@@ -8,7 +8,7 @@ interface FolderState {
   folders: FolderItem[];
   selectedFolderId: string | null;
 
-  addFolder: (name: string, color: string, icon: string) => void;
+  addFolder: (name: string, color: string, icon: string, projectId: string) => void;
   renameFolder: (id: string, name: string) => void;
   deleteFolder: (id: string) => void;
   updateFolder: (id: string, changes: Partial<FolderItem>) => void;
@@ -28,7 +28,7 @@ export const useFolderStore = create<FolderState>()(
       folders: [],
       selectedFolderId: null,
 
-      addFolder: (name, color, icon) =>
+      addFolder: (name, color, icon, projectId) =>
         set((state) => ({
           folders: [
             ...state.folders,
@@ -39,6 +39,7 @@ export const useFolderStore = create<FolderState>()(
               icon,
               forms: [],
               createdAt: new Date().toLocaleDateString("es-CO"),
+              projectId,
             },
           ],
         })),
