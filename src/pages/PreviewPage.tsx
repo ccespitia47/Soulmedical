@@ -37,7 +37,14 @@ export default function PreviewPage({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f0f4f8", fontFamily: "'Segoe UI', sans-serif" }}>
+    <div style={{ 
+      height: "100vh", 
+      overflowY: "auto",
+      background: "#f0f4f8", 
+      fontFamily: "'Segoe UI', sans-serif",
+      display: "flex",
+      flexDirection: "column",
+    }}>
       
       {/* Topbar */}
       <header style={{
@@ -48,6 +55,7 @@ export default function PreviewPage({ onClose }: { onClose: () => void }) {
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
+        flexShrink: 0,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ fontSize: 24 }}>👁️</span>
@@ -80,10 +88,14 @@ export default function PreviewPage({ onClose }: { onClose: () => void }) {
 
       {/* Contenedor del formulario */}
       <div style={{
-        maxWidth: 680,
-        margin: "40px auto",
-        padding: "0 16px",
+        flex: 1,
+        overflowY: "auto",
+        padding: "40px 16px",
       }}>
+        <div style={{
+          maxWidth: 680,
+          margin: "0 auto",
+        }}>
         
         {/* Card del formulario */}
         <div style={{
@@ -215,6 +227,7 @@ export default function PreviewPage({ onClose }: { onClose: () => void }) {
           lineHeight: 1.6,
         }}>
           <strong>💡 Modo Vista Previa:</strong> Estás viendo cómo se verá el formulario para los usuarios finales. Los datos ingresados aquí no se guardarán.
+        </div>
         </div>
       </div>
 

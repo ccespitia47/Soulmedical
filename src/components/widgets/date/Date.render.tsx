@@ -9,6 +9,7 @@ export default function DateRender({ widget }: WidgetRenderProps) {
       </label>
       <input
         type="date"
+        name={widget.id}
         required={widget.required}
         min={(widget.config.min as string) || undefined}
         max={(widget.config.max as string) || undefined}

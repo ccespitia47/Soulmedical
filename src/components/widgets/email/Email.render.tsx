@@ -9,6 +9,7 @@ export default function EmailRender({ widget }: WidgetRenderProps) {
       </label>
       <input
         type="email"
+        name={widget.id}
         required={widget.required}
         placeholder={(widget.config.placeholder as string) || "correo@ejemplo.com"}
         style={{

@@ -1,11 +1,12 @@
 import { useState } from "react";
 import HomePage from "./pages/HomePage";
 import BuilderPage from "./pages/BuilderPage";
+import Login from "./pages/Login";
 
-type View = "home" | "builder";
+type View = "login" | "home" | "builder";
 
 export default function App() {
-  const [view, setView] = useState<View>("home");
+  const [view, setView] = useState<View>("login");
   const [currentFolder, setCurrentFolder] = useState("");
   const [currentForm, setCurrentForm] = useState("");
 
@@ -14,6 +15,10 @@ export default function App() {
     setCurrentForm(formId);
     setView("builder");
   };
+
+  if (view === "login") {
+    return <Login onLogin={() => setView("home")} />;
+  }
 
   if (view === "builder") {
     return (
@@ -25,5 +30,10 @@ export default function App() {
     );
   }
 
-  return <HomePage onOpenBuilder={handleOpenBuilder} />;
+  return (
+    <HomePage
+      onOpenBuilder={handleOpenBuilder}
+      onLogout={() => setView("login")}
+    />
+  );
 }

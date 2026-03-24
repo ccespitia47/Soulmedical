@@ -131,8 +131,19 @@ export default function IdScannerRender({ widget, onValue }: WidgetRenderProps) 
     cursor: "pointer", background: bg, color,
   });
 
+  // Valor principal para validación (usamos el número de documento o el primer campo)
+  const mainValue = extracted.numero || extracted[fields[0]] || "";
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* Input oculto para validación del formulario */}
+      <input
+        type="hidden"
+        name={widget.id}
+        value={mainValue}
+        required={widget.required}
+      />
+
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <span style={{ fontSize: 24 }}>🪪</span>
         <div>
@@ -144,7 +155,7 @@ export default function IdScannerRender({ widget, onValue }: WidgetRenderProps) 
       {/* IDLE */}
       {status === "idle" && (
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button style={btnStyle("#fff", "#00c2a8")} onClick={openCamera}>📷 Usar cámara</button>
+          <button type="button" style={btnStyle("#fff", "#00c2a8")} onClick={openCamera}>📷 Usar cámara</button>
           <label style={{ ...btnStyle("#00a690", "#e6faf7"), cursor: "pointer" }}>
             🖼️ Subir imagen
             <input type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileUpload} />
@@ -165,8 +176,8 @@ export default function IdScannerRender({ widget, onValue }: WidgetRenderProps) 
             </div>
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-            <button style={{ ...btnStyle("#fff", "#ef4444"), padding: "12px 28px", borderRadius: 50 }} onClick={capture}>⬤ Capturar</button>
-            <button style={btnStyle("#6b7280", "#f3f4f6")} onClick={() => { stopCamera(); setStatus("idle"); }}>Cancelar</button>
+            <button type="button" style={{ ...btnStyle("#fff", "#ef4444"), padding: "12px 28px", borderRadius: 50 }} onClick={capture}>⬤ Capturar</button>
+            <button type="button" style={btnStyle("#6b7280", "#f3f4f6")} onClick={() => { stopCamera(); setStatus("idle"); }}>Cancelar</button>
           </div>
         </div>
       )}
@@ -187,7 +198,7 @@ export default function IdScannerRender({ widget, onValue }: WidgetRenderProps) 
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#d1fae5", padding: "8px 12px", borderRadius: 6, fontSize: 13, fontWeight: 600, color: "#065f46" }}>
             <span>✅ Datos extraídos</span>
-            <button style={{ ...btnStyle("#6b7280", "transparent"), padding: "4px 10px", fontSize: 12 }} onClick={reset}>Reintentar</button>
+            <button type="button" style={{ ...btnStyle("#6b7280", "transparent"), padding: "4px 10px", fontSize: 12 }} onClick={reset}>Reintentar</button>
           </div>
           {fields.map((key) => (
             <div key={key} style={{ marginBottom: 8 }}>
@@ -214,7 +225,7 @@ export default function IdScannerRender({ widget, onValue }: WidgetRenderProps) 
       {status === "error" && (
         <div style={{ padding: 14, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, fontSize: 13, color: "#991b1b" }}>
           <p style={{ marginBottom: 8 }}>⚠️ {error}</p>
-          <button style={btnStyle("#6b7280", "#f3f4f6")} onClick={reset}>Intentar de nuevo</button>
+          <button type="button" style={btnStyle("#6b7280", "#f3f4f6")} onClick={reset}>Intentar de nuevo</button>
         </div>
       )}
 

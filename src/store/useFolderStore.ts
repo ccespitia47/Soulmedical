@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { FolderItem } from "../types/folder.types";
 import type { WidgetInstance } from "../types/widget.types";
-
+import type { EmailTemplate } from "../types/email-template.types";
 
 interface FolderState {
   folders: FolderItem[];
@@ -20,6 +20,7 @@ interface FolderState {
   renameForm: (folderId: string, formId: string, name: string) => void;
   duplicateForm: (folderId: string, formId: string) => void;
   saveFormWidgets: (folderId: string, formId: string, widgets: WidgetInstance[]) => void;
+  updateFormEmailTemplate: (folderId: string, formId: string, emailTemplate: EmailTemplate) => void;
 }
 
 export const useFolderStore = create<FolderState>()(
@@ -166,6 +167,26 @@ export const useFolderStore = create<FolderState>()(
                       ? {
                           ...fm,
                           widgets,
+                          updatedAt: new Date().toLocaleDateString("es-CO"),
+                        }
+                      : fm
+                  ),
+                }
+              : f
+          ),
+        })),
+
+      updateFormEmailTemplate: (folderId, formId, emailTemplate) =>
+        set((state) => ({
+          folders: state.folders.map((f) =>
+            f.id === folderId
+              ? {
+                  ...f,
+                  forms: f.forms.map((fm) =>
+                    fm.id === formId
+                      ? {
+                          ...fm,
+                          emailTemplate,
                           updatedAt: new Date().toLocaleDateString("es-CO"),
                         }
                       : fm

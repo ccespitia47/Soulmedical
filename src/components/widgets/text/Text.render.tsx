@@ -49,6 +49,7 @@ export default function TextRender({ widget }: WidgetRenderProps) {
       </label>
       <input
         type="text"
+        name={widget.id}
         required={widget.required}
         placeholder={(widget.config.placeholder as string) || ""}
         defaultValue={(widget.config.defaultValue as string) || ""}

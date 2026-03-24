@@ -4,6 +4,7 @@ import WidgetPalette from "./WidgetPalette";
 import PropertyPanel from "../properties/PropertyPanel";
 import { useBuilderStore } from "../../store/useBuilderStore";
 import PreviewPage from "@/pages/PreviewPage";
+import EmailConfigPanel from "../email/EmailConfigPanel";
 import logo from "../../assets/Logo_GrupoSoul.png";
 import { useFolderStore } from "../../store/useFolderStore";
 
@@ -15,6 +16,7 @@ export default function BuilderLayout({ folderId, formId, onBack }: { folderId?:
 
   const selectedWidgetId = useBuilderStore((s) => s.selectedWidgetId);
   const [showPreview, setShowPreview] = useState(false);
+  const [showEmailConfig, setShowEmailConfig] = useState(false);
   const closePanel = () => setMobilePanel(null);
 
   const handleSave = () => {
@@ -35,7 +37,7 @@ export default function BuilderLayout({ folderId, formId, onBack }: { folderId?:
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
 
       {/* ── Topbar ── */}
-            <header style={{
+      <header style={{
         height: 56, background: "#ffffff",
         borderBottom: "1px solid #e2e8f0",
         display: "flex", alignItems: "center",
@@ -66,6 +68,14 @@ export default function BuilderLayout({ folderId, formId, onBack }: { folderId?:
             color: "#6b7280", fontFamily: "inherit",
           }}>
             👁️ Vista previa
+          </button>
+          <button onClick={() => setShowEmailConfig(true)} style={{
+            padding: "6px 14px", borderRadius: 6,
+            border: "1.5px solid #e2e8f0", background: "none",
+            cursor: "pointer", fontSize: 13, fontWeight: 600,
+            color: "#6b7280", fontFamily: "inherit",
+          }}>
+            📧 Email
           </button>
           <button onClick={handleSave} disabled={saveStatus === "saving"} style={{
             padding: "6px 14px", borderRadius: 6, border: "none",
@@ -152,7 +162,6 @@ export default function BuilderLayout({ folderId, formId, onBack }: { folderId?:
       {/* ── Drawer móvil ── */}
       {mobilePanel && (
         <>
-          {/* Fondo oscuro */}
           <div
             onClick={closePanel}
             style={{
@@ -160,7 +169,6 @@ export default function BuilderLayout({ folderId, formId, onBack }: { folderId?:
               background: "rgba(0,0,0,0.4)", zIndex: 60,
             }}
           />
-          {/* Panel que sube desde abajo */}
           <div style={{
             position: "fixed", bottom: 0, left: 0, right: 0,
             maxHeight: "80vh", background: "#ffffff",
@@ -177,7 +185,6 @@ export default function BuilderLayout({ folderId, formId, onBack }: { folderId?:
         </>
       )}
 
-      {/* CSS para mostrar/ocultar en móvil */}
       <style>{`
         @media (max-width: 768px) {
           .sf-hide-mobile { display: none !important; }
@@ -187,11 +194,21 @@ export default function BuilderLayout({ folderId, formId, onBack }: { folderId?:
           .sf-show-mobile { display: none !important; }
         }
       `}</style>
+      
       {/* ── Vista Previa ── */}
       {showPreview && (
         <div style={{ position: "fixed", inset: 0, zIndex: 200 }}>
           <PreviewPage onClose={() => setShowPreview(false)} />
         </div>
+      )}
+
+      {/* ── Configuración de Email ── */}
+      {showEmailConfig && (
+        <EmailConfigPanel 
+          folderId={folderId} 
+          formId={formId} 
+          onClose={() => setShowEmailConfig(false)} 
+        />
       )}
     </div>
   );

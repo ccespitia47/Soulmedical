@@ -15,6 +15,7 @@ export default function NumberRender({ widget }: WidgetRenderProps) {
       </label>
       <input
         type="number"
+        name={widget.id}
         required={widget.required}
         placeholder={(widget.config.placeholder as string) || ""}
         min={min}

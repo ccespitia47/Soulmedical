@@ -1,4 +1,5 @@
 import type { WidgetInstance } from "./widget.types";
+import type { EmailTemplate } from "./email-template.types";
 
 export type ProjectItem = {
   id: string;
@@ -14,6 +15,7 @@ export type FormItem = {
   createdAt: string;
   updatedAt: string;
   widgets?: WidgetInstance[];
+  emailTemplate?: EmailTemplate;
 };
 
 export type FolderItem = {

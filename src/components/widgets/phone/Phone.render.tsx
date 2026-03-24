@@ -41,6 +41,7 @@ export default function PhoneRender({ widget }: WidgetRenderProps) {
         </span>
         <input
           type="tel"
+          name={widget.id}
           required={widget.required}
           placeholder={(widget.config.placeholder as string) || "300 123 4567"}
           maxLength={(widget.config.maxLength as number) || 10}
