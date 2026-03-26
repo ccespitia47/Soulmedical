@@ -1,14 +1,36 @@
 import { useState } from "react";
-import HomePage from "./pages/HomePage";
+import AdminLayout from "./pages/AdminLayout";
 import BuilderPage from "./pages/BuilderPage";
+import FormPage from "./pages/FormPage";
+import UserAppPage from "./pages/UserAppPage";
 import Login from "./pages/Login";
+import { useFolderStore } from "./store/useFolderStore";
+import type { AuthUser } from "./types/auth.types";
+import { ROLE_PERMISSIONS } from "./types/auth.types";
 
-type View = "login" | "home" | "builder";
+type View = "login" | "admin" | "builder" | "form" | "userapp";
 
 export default function App() {
   const [view, setView] = useState<View>("login");
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [currentFolder, setCurrentFolder] = useState("");
   const [currentForm, setCurrentForm] = useState("");
+  const { folders } = useFolderStore();
+
+  const handleLogin = (user: AuthUser) => {
+    setCurrentUser(user);
+    const perms = ROLE_PERMISSIONS[user.role];
+    if (perms.canManageProjects) {
+      setView("admin");
+    } else {
+      setView("userapp");
+    }
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setView("login");
+  };
 
   const handleOpenBuilder = (folderId: string, formId: string) => {
     setCurrentFolder(folderId);
@@ -16,24 +38,69 @@ export default function App() {
     setView("builder");
   };
 
-  if (view === "login") {
-    return <Login onLogin={() => setView("home")} />;
-  }
+  const handleOpenForm = (folderId: string, formId: string) => {
+    setCurrentFolder(folderId);
+    setCurrentForm(formId);
+    setView("form");
+  };
 
-  if (view === "builder") {
+  const getFormData = () => {
+    const folder = folders.find((f) => f.id === currentFolder);
+    const form = folder?.forms.find((fm) => fm.id === currentForm);
+    return form;
+  };
+
+  const backView: View = currentUser?.role === "admin" ? "admin" : "userapp";
+
+  if (view === "login") return <Login onLogin={handleLogin} />;
+
+  if (view === "builder") return (
+    <BuilderPage
+      folderId={currentFolder}
+      formId={currentForm}
+      onBack={() => setView(backView)}
+    />
+  );
+
+  if (view === "form") {
+    const form = getFormData();
     return (
-      <BuilderPage
-        folderId={currentFolder}
+      <FormPage
         formId={currentForm}
-        onBack={() => setView("home")}
+        folderId={currentFolder}
+        formName={form?.name ?? "Formulario"}
+        widgets={form?.widgets ?? []}
+        onClose={() => setView(backView)}
       />
     );
   }
 
-  return (
-    <HomePage
-      onOpenBuilder={handleOpenBuilder}
-      onLogout={() => setView("login")}
-    />
-  );
+  if (view === "userapp") {
+    const user = currentUser!;
+    return (
+      <UserAppPage
+        user={user}
+        onFillForm={handleOpenForm}
+        onLogout={handleLogout}
+        onSwitchToAdmin={
+          user.role === "admin" ? () => setView("admin") : undefined
+        }
+      />
+    );
+  }
+
+  if (view === "admin") {
+    const user = currentUser!;
+    return (
+      <AdminLayout
+        currentUser={user}
+        onOpenBuilder={handleOpenBuilder}
+        onOpenForm={handleOpenForm}
+        onSwitchToUserApp={() => setView("userapp")}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  return null;
 }

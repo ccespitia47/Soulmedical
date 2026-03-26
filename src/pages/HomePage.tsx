@@ -2,45 +2,37 @@ import { useState } from "react";
 import { useFolderStore } from "../store/useFolderStore";
 import { useProjectStore } from "../store/useProjectStore";
 import { FOLDER_COLORS, FOLDER_ICONS, PROJECT_COLORS, PROJECT_ICONS } from "../types/folder.types";
-import logo from "../assets/Logo_GrupoSoul.png";
 
-// ── ConfirmModal fuera del componente para evitar problemas de re-render ──
-function ConfirmModal({
-  title, message, onCancel, onConfirm, confirmLabel, confirmColor,
-}: {
-  title: string;
-  message: string;
-  onCancel: () => void;
-  onConfirm: () => void;
-  confirmLabel: string;
-  confirmColor: string;
+function ConfirmModal({ title, message, onCancel, onConfirm, confirmLabel, confirmColor }: {
+  title: string; message: string; onCancel: () => void; onConfirm: () => void; confirmLabel: string; confirmColor: string;
 }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div style={{ background: "#fff", borderRadius: 16, padding: "32px", width: "100%", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,0.3)", textAlign: "center" }}>
-        <div style={{ width: 64, height: 64, margin: "0 auto 20px", background: `linear-gradient(135deg, ${confirmColor}, ${confirmColor}cc)`, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 8px 20px ${confirmColor}4d` }}>
+        <div style={{ width: 64, height: 64, margin: "0 auto 20px", background: `linear-gradient(135deg, ${confirmColor}, ${confirmColor}cc)`, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <span style={{ fontSize: 32 }}>{confirmColor === "#ef4444" ? "🗑️" : "📋"}</span>
         </div>
         <h2 style={{ fontSize: 20, fontWeight: 700, color: "#111827", margin: "0 0 12px" }}>{title}</h2>
         <p style={{ fontSize: 14, color: "#6b7280", margin: "0 0 24px", lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: message }} />
         <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
           <button onClick={onCancel} style={{ padding: "10px 24px", background: "none", color: "#6b7280", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
-          <button onClick={onConfirm} style={{ padding: "10px 24px", background: confirmColor, color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", boxShadow: `0 2px 8px ${confirmColor}4d` }}>{confirmLabel}</button>
+          <button onClick={onConfirm} style={{ padding: "10px 24px", background: confirmColor, color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>{confirmLabel}</button>
         </div>
       </div>
     </div>
   );
 }
 
-// ── Componente principal ──
 export default function HomePage({
   onOpenBuilder,
-  onLogout,
+  onOpenForm,
+  currentUser,
 }: {
   onOpenBuilder: (folderId: string, formId: string) => void;
-  onLogout: () => void;
+  onOpenForm: (folderId: string, formId: string) => void;
+  currentUser?: { name: string; role: string; avatar: string } | null;
 }) {
-  const { folders, addFolder, deleteFolder, updateFolder, addForm, deleteForm, selectFolder, selectedFolderId, duplicateFolder, duplicateForm } = useFolderStore();
+  const { folders, addFolder, deleteFolder, updateFolder, addForm, deleteForm, renameForm, selectFolder, selectedFolderId, duplicateFolder, duplicateForm } = useFolderStore();
   const { projects, selectedProjectId, addProject, deleteProject, updateProject, selectProject } = useProjectStore();
 
   const [showNewFolder, setShowNewFolder] = useState(false);
@@ -53,6 +45,8 @@ export default function HomePage({
 
   const [confirmDelete, setConfirmDelete] = useState<{ folderId: string; formId: string; formName: string } | null>(null);
   const [confirmDuplicate, setConfirmDuplicate] = useState<{ folderId: string; formId: string; formName: string } | null>(null);
+  const [editingForm, setEditingForm] = useState<{ folderId: string; formId: string; formName: string } | null>(null);
+  const [editFormName, setEditFormName] = useState("");
   const [confirmDeleteFolder, setConfirmDeleteFolder] = useState<{ folderId: string; folderName: string } | null>(null);
   const [confirmDuplicateFolder, setConfirmDuplicateFolder] = useState<{ folderId: string; folderName: string } | null>(null);
   const [confirmDeleteProject, setConfirmDeleteProject] = useState<{ projectId: string; projectName: string } | null>(null);
@@ -61,12 +55,10 @@ export default function HomePage({
   const [folderColor, setFolderColor] = useState("#00c2a8");
   const [folderIcon, setFolderIcon] = useState("📁");
   const [newFormName, setNewFormName] = useState("");
-
   const [projectName, setProjectName] = useState("");
   const [projectColor, setProjectColor] = useState("#00c2a8");
   const [projectIcon, setProjectIcon] = useState("🏢");
-
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [search, setSearch] = useState("");
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId);
   const projectFolders = folders.filter((f) => f.projectId === selectedProjectId);
@@ -75,15 +67,13 @@ export default function HomePage({
   const handleCreateFolder = () => {
     if (!folderName.trim() || !selectedProjectId) return;
     addFolder(folderName.trim(), folderColor, folderIcon, selectedProjectId);
-    setFolderName(""); setFolderColor("#00c2a8"); setFolderIcon("📁");
-    setShowNewFolder(false);
+    setFolderName(""); setFolderColor("#00c2a8"); setFolderIcon("📁"); setShowNewFolder(false);
   };
 
   const handleCreateProject = () => {
     if (!projectName.trim()) return;
     addProject(projectName.trim(), projectColor, projectIcon);
-    setProjectName(""); setProjectColor("#00c2a8"); setProjectIcon("🏢");
-    setShowNewProject(false);
+    setProjectName(""); setProjectColor("#00c2a8"); setProjectIcon("🏢"); setShowNewProject(false);
   };
 
   const handleOpenEditProject = (projectId: string) => {
@@ -99,34 +89,11 @@ export default function HomePage({
     setShowEditProject(false); setEditingProjectId(null);
   };
 
-  const handleConfirmDeleteProject = () => {
-    if (!confirmDeleteProject) return;
-    deleteProject(confirmDeleteProject.projectId);
-    setConfirmDeleteProject(null);
-  };
-
-  const handleConfirmDelete = () => {
-    if (!confirmDelete) return;
-    deleteForm(confirmDelete.folderId, confirmDelete.formId);
-    setConfirmDelete(null);
-  };
-
-  const handleConfirmDuplicate = () => {
-    if (!confirmDuplicate) return;
-    duplicateForm(confirmDuplicate.folderId, confirmDuplicate.formId);
-    setConfirmDuplicate(null);
-  };
-
-  const handleConfirmDeleteFolder = () => {
-    if (!confirmDeleteFolder) return;
-    deleteFolder(confirmDeleteFolder.folderId);
-    setConfirmDeleteFolder(null);
-  };
-
-  const handleConfirmDuplicateFolder = () => {
-    if (!confirmDuplicateFolder) return;
-    duplicateFolder(confirmDuplicateFolder.folderId);
-    setConfirmDuplicateFolder(null);
+  const handleOpenEdit = (folderId: string) => {
+    const folder = folders.find((f) => f.id === folderId);
+    if (!folder) return;
+    setFolderName(folder.name); setFolderColor(folder.color); setFolderIcon(folder.icon);
+    setEditingFolder(folderId); setShowEditFolder(true);
   };
 
   const handleSaveEditFolder = () => {
@@ -135,28 +102,15 @@ export default function HomePage({
     setShowEditFolder(false); setEditingFolder(null);
   };
 
-  const handleOpenEdit = (folderId: string) => {
-    const folder = folders.find((f) => f.id === folderId);
-    if (!folder) return;
-    setFolderName(folder.name); setFolderColor(folder.color); setFolderIcon(folder.icon);
-    setEditingFolder(folderId); setShowEditFolder(true);
-  };
-
   const handleCreateForm = () => {
     if (!newFormName.trim() || !selectedFolderId) return;
     addForm(selectedFolderId, newFormName.trim());
     setNewFormName(""); setShowNewForm(false);
   };
 
-  const handleSelectProject = (id: string) => {
-    selectProject(id); selectFolder(null); setSidebarOpen(false);
-  };
-
-  // ── Estilos reutilizables ──
-  const cardStyle = (color: string) => ({
-    background: "#ffffff", borderRadius: 12, border: `2px solid ${color}22`,
-    boxShadow: "0 2px 8px rgba(0,0,0,0.08)", overflow: "hidden", cursor: "pointer", transition: "all 0.2s",
-  });
+  const filteredProjects = projects.filter((p) =>
+    search.trim() === "" || p.name.toLowerCase().includes(search.toLowerCase())
+  );
 
   const inputStyle = {
     width: "100%", padding: "9px 12px", border: "1.5px solid #e2e8f0", borderRadius: 8,
@@ -194,241 +148,194 @@ export default function HomePage({
   );
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f0f4f8", fontFamily: "'Segoe UI', sans-serif", display: "flex" }}>
+    <div style={{ minHeight: "100vh", background: "#f0f4f8", fontFamily: "'Segoe UI', sans-serif" }}>
 
-      {/* ── Sidebar ── */}
-      <aside className="sidebar-desktop" style={{
-        width: 260, minHeight: "100vh", background: "#ffffff", borderRight: "1px solid #e2e8f0",
-        display: "flex", flexDirection: "column", flexShrink: 0,
-        position: "fixed", left: sidebarOpen ? 0 : undefined, top: 0, bottom: 0, zIndex: 50, transition: "transform 0.3s",
+      {/* Topbar */}
+      <header style={{
+        background: "#ffffff", borderBottom: "1px solid #e2e8f0",
+        padding: "0 24px", height: 56,
+        display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
+        position: "sticky", top: 0, zIndex: 10,
       }}>
-        {/* Logo */}
-        <div style={{ padding: "16px 18px", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: 10 }}>
-          <img src={logo} alt="Grupo Soul" style={{ height: 32, objectFit: "contain" }} />
-          <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}>Formularios</span>
+        <h1 style={{ fontSize: 16, fontWeight: 700, color: "#111827", margin: 0, whiteSpace: "nowrap" }}>Formularios</h1>
+        <div style={{ position: "relative", flex: 1, maxWidth: 400 }}>
+          <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 14, color: "#9ca3af" }}>🔍</span>
+          <input type="text" placeholder="Buscar proyectos y carpetas..." value={search} onChange={(e) => setSearch(e.target.value)}
+            style={{ width: "100%", padding: "8px 12px 8px 34px", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 13, fontFamily: "inherit", outline: "none", background: "#f8fafc", color: "#111827", boxSizing: "border-box", transition: "all 0.2s" }}
+            onFocus={(e) => { e.target.style.borderColor = "#00c2a8"; e.target.style.background = "#fff"; }}
+            onBlur={(e) => { e.target.style.borderColor = "#e2e8f0"; e.target.style.background = "#f8fafc"; }}
+          />
         </div>
-
-        {/* Nuevo Proyecto */}
-        <div style={{ padding: "14px 14px 8px" }}>
-          <button onClick={() => setShowNewProject(true)} style={{
-            width: "100%", padding: "10px 14px", background: "linear-gradient(135deg, #00c2a8, #00a892)",
-            color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer",
-            fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-            boxShadow: "0 2px 8px rgba(0,194,168,0.3)",
-          }}>
-            ➕ Nuevo Proyecto
-          </button>
-        </div>
-
-        {/* Lista proyectos */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "6px 8px" }}>
-          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: "#9ca3af", textTransform: "uppercase", padding: "8px 8px 6px" }}>
-            PROYECTOS ({projects.length})
-          </div>
-
-          {projects.length === 0 && (
-            <div style={{ padding: "24px 12px", textAlign: "center", color: "#9ca3af" }}>
-              <span style={{ fontSize: 32, display: "block", marginBottom: 8 }}>🏢</span>
-              <p style={{ fontSize: 12, margin: 0, lineHeight: 1.5 }}>Crea tu primer proyecto para organizar tus formularios</p>
-            </div>
-          )}
-
-          {projects.map((project) => {
-            const isSelected = project.id === selectedProjectId;
-            return (
-              <div key={project.id} onClick={() => handleSelectProject(project.id)} style={{
-                display: "flex", alignItems: "center", gap: 10, padding: "10px 10px", borderRadius: 8,
-                cursor: "pointer", transition: "all 0.15s", marginBottom: 2,
-                background: isSelected ? `${project.color}15` : "transparent",
-                borderLeft: isSelected ? `3px solid ${project.color}` : "3px solid transparent",
-              }}
-                onMouseOver={(e) => { if (!isSelected) e.currentTarget.style.background = "#f8fafc"; }}
-                onMouseOut={(e) => { if (!isSelected) e.currentTarget.style.background = "transparent"; }}
-              >
-                <span style={{ fontSize: 20, flexShrink: 0 }}>{project.icon}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: isSelected ? 700 : 500, color: isSelected ? project.color : "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {project.name}
-                  </div>
-                  <div style={{ fontSize: 10, color: "#9ca3af" }}>
-                    {folders.filter((f) => f.projectId === project.id).length} carpetas
-                  </div>
-                </div>
-                {isSelected && (
-                  <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
-                    <button onClick={(e) => { e.stopPropagation(); handleOpenEditProject(project.id); }}
-                      style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, padding: 2, color: "#9ca3af" }} title="Editar">✏️</button>
-                    <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteProject({ projectId: project.id, projectName: project.name }); }}
-                      style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, padding: 2, color: "#9ca3af" }} title="Eliminar">🗑️</button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Footer sidebar con cerrar sesión */}
-        <div style={{ padding: "12px 14px", borderTop: "1px solid #e2e8f0", display: "flex", flexDirection: "column", gap: 8 }}>
-          <button
-            onClick={onLogout}
-            style={{
-              width: "100%", padding: "9px 14px", background: "none", color: "#ef4444",
-              border: "1.5px solid #fecaca", borderRadius: 8, fontSize: 12, fontWeight: 600,
-              cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center",
-              justifyContent: "center", gap: 6, transition: "all 0.15s",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "#fef2f2"; e.currentTarget.style.borderColor = "#ef4444"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "none"; e.currentTarget.style.borderColor = "#fecaca"; }}
-          >
-            🚪 Cerrar sesión
-          </button>
-          <div style={{ fontSize: 10, color: "#9ca3af", textAlign: "center" }}>SoulForms v1.0</div>
-        </div>
-      </aside>
-
-      {/* Overlay mobile */}
-      {sidebarOpen && (
-        <div className="sidebar-overlay" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 40 }}
-          onClick={() => setSidebarOpen(false)} />
-      )}
-
-      {/* ── Main ── */}
-      <main className="main-content" style={{ flex: 1, marginLeft: 260, minHeight: "100vh" }}>
-
-        {/* Topbar mobile */}
-        <header className="mobile-topbar" style={{
-          background: "#ffffff", borderBottom: "1px solid #e2e8f0", padding: "12px 16px",
-          minHeight: 56, display: "none", alignItems: "center", justifyContent: "space-between", gap: 8,
-        }}>
-          <button onClick={() => setSidebarOpen(true)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", padding: "4px 8px" }}>☰</button>
-          <img src={logo} alt="Grupo Soul" style={{ height: 28, objectFit: "contain" }} />
-          <div style={{ width: 36 }} />
-        </header>
-
-        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px" }}>
-
-          {/* Sin proyecto */}
-          {!selectedProjectId && (
-            <div style={{ textAlign: "center", padding: "100px 24px", color: "#9ca3af" }}>
-              <span style={{ fontSize: 56, display: "block", marginBottom: 16 }}>🏢</span>
-              <h2 style={{ fontSize: 20, fontWeight: 700, color: "#374151", margin: "0 0 8px" }}>Selecciona o crea un proyecto</h2>
-              <p style={{ fontSize: 14, margin: "0 auto 24px", maxWidth: 400 }}>
-                Los proyectos te permiten agrupar carpetas y formularios.
-              </p>
-              <button style={btnPrimary} onClick={() => setShowNewProject(true)}>➕ Crear primer proyecto</button>
-            </div>
-          )}
-
-          {/* Vista carpetas */}
-          {selectedProject && !selectedFolderId && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginRight: 12 }}>
+          {currentUser && (
             <>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
-                <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <span style={{ fontSize: 28 }}>{selectedProject.icon}</span>
-                    <h1 style={{ fontSize: 24, fontWeight: 700, color: "#111827", margin: 0 }}>{selectedProject.name}</h1>
-                  </div>
-                  <p style={{ fontSize: 14, color: "#6b7280", margin: "4px 0 0 38px" }}>Organiza tus formularios en carpetas</p>
-                </div>
-                <button style={btnPrimary} onClick={() => setShowNewFolder(true)}>➕ Nueva carpeta</button>
-              </div>
-
-              {projectFolders.length === 0 && (
-                <div style={{ textAlign: "center", padding: "80px 24px", border: "2px dashed #e2e8f0", borderRadius: 16, color: "#9ca3af" }}>
-                  <span style={{ fontSize: 48 }}>📁</span>
-                  <p style={{ fontSize: 16, marginTop: 16, marginBottom: 8, fontWeight: 600 }}>No hay carpetas todavía</p>
-                  <p style={{ fontSize: 14, marginBottom: 20 }}>Crea tu primera carpeta</p>
-                  <button style={btnPrimary} onClick={() => setShowNewFolder(true)}>Crear carpeta</button>
-                </div>
-              )}
-
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 16 }}>
-                {projectFolders.map((folder) => (
-                  <div key={folder.id} style={cardStyle(folder.color)}
-                    onClick={() => selectFolder(folder.id)}
-                    onMouseOver={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 24px rgba(0,0,0,0.12)"; }}
-                    onMouseOut={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.08)"; }}
-                  >
-                    <div style={{ height: 6, background: folder.color }} />
-                    <div style={{ padding: "16px" }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                        <span style={{ fontSize: 32 }}>{folder.icon}</span>
-                        <div style={{ display: "flex", gap: 4 }}>
-                          <button onClick={(e) => { e.stopPropagation(); handleOpenEdit(folder.id); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, padding: "4px", borderRadius: 4, color: "#9ca3af" }}>✏️</button>
-                          <button onClick={(e) => { e.stopPropagation(); setConfirmDuplicateFolder({ folderId: folder.id, folderName: folder.name }); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, padding: "4px", borderRadius: 4, color: "#9ca3af" }}>📋</button>
-                          <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteFolder({ folderId: folder.id, folderName: folder.name }); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, padding: "4px", borderRadius: 4, color: "#9ca3af" }}>🗑️</button>
-                        </div>
-                      </div>
-                      <h3 style={{ fontSize: 15, fontWeight: 700, color: "#111827", margin: "0 0 4px" }}>{folder.name}</h3>
-                      <p style={{ fontSize: 12, color: "#9ca3af", margin: "0 0 12px" }}>{folder.forms.length} formulario{folder.forms.length !== 1 ? "s" : ""}</p>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                        <span style={{ fontSize: 11, color: "#9ca3af" }}>Creada: {folder.createdAt}</span>
-                        <span style={{ fontSize: 12, color: folder.color, fontWeight: 600 }}>Ver →</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <span style={{ fontSize: 16 }}>{currentUser.avatar}</span>
+              <span style={{ fontSize: 13, color: "#374151", fontWeight: 600 }}>{currentUser.name}</span>
             </>
           )}
+        </div>
+        <button style={{ ...btnPrimary, padding: "8px 16px", fontSize: 13, whiteSpace: "nowrap" }} onClick={() => setShowNewProject(true)}>
+          ➕ Nuevo Proyecto
+        </button>
+      </header>
 
-          {/* Vista formularios */}
-          {selectedFolder && (
-            <>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
-                <button onClick={() => selectFolder(null)} style={{ ...btnGhost, padding: "8px 14px", fontSize: 13 }}>← Volver</button>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 24 }}>{selectedFolder.icon}</span>
-                    <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: 0 }}>{selectedFolder.name}</h1>
-                  </div>
-                  <p style={{ fontSize: 13, color: "#9ca3af", margin: "2px 0 0 32px" }}>
-                    {selectedFolder.forms.length} formulario{selectedFolder.forms.length !== 1 ? "s" : ""}
-                  </p>
-                </div>
-                <button style={btnPrimary} onClick={() => setShowNewForm(true)}>➕ Nuevo formulario</button>
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 24px" }}>
+
+        {/* Lista de proyectos */}
+        {!selectedProjectId && (
+          <>
+            {filteredProjects.length === 0 && search.trim() === "" ? (
+              <div style={{ textAlign: "center", padding: "80px 24px", color: "#9ca3af" }}>
+                <span style={{ fontSize: 56, display: "block", marginBottom: 16 }}>🏢</span>
+                <h2 style={{ fontSize: 20, fontWeight: 700, color: "#374151", margin: "0 0 8px" }}>Crea tu primer proyecto</h2>
+                <p style={{ fontSize: 14, margin: "0 auto 24px", maxWidth: 400 }}>Organiza tus formularios en proyectos y carpetas.</p>
+                <button style={btnPrimary} onClick={() => setShowNewProject(true)}>➕ Crear primer proyecto</button>
               </div>
-
-              {selectedFolder.forms.length === 0 && (
-                <div style={{ textAlign: "center", padding: "60px 24px", border: "2px dashed #e2e8f0", borderRadius: 16, color: "#9ca3af" }}>
-                  <span style={{ fontSize: 40 }}>📋</span>
-                  <p style={{ fontSize: 15, marginTop: 12, marginBottom: 8, fontWeight: 600 }}>No hay formularios en esta carpeta</p>
-                  <p style={{ fontSize: 13, marginBottom: 20 }}>Crea tu primer formulario</p>
-                  <button style={btnPrimary} onClick={() => setShowNewForm(true)}>Crear formulario</button>
+            ) : (
+              <>
+                <p style={{ fontSize: 13, color: "#9ca3af", marginBottom: 16 }}>PROYECTOS ({filteredProjects.length})</p>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
+                  {filteredProjects.map((project) => (
+                    <div key={project.id} onClick={() => selectProject(project.id)} style={{
+                      background: "#fff", borderRadius: 12, border: "1.5px solid #e2e8f0",
+                      padding: 18, cursor: "pointer", transition: "all 0.2s",
+                      boxShadow: "0 1px 4px rgba(0,0,0,0.05)", borderLeft: `4px solid ${project.color}`,
+                    }}
+                      onMouseOver={(e) => { e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.10)"; }}
+                      onMouseOut={(e) => { e.currentTarget.style.boxShadow = "0 1px 4px rgba(0,0,0,0.05)"; }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                        <span style={{ fontSize: 28 }}>{project.icon}</span>
+                        <div style={{ display: "flex", gap: 4 }}>
+                          <button onClick={(e) => { e.stopPropagation(); handleOpenEditProject(project.id); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, padding: 2, color: "#9ca3af" }}>✏️</button>
+                          <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteProject({ projectId: project.id, projectName: project.name }); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, padding: 2, color: "#9ca3af" }}>🗑️</button>
+                        </div>
+                      </div>
+                      <h3 style={{ fontSize: 14, fontWeight: 700, color: "#111827", margin: "0 0 4px" }}>{project.name}</h3>
+                      <p style={{ fontSize: 12, color: "#9ca3af", margin: 0 }}>{folders.filter((f) => f.projectId === project.id).length} carpeta{folders.filter((f) => f.projectId === project.id).length !== 1 ? "s" : ""}</p>
+                    </div>
+                  ))}
                 </div>
-              )}
+                {filteredProjects.length === 0 && search.trim() !== "" && (
+                  <div style={{ textAlign: "center", padding: "60px 24px", color: "#9ca3af" }}>
+                    <span style={{ fontSize: 40 }}>🔍</span>
+                    <p style={{ fontSize: 14, marginTop: 12 }}>Sin resultados para "<strong>{search}</strong>"</p>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
-                {selectedFolder.forms.map((form) => (
-                  <div key={form.id}
-                    style={{ background: "#fff", borderRadius: 10, border: "1.5px solid #e2e8f0", padding: 16, cursor: "pointer", transition: "all 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}
-                    onMouseOver={(e) => { e.currentTarget.style.borderColor = selectedFolder.color; e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.10)"; }}
-                    onMouseOut={(e) => { e.currentTarget.style.borderColor = "#e2e8f0"; e.currentTarget.style.boxShadow = "0 1px 4px rgba(0,0,0,0.06)"; }}
-                    onClick={() => onOpenBuilder(selectedFolder.id, form.id)}
-                  >
+        {/* Vista carpetas */}
+        {selectedProject && !selectedFolderId && (
+          <>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <button onClick={() => selectProject("")} style={{ ...btnGhost, padding: "7px 12px", fontSize: 13 }}>← Proyectos</button>
+                <span style={{ fontSize: 22 }}>{selectedProject.icon}</span>
+                <h1 style={{ fontSize: 20, fontWeight: 700, color: "#111827", margin: 0 }}>{selectedProject.name}</h1>
+              </div>
+              <button style={btnPrimary} onClick={() => setShowNewFolder(true)}>➕ Nueva carpeta</button>
+            </div>
+
+            {projectFolders.length === 0 && (
+              <div style={{ textAlign: "center", padding: "80px 24px", border: "2px dashed #e2e8f0", borderRadius: 16, color: "#9ca3af" }}>
+                <span style={{ fontSize: 48 }}>📁</span>
+                <p style={{ fontSize: 16, marginTop: 16, marginBottom: 8, fontWeight: 600 }}>No hay carpetas todavía</p>
+                <button style={{ ...btnPrimary, marginTop: 12 }} onClick={() => setShowNewFolder(true)}>Crear carpeta</button>
+              </div>
+            )}
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
+              {projectFolders.map((folder) => (
+                <div key={folder.id} style={{ background: "#ffffff", borderRadius: 12, border: `2px solid ${folder.color}22`, boxShadow: "0 2px 8px rgba(0,0,0,0.08)", overflow: "hidden", transition: "all 0.2s" }}
+                  onMouseOver={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 24px rgba(0,0,0,0.12)"; }}
+                  onMouseOut={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.08)"; }}
+                >
+                  <div style={{ height: 6, background: folder.color }} />
+                  <div style={{ padding: "16px", cursor: "pointer" }} onClick={() => selectFolder(folder.id)}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                      <span style={{ fontSize: 32 }}>{folder.icon}</span>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button onClick={(e) => { e.stopPropagation(); handleOpenEdit(folder.id); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, padding: "4px", color: "#9ca3af" }}>✏️</button>
+                        <button onClick={(e) => { e.stopPropagation(); setConfirmDuplicateFolder({ folderId: folder.id, folderName: folder.name }); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, padding: "4px", color: "#9ca3af" }}>📋</button>
+                        <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteFolder({ folderId: folder.id, folderName: folder.name }); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, padding: "4px", color: "#9ca3af" }}>🗑️</button>
+                      </div>
+                    </div>
+                    <h3 style={{ fontSize: 15, fontWeight: 700, color: "#111827", margin: "0 0 4px" }}>{folder.name}</h3>
+                    <p style={{ fontSize: 12, color: "#9ca3af", margin: "0 0 14px" }}>{folder.forms.length} formulario{folder.forms.length !== 1 ? "s" : ""}</p>
+                    <button onClick={(e) => { e.stopPropagation(); selectFolder(folder.id); }}
+                      style={{ width: "100%", padding: "7px 0", background: "none", color: "#6b7280", border: "1.5px solid #e2e8f0", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                      📂 Abrir
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Vista formularios */}
+        {selectedFolder && (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
+              <button onClick={() => selectFolder(null)} style={{ ...btnGhost, padding: "8px 14px", fontSize: 13 }}>← Volver</button>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 24 }}>{selectedFolder.icon}</span>
+                  <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: 0 }}>{selectedFolder.name}</h1>
+                </div>
+                <p style={{ fontSize: 13, color: "#9ca3af", margin: "2px 0 0 32px" }}>{selectedFolder.forms.length} formulario{selectedFolder.forms.length !== 1 ? "s" : ""}</p>
+              </div>
+              <button style={btnPrimary} onClick={() => setShowNewForm(true)}>➕ Nuevo formulario</button>
+            </div>
+
+            {selectedFolder.forms.length === 0 && (
+              <div style={{ textAlign: "center", padding: "60px 24px", border: "2px dashed #e2e8f0", borderRadius: 16, color: "#9ca3af" }}>
+                <span style={{ fontSize: 40 }}>📋</span>
+                <p style={{ fontSize: 15, marginTop: 12, marginBottom: 8, fontWeight: 600 }}>No hay formularios</p>
+                <button style={{ ...btnPrimary, marginTop: 8 }} onClick={() => setShowNewForm(true)}>Crear formulario</button>
+              </div>
+            )}
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
+              {selectedFolder.forms.map((form) => (
+                <div key={form.id} style={{ background: "#fff", borderRadius: 12, border: "1.5px solid #e2e8f0", overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", transition: "all 0.2s" }}
+                  onMouseOver={(e) => { e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.10)"; e.currentTarget.style.borderColor = selectedFolder.color; }}
+                  onMouseOut={(e) => { e.currentTarget.style.boxShadow = "0 1px 4px rgba(0,0,0,0.06)"; e.currentTarget.style.borderColor = "#e2e8f0"; }}
+                >
+                  <div style={{ height: 4, background: selectedFolder.color }} />
+                  <div style={{ padding: 16 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
                       <span style={{ fontSize: 28 }}>📋</span>
                       <div style={{ display: "flex", gap: 4 }}>
-                        <button onClick={(e) => { e.stopPropagation(); setConfirmDuplicate({ folderId: selectedFolder.id, formId: form.id, formName: form.name }); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: 14 }}>📋</button>
-                        <button onClick={(e) => { e.stopPropagation(); setConfirmDelete({ folderId: selectedFolder.id, formId: form.id, formName: form.name }); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: 14 }}>🗑️</button>
+                        <button onClick={() => { setEditFormName(form.name); setEditingForm({ folderId: selectedFolder.id, formId: form.id, formName: form.name }); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: 14 }}>✏️</button>
+                        <button onClick={() => setConfirmDuplicate({ folderId: selectedFolder.id, formId: form.id, formName: form.name })} style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: 14 }}>📋</button>
+                        <button onClick={() => setConfirmDelete({ folderId: selectedFolder.id, formId: form.id, formName: form.name })} style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: 14 }}>🗑️</button>
                       </div>
                     </div>
                     <h3 style={{ fontSize: 14, fontWeight: 700, color: "#111827", margin: "0 0 4px" }}>{form.name}</h3>
-                    <p style={{ fontSize: 11, color: "#9ca3af", margin: 0 }}>Editado: {form.updatedAt}</p>
-                    <div style={{ marginTop: 12, padding: "6px 10px", background: selectedFolder.color + "18", borderRadius: 6, textAlign: "center", fontSize: 12, fontWeight: 600, color: selectedFolder.color }}>
-                      Abrir editor →
+                    <p style={{ fontSize: 11, color: "#9ca3af", margin: "0 0 14px" }}>Editado: {form.updatedAt}</p>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={() => onOpenForm(selectedFolder.id, form.id)}
+                        style={{ flex: 1, padding: "8px 0", background: selectedFolder.color, color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", boxShadow: `0 2px 6px ${selectedFolder.color}44` }}>
+                        ✏️ Diligenciar
+                      </button>
+                      <button onClick={() => onOpenBuilder(selectedFolder.id, form.id)}
+                        style={{ flex: 1, padding: "8px 0", background: "none", color: "#6b7280", border: "1.5px solid #e2e8f0", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                        ⚙️ configuracion
+                      </button>
                     </div>
                   </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      </main>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
 
-      {/* ── Modales de creación/edición ── */}
-
-      {/* Nuevo Proyecto */}
+      {/* Modales */}
       {showNewProject && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
           <div style={{ background: "#fff", borderRadius: 16, padding: 20, width: "100%", maxWidth: 420, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
@@ -446,8 +353,6 @@ export default function HomePage({
           </div>
         </div>
       )}
-
-      {/* Editar Proyecto */}
       {showEditProject && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
           <div style={{ background: "#fff", borderRadius: 16, padding: 20, width: "100%", maxWidth: 420, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
@@ -465,8 +370,6 @@ export default function HomePage({
           </div>
         </div>
       )}
-
-      {/* Nueva Carpeta */}
       {showNewFolder && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
           <div style={{ background: "#fff", borderRadius: 16, padding: 20, width: "100%", maxWidth: 420, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
@@ -484,8 +387,6 @@ export default function HomePage({
           </div>
         </div>
       )}
-
-      {/* Editar Carpeta */}
       {showEditFolder && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
           <div style={{ background: "#fff", borderRadius: 16, padding: 20, width: "100%", maxWidth: 420, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
@@ -503,15 +404,12 @@ export default function HomePage({
           </div>
         </div>
       )}
-
-      {/* Nuevo Formulario */}
       {showNewForm && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
           <div style={{ background: "#fff", borderRadius: 16, padding: 20, width: "100%", maxWidth: 380, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
             <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 20, color: "#111827" }}>Nuevo Formulario</h2>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 6, textTransform: "uppercase" }}>Nombre del formulario</label>
-            <input style={inputStyle} placeholder="Ej: Registro de pacientes" value={newFormName} onChange={(e) => setNewFormName(e.target.value)} autoFocus
-              onKeyDown={(e) => { if (e.key === "Enter") handleCreateForm(); }} />
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 6, textTransform: "uppercase" }}>Nombre</label>
+            <input style={inputStyle} placeholder="Ej: Registro de pacientes" value={newFormName} onChange={(e) => setNewFormName(e.target.value)} autoFocus onKeyDown={(e) => { if (e.key === "Enter") handleCreateForm(); }} />
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button style={btnGhost} onClick={() => setShowNewForm(false)}>Cancelar</button>
               <button style={btnPrimary} onClick={handleCreateForm}>Crear formulario</button>
@@ -520,49 +418,34 @@ export default function HomePage({
         </div>
       )}
 
-      {/* ── Modales de confirmación ── */}
-      {confirmDelete && (
-        <ConfirmModal title="¿Eliminar formulario?"
-          message={`Estás a punto de eliminar "<strong>${confirmDelete.formName}</strong>". Esta acción no se puede deshacer.`}
-          onCancel={() => setConfirmDelete(null)} onConfirm={handleConfirmDelete}
-          confirmLabel="Eliminar" confirmColor="#ef4444" />
-      )}
-      {confirmDuplicate && (
-        <ConfirmModal title="¿Duplicar formulario?"
-          message={`Se creará una copia de "<strong>${confirmDuplicate.formName}</strong>" con todos sus campos.`}
-          onCancel={() => setConfirmDuplicate(null)} onConfirm={handleConfirmDuplicate}
-          confirmLabel="Duplicar" confirmColor="#3b82f6" />
-      )}
-      {confirmDeleteFolder && (
-        <ConfirmModal title="¿Eliminar carpeta?"
-          message={`Estás a punto de eliminar la carpeta "<strong>${confirmDeleteFolder.folderName}</strong>" y todos sus formularios.`}
-          onCancel={() => setConfirmDeleteFolder(null)} onConfirm={handleConfirmDeleteFolder}
-          confirmLabel="Eliminar" confirmColor="#ef4444" />
-      )}
-      {confirmDuplicateFolder && (
-        <ConfirmModal title="¿Duplicar carpeta?"
-          message={`Se creará una copia de la carpeta "<strong>${confirmDuplicateFolder.folderName}</strong>" con todos sus formularios.`}
-          onCancel={() => setConfirmDuplicateFolder(null)} onConfirm={handleConfirmDuplicateFolder}
-          confirmLabel="Duplicar" confirmColor="#3b82f6" />
-      )}
-      {confirmDeleteProject && (
-        <ConfirmModal title="¿Eliminar proyecto?"
-          message={`Estás a punto de eliminar el proyecto "<strong>${confirmDeleteProject.projectName}</strong>" y todas sus carpetas y formularios.`}
-          onCancel={() => setConfirmDeleteProject(null)} onConfirm={handleConfirmDeleteProject}
-          confirmLabel="Eliminar" confirmColor="#ef4444" />
+      {editingForm && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: 20, width: "100%", maxWidth: 380, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 20, color: "#111827" }}>Editar Formulario</h2>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 6, textTransform: "uppercase" }}>Nombre</label>
+            <input style={inputStyle} value={editFormName} onChange={(e) => setEditFormName(e.target.value)} autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  if (editFormName.trim()) { renameForm(editingForm.folderId, editingForm.formId, editFormName.trim()); }
+                  setEditingForm(null);
+                }
+              }} />
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button style={btnGhost} onClick={() => setEditingForm(null)}>Cancelar</button>
+              <button style={btnPrimary} onClick={() => {
+                if (editFormName.trim()) { renameForm(editingForm.folderId, editingForm.formId, editFormName.trim()); }
+                setEditingForm(null);
+              }}>Guardar</button>
+            </div>
+          </div>
+        </div>
       )}
 
-      <style>{`
-        @media (max-width: 768px) {
-          .sidebar-desktop { transform: translateX(-100%); }
-          .sidebar-desktop[style*="left: 0"] { transform: translateX(0) !important; }
-          .main-content { margin-left: 0 !important; }
-          .mobile-topbar { display: flex !important; }
-        }
-        @media (min-width: 769px) {
-          .sidebar-overlay { display: none !important; }
-        }
-      `}</style>
+      {confirmDelete && <ConfirmModal title="¿Eliminar formulario?" message={`Eliminarás "<strong>${confirmDelete.formName}</strong>".`} onCancel={() => setConfirmDelete(null)} onConfirm={() => { deleteForm(confirmDelete.folderId, confirmDelete.formId); setConfirmDelete(null); }} confirmLabel="Eliminar" confirmColor="#ef4444" />}
+      {confirmDuplicate && <ConfirmModal title="¿Duplicar formulario?" message={`Se creará una copia de "<strong>${confirmDuplicate.formName}</strong>".`} onCancel={() => setConfirmDuplicate(null)} onConfirm={() => { duplicateForm(confirmDuplicate.folderId, confirmDuplicate.formId); setConfirmDuplicate(null); }} confirmLabel="Duplicar" confirmColor="#3b82f6" />}
+      {confirmDeleteFolder && <ConfirmModal title="¿Eliminar carpeta?" message={`Eliminarás "<strong>${confirmDeleteFolder.folderName}</strong>" y todos sus formularios.`} onCancel={() => setConfirmDeleteFolder(null)} onConfirm={() => { deleteFolder(confirmDeleteFolder.folderId); setConfirmDeleteFolder(null); }} confirmLabel="Eliminar" confirmColor="#ef4444" />}
+      {confirmDuplicateFolder && <ConfirmModal title="¿Duplicar carpeta?" message={`Se duplicará "<strong>${confirmDuplicateFolder.folderName}</strong>".`} onCancel={() => setConfirmDuplicateFolder(null)} onConfirm={() => { duplicateFolder(confirmDuplicateFolder.folderId); setConfirmDuplicateFolder(null); }} confirmLabel="Duplicar" confirmColor="#3b82f6" />}
+      {confirmDeleteProject && <ConfirmModal title="¿Eliminar proyecto?" message={`Eliminarás "<strong>${confirmDeleteProject.projectName}</strong>" y todo su contenido.`} onCancel={() => setConfirmDeleteProject(null)} onConfirm={() => { deleteProject(confirmDeleteProject.projectId); setConfirmDeleteProject(null); }} confirmLabel="Eliminar" confirmColor="#ef4444" />}
     </div>
   );
 }
