@@ -148,9 +148,7 @@ export default function AdminLayout({
           <HomePage
             onOpenBuilder={onOpenBuilder}
             onOpenForm={onOpenForm}
-            onLogout={onLogout}
             currentUser={currentUser}
-            onSwitchToUserApp={onSwitchToUserApp}
           />
         )}
         {section === "usuarios" && <UsersPage />}

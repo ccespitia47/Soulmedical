@@ -5,7 +5,7 @@ import type { AuthUser } from "../types/auth.types";
 import logo from "../assets/Logo_GrupoSoul.png";
 
 // Usamos Pick para aceptar tanto AuthUser como AppUser
-type UserForApp = Pick<AuthUser, "name" | "role" | "avatar" | "assignments"> & { id?: string; email?: string };
+type UserForApp = Pick<AuthUser, "name" | "role" | "avatar" | "assignments"> & { id?: number; email?: string };
 
 type UserAppPageProps = {
   user: UserForApp;
@@ -30,7 +30,7 @@ export default function UserAppPage({ user, onFillForm, onLogout, onSwitchToAdmi
   const getVisibleFolders = () => {
     const projectFolders = folders.filter((f) => f.projectId === selectedProjectId);
 
-    if (user.role === "usuario_externo" && user.assignments) {
+    if (user.role === "user" && user.assignments) {
       return projectFolders
         .map((folder) => {
           const assignment = user.assignments!.find((a) => a.folderId === folder.id);
@@ -206,7 +206,7 @@ export default function UserAppPage({ user, onFillForm, onLogout, onSwitchToAdmi
               <span style={{ fontSize: 48, display: "block", marginBottom: 16 }}>📋</span>
               <p style={{ fontSize: 15, fontWeight: 600 }}>No hay formularios disponibles</p>
               <p style={{ fontSize: 13 }}>
-                {user.role === "usuario_externo"
+                {user.role === "user"
                   ? "El administrador aún no te ha asignado formularios."
                   : "Contacta al administrador para asignarte formularios."}
               </p>

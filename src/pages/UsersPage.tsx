@@ -3,13 +3,12 @@ import { useUsersStore, type AppUser, type UserAssignment } from "../store/useUs
 import { useFolderStore } from "../store/useFolderStore";
 import { ROLE_LABELS, ROLE_AVATARS, type UserRole } from "../types/auth.types";
 
-const ROLES: UserRole[] = ["coordinacion", "enfermero", "usuario_externo"];
+const ROLES: UserRole[] = ["coordinator", "user"];
 
 const ROLE_COLORS: Record<UserRole, string> = {
   admin: "#7c3aed",
-  coordinacion: "#0891b2",
-  enfermero: "#059669",
-  usuario_externo: "#d97706",
+  coordinator: "#0891b2",
+  user: "#d97706",
 };
 
 export default function UsersPage() {
@@ -26,7 +25,7 @@ export default function UsersPage() {
   const [formName, setFormName] = useState("");
   const [formEmail, setFormEmail] = useState("");
   const [formPassword, setFormPassword] = useState("");
-  const [formRole, setFormRole] = useState<UserRole>("enfermero");
+  const [formRole, setFormRole] = useState<UserRole>("user");
 
   // Asignaciones temporales
   const [tempAssignments, setTempAssignments] = useState<UserAssignment[]>([]);
@@ -38,7 +37,7 @@ export default function UsersPage() {
   );
 
   const handleOpenNew = () => {
-    setFormName(""); setFormEmail(""); setFormPassword(""); setFormRole("enfermero");
+    setFormName(""); setFormEmail(""); setFormPassword(""); setFormRole("user");
     setShowNewUser(true);
   };
 
@@ -166,7 +165,7 @@ export default function UsersPage() {
                   {!user.active && <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, background: "#f3f4f6", color: "#9ca3af", fontWeight: 600 }}>Inactivo</span>}
                 </div>
                 <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{user.email}</div>
-                {user.role === "usuario_externo" && (
+                {user.role === "user" && (
                   <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>
                     {getAssignmentCount(user)} formulario{getAssignmentCount(user) !== 1 ? "s" : ""} asignado{getAssignmentCount(user) !== 1 ? "s" : ""}
                   </div>
@@ -175,7 +174,7 @@ export default function UsersPage() {
 
               {/* Acciones */}
               <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
-                {user.role === "usuario_externo" && (
+                {user.role === "user" && (
                   <button onClick={() => handleOpenAssign(user)} style={{
                     padding: "6px 12px", background: "#eff6ff", color: "#1d4ed8",
                     border: "1px solid #bfdbfe", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer",

@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AdminLayout from "./pages/AdminLayout";
 import BuilderPage from "./pages/BuilderPage";
 import FormPage from "./pages/FormPage";
 import UserAppPage from "./pages/UserAppPage";
 import Login from "./pages/Login";
 import { useFolderStore } from "./store/useFolderStore";
+import { getToken, getStoredUser, clearSession } from "./services/api";
 import type { AuthUser } from "./types/auth.types";
-import { ROLE_PERMISSIONS } from "./types/auth.types";
+import { ROLE_PERMISSIONS, ROLE_AVATARS } from "./types/auth.types";
 
 type View = "login" | "admin" | "builder" | "form" | "userapp";
 
@@ -16,6 +17,21 @@ export default function App() {
   const [currentFolder, setCurrentFolder] = useState("");
   const [currentForm, setCurrentForm] = useState("");
   const { folders } = useFolderStore();
+
+  // Restaurar sesion si hay token guardado
+  useEffect(() => {
+    const token = getToken();
+    const stored = getStoredUser();
+    if (token && stored) {
+      const user: AuthUser = {
+        ...stored,
+        avatar: ROLE_AVATARS[stored.role as AuthUser["role"]] ?? "👤",
+      };
+      setCurrentUser(user);
+      const perms = ROLE_PERMISSIONS[user.role];
+      setView(perms.canManageProjects ? "admin" : "userapp");
+    }
+  }, []);
 
   const handleLogin = (user: AuthUser) => {
     setCurrentUser(user);
@@ -28,6 +44,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    clearSession();
     setCurrentUser(null);
     setView("login");
   };

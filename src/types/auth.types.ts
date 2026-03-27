@@ -1,17 +1,17 @@
 // ─── Tipos de perfil ─────────────────────────────────────────────────────────
 
-export type UserRole = "admin" | "coordinacion" | "enfermero" | "usuario_externo";
+export type UserRole = "admin" | "coordinator" | "user";
 
 export type AuthUser = {
-  id: string;
+  id: number;
   email: string;
   name: string;
   role: UserRole;
   avatar: string;
-  // Solo para usuario_externo: carpetas y formularios asignados
+  // Solo para usuario externo: carpetas y formularios asignados
   assignments?: {
     folderId: string;
-    formIds: string[]; // formularios específicos dentro de esa carpeta
+    formIds: string[];
   }[];
 };
 
@@ -24,7 +24,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, {
   canManageUsers: boolean;
   canFillForms: boolean;
   canViewSubmissions: boolean;
-  hasLimitedAccess: boolean; // usuario_externo
+  hasLimitedAccess: boolean;
 }> = {
   admin: {
     canAccessBuilder: true,
@@ -35,7 +35,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, {
     canViewSubmissions: true,
     hasLimitedAccess: false,
   },
-  coordinacion: {
+  coordinator: {
     canAccessBuilder: false,
     canManageFolders: false,
     canManageProjects: false,
@@ -44,84 +44,25 @@ export const ROLE_PERMISSIONS: Record<UserRole, {
     canViewSubmissions: true,
     hasLimitedAccess: false,
   },
-  enfermero: {
+  user: {
     canAccessBuilder: false,
     canManageFolders: false,
     canManageProjects: false,
     canManageUsers: false,
     canFillForms: true,
     canViewSubmissions: false,
-    hasLimitedAccess: false,
-  },
-  usuario_externo: {
-    canAccessBuilder: false,
-    canManageFolders: false,
-    canManageProjects: false,
-    canManageUsers: false,
-    canFillForms: true,
-    canViewSubmissions: false,
-    hasLimitedAccess: true, // solo ve sus formularios asignados
+    hasLimitedAccess: true,
   },
 };
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   admin: "Administrador",
-  coordinacion: "Coordinación",
-  enfermero: "Enfermero",
-  usuario_externo: "Usuario Externo",
+  coordinator: "Coordinador",
+  user: "Usuario",
 };
 
 export const ROLE_AVATARS: Record<UserRole, string> = {
   admin: "👨‍💼",
-  coordinacion: "👩‍⚕️",
-  enfermero: "🩺",
-  usuario_externo: "👤",
+  coordinator: "👩‍⚕️",
+  user: "👤",
 };
-
-// ─── Credenciales temporales (admin y roles internos) ─────────────────────────
-// Los usuarios externos se crean desde el panel de administración
-
-const TEMP_CREDENTIALS: Record<string, { password: string; user: AuthUser }> = {
-  "bi@sarapacientes.com": {
-    password: "admin123",
-    user: {
-      id: "admin-1",
-      email: "bi@sarapacientes.com",
-      name: "Administrador",
-      role: "admin",
-      avatar: "👨‍💼",
-    },
-  },
-  "coordinacion@sarapacientes.com": {
-    password: "coord123",
-    user: {
-      id: "coord-1",
-      email: "coordinacion@sarapacientes.com",
-      name: "Coordinación",
-      role: "coordinacion",
-      avatar: "👩‍⚕️",
-    },
-  },
-  "enfermero@sarapacientes.com": {
-    password: "enf123",
-    user: {
-      id: "enf-1",
-      email: "enfermero@sarapacientes.com",
-      name: "Enfermero",
-      role: "enfermero",
-      avatar: "🩺",
-    },
-  },
-};
-
-// ─── Función de autenticación ─────────────────────────────────────────────────
-
-export function authenticateTemp(
-  email: string,
-  password: string
-): AuthUser | null {
-  const entry = TEMP_CREDENTIALS[email.toLowerCase().trim()];
-  if (!entry) return null;
-  if (entry.password !== password) return null;
-  return entry.user;
-}

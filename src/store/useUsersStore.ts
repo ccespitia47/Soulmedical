@@ -25,10 +25,10 @@ interface UsersState {
     assignments?: UserAssignment[];
   }) => void;
 
-  updateUser: (id: string, changes: Partial<Omit<AppUser, "id" | "createdAt">>) => void;
-  deleteUser: (id: string) => void;
-  toggleActive: (id: string) => void;
-  updateAssignments: (id: string, assignments: UserAssignment[]) => void;
+  updateUser: (id: number, changes: Partial<Omit<AppUser, "id" | "createdAt">>) => void;
+  deleteUser: (id: number) => void;
+  toggleActive: (id: number) => void;
+  updateAssignments: (id: number, assignments: UserAssignment[]) => void;
 
   // Autenticar usuario externo creado por admin
   authenticateUser: (email: string, password: string) => AppUser | null;
@@ -40,8 +40,9 @@ export const useUsersStore = create<UsersState>()(
       users: [],
 
       addUser: (data) => {
+        const maxId = get().users.reduce((max, u) => Math.max(max, u.id), 0);
         const newUser: AppUser = {
-          id: crypto.randomUUID(),
+          id: maxId + 1,
           email: data.email,
           name: data.name,
           role: data.role,
