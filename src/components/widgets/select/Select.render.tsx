@@ -10,6 +10,7 @@ export default function SelectRender({ widget }: WidgetRenderProps) {
         {widget.required && <span style={{ color: "#ef4444", marginLeft: 3 }}>*</span>}
       </label>
       <select
+        name={widget.id}
         required={widget.required}
         defaultValue=""
         style={{

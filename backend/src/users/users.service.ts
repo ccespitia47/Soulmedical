@@ -1,4 +1,4 @@
-import { Injectable, ConflictException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
@@ -47,6 +47,38 @@ export class UsersService {
       select: ['id', 'name', 'email', 'role', 'isActive', 'createdAt'],
     });
     return users;
+  }
+
+  async update(
+    id: number,
+    changes: { name?: string; email?: string; role?: UserRole; password?: string },
+  ): Promise<Omit<User, 'password'>> {
+    const user = await this.findById(id);
+    if (!user) throw new NotFoundException('Usuario no encontrado');
+
+    if (changes.password) {
+      changes = { ...changes, password: await bcrypt.hash(changes.password, 12) };
+    }
+    await this.usersRepository.update(id, changes);
+    const updated = await this.findById(id);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password: _p, ...rest } = updated!;
+    return rest;
+  }
+
+  async remove(id: number): Promise<void> {
+    const user = await this.findById(id);
+    if (!user) throw new NotFoundException('Usuario no encontrado');
+    await this.usersRepository.delete(id);
+  }
+
+  async toggleActive(id: number): Promise<Omit<User, 'password'>> {
+    const user = await this.findById(id);
+    if (!user) throw new NotFoundException('Usuario no encontrado');
+    await this.usersRepository.update(id, { isActive: !user.isActive });
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password: _p, ...rest } = { ...user, isActive: !user.isActive };
+    return rest;
   }
 
   /** Crea un admin inicial si no existe ningún usuario */

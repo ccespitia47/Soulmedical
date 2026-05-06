@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
+import { ApiKeyGuard } from '../auth/api-key.guard';
 import { SubmissionsService } from './submissions.service';
 import { CreateSubmissionDto } from './dto/create-submission.dto';
 
@@ -10,7 +11,6 @@ interface OptionalAuthRequest { user?: { id: number } }
 export class SubmissionsController {
   constructor(private readonly submissionsService: SubmissionsService) {}
 
-  // Captura el usuario logueado si hay token, pero no lo requiere
   @UseGuards(OptionalJwtAuthGuard)
   @Post('forms/:formId/submit')
   submit(
@@ -18,11 +18,9 @@ export class SubmissionsController {
     @Body() dto: CreateSubmissionDto,
     @Request() req: OptionalAuthRequest,
   ) {
-    const userId = req.user?.id ?? undefined;
-    return this.submissionsService.submit(formId, dto, userId);
+    return this.submissionsService.submit(formId, dto, req.user?.id);
   }
 
-  // Obtener respuestas de un formulario (requiere login)
   @UseGuards(JwtAuthGuard)
   @Get('forms/:formId/submissions')
   findByForm(
@@ -33,14 +31,31 @@ export class SubmissionsController {
     return this.submissionsService.findByForm(formId, parseInt(page), parseInt(limit));
   }
 
-  // Detalle de una respuesta especifica
+  // Endpoint para Power BI y herramientas externas — usa X-Api-Key
+  @UseGuards(ApiKeyGuard)
+  @Get('forms/:formId/submissions/export')
+  exportByForm(
+    @Param('formId') formId: string,
+    @Query('page') page = '0',
+    @Query('limit') limit = '100',
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.submissionsService.exportByForm(
+      formId,
+      parseInt(page),
+      parseInt(limit),
+      from,
+      to,
+    );
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get('submissions/:id')
   findOne(@Param('id') id: string) {
     return this.submissionsService.findOne(id);
   }
 
-  // Listado global (solo admin)
   @UseGuards(JwtAuthGuard)
   @Get('submissions')
   findAll(

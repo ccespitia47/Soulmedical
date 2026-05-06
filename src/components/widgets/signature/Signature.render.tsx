@@ -4,6 +4,7 @@ import type { WidgetRenderProps } from "../../../types/widget.types";
 export default function SignatureRender({ widget }: WidgetRenderProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
+  const [signatureData, setSignatureData] = useState("");
 
   const penColor = (widget.config.penColor as string) || "#000000";
   const penWidth = (widget.config.penWidth as number) || 2;
@@ -67,6 +68,8 @@ export default function SignatureRender({ widget }: WidgetRenderProps) {
 
   const stopDrawing = useCallback(() => {
     setIsDrawing(false);
+    const canvas = canvasRef.current;
+    if (canvas) setSignatureData(canvas.toDataURL("image/png"));
   }, []);
 
   const clearCanvas = useCallback(() => {
@@ -74,6 +77,7 @@ export default function SignatureRender({ widget }: WidgetRenderProps) {
     const ctx = canvas?.getContext("2d");
     if (!ctx || !canvas) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setSignatureData("");
   }, []);
 
   // Ajustar el tamanio interno del canvas al tamanio visual
@@ -118,6 +122,7 @@ export default function SignatureRender({ widget }: WidgetRenderProps) {
           display: "block",
         }}
       />
+      <input type="hidden" name={widget.id} value={signatureData} readOnly />
       <button
         type="button"
         onClick={clearCanvas}

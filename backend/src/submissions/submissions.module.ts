@@ -4,14 +4,17 @@ import { FormSubmission, FormSubmissionSchema } from './form-submission.schema';
 import { SubmissionsService } from './submissions.service';
 import { SubmissionsController } from './submissions.controller';
 import { FormsModule } from '../forms/forms.module';
+import { ApiKeysModule } from '../api-keys/api-keys.module';
+import { ApiKeyGuard } from '../auth/api-key.guard';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: FormSubmission.name, schema: FormSubmissionSchema }]),
     FormsModule,
+    ApiKeysModule,
   ],
   controllers: [SubmissionsController],
-  providers: [SubmissionsService],
+  providers: [SubmissionsService, ApiKeyGuard],
   exports: [SubmissionsService],
 })
 export class SubmissionsModule {}

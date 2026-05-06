@@ -114,6 +114,37 @@ export function clearSession() {
   localStorage.removeItem('user');
 }
 
+// --- Usuarios ---
+
+export type UserApiData = {
+  id: number;
+  name: string;
+  email: string;
+  role: 'admin' | 'coordinator' | 'user';
+  isActive: boolean;
+  createdAt: string;
+};
+
+export async function getUsersApi() {
+  return request<UserApiData[]>('/users');
+}
+
+export async function createUserApi(dto: { name: string; email: string; password: string; role: string }) {
+  return request<UserApiData>('/users', { method: 'POST', body: JSON.stringify(dto) });
+}
+
+export async function updateUserApi(id: number, dto: { name?: string; email?: string; role?: string; password?: string }) {
+  return request<UserApiData>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(dto) });
+}
+
+export async function deleteUserApi(id: number) {
+  return request<void>(`/users/${id}`, { method: 'DELETE' });
+}
+
+export async function toggleUserActiveApi(id: number) {
+  return request<UserApiData>(`/users/${id}/toggle`, { method: 'PATCH' });
+}
+
 // --- Proyectos ---
 
 export type ProjectData = {

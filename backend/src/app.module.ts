@@ -7,6 +7,7 @@ import { ProjectsModule } from './projects/projects.module';
 import { FoldersModule } from './folders/folders.module';
 import { FormsModule } from './forms/forms.module';
 import { SubmissionsModule } from './submissions/submissions.module';
+import { ApiKeysModule } from './api-keys/api-keys.module';
 import { User } from './users/user.entity';
 
 @Module({
@@ -32,6 +33,7 @@ import { User } from './users/user.entity';
     FoldersModule,
     FormsModule,
     SubmissionsModule,
+    ApiKeysModule,
   ],
 })
 export class AppModule {}

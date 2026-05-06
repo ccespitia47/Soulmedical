@@ -1,14 +1,13 @@
 import { useState } from "react";
-import { authenticateTemp } from "../types/auth.types";
-import { useUsersStore } from "../store/useUsersStore";
+import { login, saveSession } from "../services/api";
 import type { AuthUser } from "../types/auth.types";
+import { ROLE_AVATARS } from "../types/auth.types";
 
 type LoginProps = {
   onLogin: (user: AuthUser) => void;
 };
 
 export default function Login({ onLogin }: LoginProps) {
-  const { authenticateUser } = useUsersStore();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -22,24 +21,23 @@ export default function Login({ onLogin }: LoginProps) {
     }
     setError("");
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 700));
+
+    const result = await login(email, password);
     setLoading(false);
 
-    // 1. Intentar con credenciales temporales (admin, coordinacion, enfermero)
-    const tempUser = authenticateTemp(email, password);
-    if (tempUser) {
-      onLogin(tempUser);
+    if (result.error || !result.data) {
+      setError(result.error ?? "Correo o contraseña incorrectos.");
       return;
     }
 
-    // 2. Intentar con usuarios creados por el admin
-    const appUser = authenticateUser(email, password);
-    if (appUser) {
-      onLogin(appUser);
-      return;
-    }
+    const { access_token, user } = result.data;
+    saveSession(access_token, user);
 
-    setError("Correo o contraseña incorrectos.");
+    const authUser: AuthUser = {
+      ...user,
+      avatar: ROLE_AVATARS[user.role] ?? "👤",
+    };
+    onLogin(authUser);
   };
 
   return (
