@@ -24,7 +24,12 @@ export class FormsService {
     return form.save();
   }
 
-  async findByFolder(folderId: string): Promise<FormDocument[]> {
+  async findByFolder(folderId: string, userId?: number, role?: string): Promise<FormDocument[]> {
+    if (role === 'user' && userId) {
+      const assignments = await this.assignmentModel.find({ userId });
+      const assignedFormIds = assignments.map((a) => a.formId);
+      return this.formModel.find({ folderId, isActive: true, _id: { $in: assignedFormIds } }).sort({ createdAt: 1 });
+    }
     return this.formModel.find({ folderId, isActive: true }).sort({ createdAt: 1 });
   }
 

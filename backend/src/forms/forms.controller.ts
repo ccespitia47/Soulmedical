@@ -18,8 +18,8 @@ export class FormsController {
   }
 
   @Get()
-  findByFolder(@Query('folderId') folderId: string) {
-    return this.formsService.findByFolder(folderId);
+  findByFolder(@Query('folderId') folderId: string, @Request() req: AuthRequest) {
+    return this.formsService.findByFolder(folderId, req.user.id, req.user.role);
   }
 
   @Get('assigned')

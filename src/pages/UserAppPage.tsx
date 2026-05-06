@@ -26,24 +26,10 @@ export default function UserAppPage({ user, onFillForm, onLogout, onSwitchToAdmi
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId);
 
-  // ── Filtrar carpetas/formularios según rol ────────────────────────────────
+  // El backend ya filtra los formularios según las asignaciones del usuario
   const getVisibleFolders = () => {
-    const projectFolders = folders.filter((f) => f.projectId === selectedProjectId);
-
-    if (user.role === "user" && user.assignments) {
-      return projectFolders
-        .map((folder) => {
-          const assignment = user.assignments!.find((a) => a.folderId === folder.id);
-          if (!assignment) return null;
-          return {
-            ...folder,
-            forms: folder.forms.filter((form) => assignment.formIds.includes(form.id)),
-          };
-        })
-        .filter((f): f is NonNullable<typeof f> => f !== null && f.forms.length > 0);
-    }
-
-    return projectFolders;
+    return folders
+      .filter((f) => f.projectId === selectedProjectId && f.forms.length > 0);
   };
 
   const visibleFolders = getVisibleFolders();

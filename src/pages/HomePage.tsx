@@ -2,6 +2,11 @@ import { useState, useEffect } from "react";
 import { useFolderStore } from "../store/useFolderStore";
 import { useProjectStore } from "../store/useProjectStore";
 import { FOLDER_COLORS, FOLDER_ICONS, PROJECT_COLORS, PROJECT_ICONS } from "../types/folder.types";
+import {
+  getUsersApi, assignFormToUserApi, unassignFormFromUserApi, getFormAssignmentsApi,
+  type UserApiData,
+} from "../services/api";
+import { ROLE_LABELS, ROLE_AVATARS, type UserRole } from "../types/auth.types";
 
 function ConfirmModal({ title, message, onCancel, onConfirm, confirmLabel, confirmColor }: {
   title: string; message: string; onCancel: () => void; onConfirm: () => void; confirmLabel: string; confirmColor: string;
@@ -63,6 +68,14 @@ export default function HomePage({
   const [confirmDuplicateFolder, setConfirmDuplicateFolder] = useState<{ folderId: string; folderName: string } | null>(null);
   const [confirmDeleteProject, setConfirmDeleteProject] = useState<{ projectId: string; projectName: string } | null>(null);
 
+  // Estado para modal de asignación de usuarios
+  const [assigningForm, setAssigningForm] = useState<{ folderId: string; formId: string; formName: string } | null>(null);
+  const [allUsers, setAllUsers] = useState<UserApiData[]>([]);
+  const [assignedUserIds, setAssignedUserIds] = useState<Set<number>>(new Set());
+  const [originalAssignedIds, setOriginalAssignedIds] = useState<Set<number>>(new Set());
+  const [loadingAssign, setLoadingAssign] = useState(false);
+  const [savingAssign, setSavingAssign] = useState(false);
+
   const [folderName, setFolderName] = useState("");
   const [folderColor, setFolderColor] = useState("#00c2a8");
   const [folderIcon, setFolderIcon] = useState("📁");
@@ -112,6 +125,39 @@ export default function HomePage({
     if (!editingFolder || !folderName.trim()) return;
     updateFolder(editingFolder, { name: folderName, color: folderColor, icon: folderIcon });
     setShowEditFolder(false); setEditingFolder(null);
+  };
+
+  const handleOpenAssign = async (folderId: string, formId: string, formName: string) => {
+    setAssigningForm({ folderId, formId, formName });
+    setLoadingAssign(true);
+    const [usersRes, assignRes] = await Promise.all([getUsersApi(), getFormAssignmentsApi(formId)]);
+    const users = (usersRes.data ?? []).filter((u) => u.role !== "admin");
+    const ids = new Set((assignRes.data ?? []).map((a) => a.userId));
+    setAllUsers(users);
+    setAssignedUserIds(new Set(ids));
+    setOriginalAssignedIds(new Set(ids));
+    setLoadingAssign(false);
+  };
+
+  const handleToggleUserAssignment = (userId: number) => {
+    setAssignedUserIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId); else next.add(userId);
+      return next;
+    });
+  };
+
+  const handleSaveAssignments = async () => {
+    if (!assigningForm) return;
+    setSavingAssign(true);
+    const toAdd = [...assignedUserIds].filter((id) => !originalAssignedIds.has(id));
+    const toRemove = [...originalAssignedIds].filter((id) => !assignedUserIds.has(id));
+    await Promise.all([
+      ...toAdd.map((id) => assignFormToUserApi(assigningForm.formId, id)),
+      ...toRemove.map((id) => unassignFormFromUserApi(assigningForm.formId, id)),
+    ]);
+    setSavingAssign(false);
+    setAssigningForm(null);
   };
 
   const handleCreateForm = () => {
@@ -338,6 +384,11 @@ export default function HomePage({
                         style={{ flex: 1, padding: "8px 0", background: "none", color: "#6b7280", border: "1.5px solid #e2e8f0", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
                         ⚙️ Config
                       </button>
+                      <button onClick={() => handleOpenAssign(selectedFolder.id, form.id, form.name)}
+                        title="Asignar usuarios"
+                        style={{ padding: "8px 10px", background: "#eff6ff", color: "#1d4ed8", border: "1.5px solid #bfdbfe", borderRadius: 7, fontSize: 14, cursor: "pointer" }}>
+                        👥
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -448,6 +499,67 @@ export default function HomePage({
                 if (editFormName.trim()) { renameForm(editingForm.folderId, editingForm.formId, editFormName.trim()); }
                 setEditingForm(null);
               }}>Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal asignar usuarios a formulario */}
+      {assigningForm && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: 24, width: "100%", maxWidth: 500, maxHeight: "85vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+            <div style={{ marginBottom: 16 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, margin: "0 0 4px", color: "#111827" }}>👥 Asignar Usuarios</h2>
+              <p style={{ fontSize: 13, color: "#6b7280", margin: 0 }}>
+                <strong>{assigningForm.formName}</strong> · Selecciona quiénes pueden ver este formulario
+              </p>
+            </div>
+
+            <div style={{ flex: 1, overflowY: "auto", paddingRight: 4 }}>
+              {loadingAssign ? (
+                <p style={{ textAlign: "center", color: "#9ca3af", padding: "40px 0", fontSize: 13 }}>Cargando usuarios...</p>
+              ) : allUsers.length === 0 ? (
+                <p style={{ textAlign: "center", color: "#9ca3af", padding: "40px 0", fontSize: 13 }}>No hay usuarios registrados</p>
+              ) : (
+                allUsers.map((user) => {
+                  const checked = assignedUserIds.has(user.id);
+                  return (
+                    <div key={user.id} onClick={() => handleToggleUserAssignment(user.id)} style={{
+                      display: "flex", alignItems: "center", gap: 12, padding: "11px 14px", marginBottom: 6,
+                      borderRadius: 8, cursor: "pointer", border: `1.5px solid ${checked ? "#bbf7d0" : "#e2e8f0"}`,
+                      background: checked ? "#f0fdf4" : "#fff", transition: "all 0.15s",
+                    }}>
+                      <div style={{
+                        width: 20, height: 20, borderRadius: 5, flexShrink: 0,
+                        border: `2px solid ${checked ? "#00c2a8" : "#d1d5db"}`,
+                        background: checked ? "#00c2a8" : "#fff",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}>
+                        {checked && <span style={{ color: "#fff", fontSize: 13 }}>✓</span>}
+                      </div>
+                      <span style={{ fontSize: 20 }}>{ROLE_AVATARS[user.role as UserRole]}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: checked ? "#065f46" : "#111827" }}>{user.name}</div>
+                        <div style={{ fontSize: 11, color: "#6b7280" }}>{user.email} · {ROLE_LABELS[user.role as UserRole]}</div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "space-between", alignItems: "center", paddingTop: 16, borderTop: "1px solid #e2e8f0", marginTop: 8 }}>
+              <span style={{ fontSize: 12, color: "#9ca3af" }}>
+                {assignedUserIds.size} usuario{assignedUserIds.size !== 1 ? "s" : ""} asignado{assignedUserIds.size !== 1 ? "s" : ""}
+              </span>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button onClick={() => setAssigningForm(null)} style={{ padding: "9px 20px", background: "none", color: "#6b7280", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                  Cancelar
+                </button>
+                <button onClick={handleSaveAssignments} disabled={savingAssign} style={{ padding: "9px 20px", background: "#00c2a8", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                  {savingAssign ? "Guardando..." : "💾 Guardar"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

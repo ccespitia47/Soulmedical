@@ -276,6 +276,21 @@ export async function submitFormApi(
   });
 }
 
+export async function getFormAssignmentsApi(formId: string) {
+  return request<{ formId: string; userId: number }[]>(`/forms/${formId}/assignments`);
+}
+
+export async function assignFormToUserApi(formId: string, userId: number) {
+  return request<{ formId: string; userId: number }>(`/forms/${formId}/assign`, {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  });
+}
+
+export async function unassignFormFromUserApi(formId: string, userId: number) {
+  return request<void>(`/forms/${formId}/assign/${userId}`, { method: 'DELETE' });
+}
+
 export async function getSubmissionsApi(formId: string, page = 1, limit = 50) {
   return request<SubmissionsPage>(`/forms/${formId}/submissions?page=${page}&limit=${limit}`);
 }
