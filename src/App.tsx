@@ -18,11 +18,23 @@ export default function App() {
   const [currentForm, setCurrentForm] = useState("");
   const { folders } = useFolderStore();
 
-  // Restaurar sesion si hay token guardado
+  // Restaurar sesion si hay token guardado y no expiró
   useEffect(() => {
     const token = getToken();
     const stored = getStoredUser();
     if (token && stored) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const expired = payload.exp && Date.now() / 1000 > payload.exp;
+        if (expired) {
+          clearSession();
+          return;
+        }
+      } catch {
+        clearSession();
+        return;
+      }
+
       const user: AuthUser = {
         ...stored,
         avatar: ROLE_AVATARS[stored.role as AuthUser["role"]] ?? "👤",

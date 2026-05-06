@@ -131,16 +131,16 @@ export default function IdScannerRender({ widget, onValue }: WidgetRenderProps) 
     cursor: "pointer", background: bg, color,
   });
 
-  // Valor principal para validación (usamos el número de documento o el primer campo)
-  const mainValue = extracted.numero || extracted[fields[0]] || "";
+  // Guardar el objeto completo como JSON; el número se usa solo para validar required
+  const hasData = Object.keys(extracted).some((k) => extracted[k]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      {/* Input oculto para validación del formulario */}
+      {/* Input oculto: guarda todos los campos extraídos como JSON */}
       <input
         type="hidden"
         name={widget.id}
-        value={mainValue}
+        value={hasData ? JSON.stringify(extracted) : ""}
         required={widget.required}
       />
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useFolderStore } from "../store/useFolderStore";
 import { useProjectStore } from "../store/useProjectStore";
 import { FOLDER_COLORS, FOLDER_ICONS, PROJECT_COLORS, PROJECT_ICONS } from "../types/folder.types";
@@ -32,8 +32,20 @@ export default function HomePage({
   onOpenForm: (folderId: string, formId: string) => void;
   currentUser?: { name: string; role: string; avatar: string } | null;
 }) {
-  const { folders, addFolder, deleteFolder, updateFolder, addForm, deleteForm, renameForm, selectFolder, selectedFolderId, duplicateFolder, duplicateForm } = useFolderStore();
-  const { projects, selectedProjectId, addProject, deleteProject, updateProject, selectProject } = useProjectStore();
+  const { folders, addFolder, deleteFolder, updateFolder, addForm, deleteForm, renameForm, selectFolder, selectedFolderId, duplicateFolder, duplicateForm, loadFolders } = useFolderStore();
+  const { projects, selectedProjectId, addProject, deleteProject, updateProject, selectProject, loadProjects, loading: loadingProjects } = useProjectStore();
+
+  // Carga inicial de proyectos desde el backend
+  useEffect(() => {
+    loadProjects();
+  }, []);
+
+  // Carga las carpetas y formularios cada vez que se selecciona un proyecto
+  useEffect(() => {
+    if (selectedProjectId) {
+      loadFolders(selectedProjectId);
+    }
+  }, [selectedProjectId]);
 
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [showEditFolder, setShowEditFolder] = useState(false);
@@ -317,14 +329,14 @@ export default function HomePage({
                     </div>
                     <h3 style={{ fontSize: 14, fontWeight: 700, color: "#111827", margin: "0 0 4px" }}>{form.name}</h3>
                     <p style={{ fontSize: 11, color: "#9ca3af", margin: "0 0 14px" }}>Editado: {form.updatedAt}</p>
-                    <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ display: "flex", gap: 6 }}>
                       <button onClick={() => onOpenForm(selectedFolder.id, form.id)}
                         style={{ flex: 1, padding: "8px 0", background: selectedFolder.color, color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", boxShadow: `0 2px 6px ${selectedFolder.color}44` }}>
                         ✏️ Diligenciar
                       </button>
                       <button onClick={() => onOpenBuilder(selectedFolder.id, form.id)}
                         style={{ flex: 1, padding: "8px 0", background: "none", color: "#6b7280", border: "1.5px solid #e2e8f0", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
-                        ⚙️ configuracion
+                        ⚙️ Config
                       </button>
                     </div>
                   </div>

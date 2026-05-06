@@ -136,7 +136,6 @@ export default function Login({ onLogin }: LoginProps) {
             SoulForms
           </h1>
           <p style={{ fontSize: 13, color: "rgba(255,255,255,0.82)", margin: "4px 0 0", textShadow: "0 1px 6px rgba(0,0,0,0.2)" }}>
-            Gestion clinica inteligente
           </p>
         </div>
 
@@ -159,7 +158,8 @@ export default function Login({ onLogin }: LoginProps) {
                 <label style={labelStyle}>Correo electronico</label>
                 <div style={{ position: "relative" }}>
                   <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 16 }}>✉️</div>
-                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                  <input type="email" name="email" autoComplete="email"
+                    value={email} onChange={(e) => setEmail(e.target.value)}
                     placeholder="usuario@gruposoul.com" onKeyDown={(e) => e.key === "Enter" && handleLogin()}
                     style={inputStyle} onFocus={handleFocus} onBlur={handleBlur} />
                 </div>
@@ -170,8 +170,8 @@ export default function Login({ onLogin }: LoginProps) {
                 <label style={labelStyle}>Contrasena</label>
                 <div style={{ position: "relative" }}>
                   <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 16 }}>🔒</div>
-                  <input type={showPassword ? "text" : "password"} value={password}
-                    onChange={(e) => setPassword(e.target.value)} placeholder="••••••••"
+                  <input type={showPassword ? "text" : "password"} name="password" autoComplete="current-password"
+                    value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••"
                     onKeyDown={(e) => e.key === "Enter" && handleLogin()}
                     style={{ ...inputStyle, paddingRight: 44 }} onFocus={handleFocus} onBlur={handleBlur} />
                   <button type="button" onClick={() => setShowPassword(!showPassword)}

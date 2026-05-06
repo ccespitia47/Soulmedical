@@ -1,70 +1,94 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 import type { ProjectItem } from "../types/folder.types";
+import {
+  getProjects,
+  createProject,
+  updateProjectApi,
+  deleteProjectApi,
+  type ProjectData,
+} from "../services/api";
+
+function mapProject(p: ProjectData): ProjectItem {
+  return {
+    id: p.id,
+    name: p.name,
+    color: p.color,
+    icon: p.icon,
+    createdAt: new Date(p.createdAt).toLocaleDateString("es-CO"),
+  };
+}
 
 interface ProjectState {
   projects: ProjectItem[];
   selectedProjectId: string | null;
+  loading: boolean;
 
-  addProject: (name: string, color: string, icon: string) => void;
-  deleteProject: (id: string) => void;
-  updateProject: (id: string, changes: Partial<ProjectItem>) => void;
+  loadProjects: () => Promise<void>;
+  addProject: (name: string, color: string, icon: string) => Promise<void>;
+  deleteProject: (id: string) => Promise<void>;
+  updateProject: (id: string, changes: Partial<ProjectItem>) => Promise<void>;
   selectProject: (id: string | null) => void;
-  duplicateProject: (id: string) => void;
+  duplicateProject: (id: string) => Promise<void>;
 }
 
-export const useProjectStore = create<ProjectState>()(
-  persist(
-    (set) => ({
-      projects: [],
-      selectedProjectId: null,
+export const useProjectStore = create<ProjectState>()((set, get) => ({
+  projects: [],
+  selectedProjectId: null,
+  loading: false,
 
-      addProject: (name, color, icon) =>
-        set((state) => {
-          const newProject: ProjectItem = {
-            id: crypto.randomUUID(),
-            name,
-            color,
-            icon,
-            createdAt: new Date().toLocaleDateString("es-CO"),
-          };
-          return {
-            projects: [...state.projects, newProject],
-            selectedProjectId: newProject.id,
-          };
-        }),
+  loadProjects: async () => {
+    set({ loading: true });
+    const { data, error } = await getProjects();
+    if (error) console.error('[ProjectStore] loadProjects error:', error);
+    if (data) {
+      set({ projects: data.map(mapProject) });
+    }
+    set({ loading: false });
+  },
 
-      deleteProject: (id) =>
-        set((state) => ({
-          projects: state.projects.filter((p) => p.id !== id),
-          selectedProjectId:
-            state.selectedProjectId === id ? null : state.selectedProjectId,
-        })),
+  addProject: async (name, color, icon) => {
+    const { data, error } = await createProject({ name, color, icon });
+    if (error) { console.error('[ProjectStore] addProject error:', error); alert(`Error al crear proyecto: ${error}`); return; }
+    if (data) {
+      const project = mapProject(data);
+      set((state) => ({
+        projects: [...state.projects, project],
+        selectedProjectId: project.id,
+      }));
+    }
+  },
 
-      updateProject: (id, changes) =>
-        set((state) => ({
-          projects: state.projects.map((p) =>
-            p.id === id ? { ...p, ...changes } : p
-          ),
-        })),
+  deleteProject: async (id) => {
+    await deleteProjectApi(id);
+    set((state) => ({
+      projects: state.projects.filter((p) => p.id !== id),
+      selectedProjectId: state.selectedProjectId === id ? null : state.selectedProjectId,
+    }));
+  },
 
-      selectProject: (id) => set({ selectedProjectId: id }),
+  updateProject: async (id, changes) => {
+    const { data } = await updateProjectApi(id, changes);
+    if (data) {
+      set((state) => ({
+        projects: state.projects.map((p) => (p.id === id ? mapProject(data) : p)),
+      }));
+    }
+  },
 
-      duplicateProject: (id) =>
-        set((state) => {
-          const project = state.projects.find((p) => p.id === id);
-          if (!project) return state;
+  selectProject: (id) => set({ selectedProjectId: id }),
 
-          const duplicate: ProjectItem = {
-            ...project,
-            id: crypto.randomUUID(),
-            name: `${project.name} (copia)`,
-            createdAt: new Date().toLocaleDateString("es-CO"),
-          };
-
-          return { projects: [...state.projects, duplicate] };
-        }),
-    }),
-    { name: "soulforms-projects" }
-  )
-);
+  duplicateProject: async (id) => {
+    const project = get().projects.find((p) => p.id === id);
+    if (!project) return;
+    const { data } = await createProject({
+      name: `${project.name} (copia)`,
+      color: project.color,
+      icon: project.icon,
+    });
+    if (data) {
+      set((state) => ({
+        projects: [...state.projects, mapProject(data)],
+      }));
+    }
+  },
+}));

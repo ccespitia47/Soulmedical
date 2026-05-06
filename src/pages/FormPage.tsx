@@ -59,15 +59,20 @@ export default function FormPage({
 
     setSubmitting(true);
 
-    // Construir mapa widgetId → valor
-    const data: Record<string, string> = {};
+    // Construir mapa widgetId → valor (puede ser objeto para widgets complejos como id_scanner)
+    const data: Record<string, unknown> = {};
     widgets.forEach((widget) => {
       const value = formData.get(widget.id);
-      data[widget.id] = value ? String(value) : "";
+      if (!value) { data[widget.id] = ""; return; }
+      const str = String(value);
+      if (str.startsWith("{") || str.startsWith("[")) {
+        try { data[widget.id] = JSON.parse(str); return; } catch { /* usar como string */ }
+      }
+      data[widget.id] = str;
     });
 
     // Guardar en el store
-    addSubmission({ formId, folderId, data });
+    addSubmission({ formId, folderId, data: data as Record<string, string> });
 
     // Simular pequeño delay para UX
     await new Promise((r) => setTimeout(r, 600));

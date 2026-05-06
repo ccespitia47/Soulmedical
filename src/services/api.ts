@@ -26,6 +26,14 @@ async function request<T>(
       headers,
     });
 
+    if (response.status === 401) {
+      // Token expirado o inválido → limpiar sesión y redirigir al login
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/';
+      return { data: null, error: 'Sesión expirada' };
+    }
+
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
       return {
@@ -33,6 +41,8 @@ async function request<T>(
         error: body.message || `Error ${response.status}`,
       };
     }
+
+    if (response.status === 204) return { data: null, error: null };
 
     const data = await response.json();
     return { data, error: null };
@@ -102,4 +112,139 @@ export function getToken(): string | null {
 export function clearSession() {
   localStorage.removeItem('token');
   localStorage.removeItem('user');
+}
+
+// --- Proyectos ---
+
+export type ProjectData = {
+  id: string;
+  name: string;
+  color: string;
+  icon: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export async function getProjects() {
+  return request<ProjectData[]>('/projects');
+}
+
+export async function createProject(dto: { name: string; color: string; icon: string }) {
+  return request<ProjectData>('/projects', {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function updateProjectApi(id: string, dto: { name?: string; color?: string; icon?: string }) {
+  return request<ProjectData>(`/projects/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function deleteProjectApi(id: string) {
+  return request<void>(`/projects/${id}`, { method: 'DELETE' });
+}
+
+// --- Carpetas ---
+
+export type FolderData = {
+  id: string;
+  name: string;
+  color: string;
+  icon: string;
+  projectId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export async function getFoldersByProject(projectId: string) {
+  return request<FolderData[]>(`/folders?projectId=${projectId}`);
+}
+
+export async function createFolder(dto: { name: string; color: string; icon: string; projectId: string }) {
+  return request<FolderData>('/folders', {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function updateFolderApi(id: string, dto: { name?: string; color?: string; icon?: string }) {
+  return request<FolderData>(`/folders/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function deleteFolderApi(id: string) {
+  return request<void>(`/folders/${id}`, { method: 'DELETE' });
+}
+
+// --- Formularios ---
+
+export type FormApiData = {
+  id: string;
+  name: string;
+  folderId: string;
+  schema: { widgets: unknown[] };
+  emailTemplate: unknown | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export async function getFormsByFolder(folderId: string) {
+  return request<FormApiData[]>(`/forms?folderId=${folderId}`);
+}
+
+export async function createFormApi(dto: { name: string; folderId: string; schema?: object; emailTemplate?: object }) {
+  return request<FormApiData>('/forms', {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function updateFormApi(id: string, dto: { name?: string; schema?: object; emailTemplate?: object }) {
+  return request<FormApiData>(`/forms/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function deleteFormApi(id: string) {
+  return request<void>(`/forms/${id}`, { method: 'DELETE' });
+}
+
+// --- Respuestas de formularios ---
+
+export type SubmissionData = {
+  id: string;
+  formId: string;
+  formVersion: number;
+  data: Record<string, unknown>;
+  metadata: Record<string, unknown> | null;
+  submittedAt: string;
+};
+
+export type SubmissionsPage = {
+  data: SubmissionData[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
+export async function submitFormApi(
+  formId: string,
+  data: Record<string, unknown>,
+  metadata?: Record<string, unknown>,
+) {
+  return request<SubmissionData>(`/forms/${formId}/submit`, {
+    method: 'POST',
+    body: JSON.stringify({ data, metadata }),
+  });
+}
+
+export async function getSubmissionsApi(formId: string, page = 1, limit = 50) {
+  return request<SubmissionsPage>(`/forms/${formId}/submissions?page=${page}&limit=${limit}`);
 }
