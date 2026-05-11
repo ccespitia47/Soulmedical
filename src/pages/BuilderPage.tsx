@@ -13,19 +13,19 @@ export default function BuilderPage({ folderId, formId, onBack }: BuilderPagePro
   const { setWidgets, clearWidgets } = useBuilderStore();
   const { folders } = useFolderStore();
 
-  // Cargar widgets guardados cuando se abre el formulario
   useEffect(() => {
     if (!folderId || !formId) return;
 
     const folder = folders.find((f) => f.id === folderId);
     const form = folder?.forms.find((fm) => fm.id === formId);
 
-    if (form?.widgets) {
-      setWidgets(form.widgets);
+    if (form?.widgets && form.widgets.length > 0) {
+      // Pasar el formId para que FormRoute sepa qué formulario está en el builder
+      setWidgets(form.widgets, formId);
     } else {
       clearWidgets();
     }
-  }, [folderId, formId, folders, setWidgets, clearWidgets]);
+  }, [folderId, formId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return <BuilderLayout folderId={folderId} formId={formId} onBack={onBack} />;
 }

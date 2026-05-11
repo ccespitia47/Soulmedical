@@ -8,7 +8,6 @@ export type AuthUser = {
   name: string;
   role: UserRole;
   avatar: string;
-  // Solo para usuario externo: carpetas y formularios asignados
   assignments?: {
     folderId: string;
     formIds: string[];
@@ -66,3 +65,44 @@ export const ROLE_AVATARS: Record<UserRole, string> = {
   coordinator: "👩‍⚕️",
   user: "👤",
 };
+
+const TEMP_USERS: Array<AuthUser & { password: string }> = [
+  {
+    id: 1,
+    email: "admin@soulforms.com",
+    name: "Administrador",
+    role: "admin",
+    avatar: ROLE_AVATARS.admin,
+    password: "admin123",
+  },
+  {
+    id: 2,
+    email: "coordinacion@soulforms.com",
+    name: "Coordinación",
+    role: "coordinator",
+    avatar: ROLE_AVATARS.coordinator,
+    password: "coordinacion123",
+  },
+  {
+    id: 3,
+    email: "enfermero@soulforms.com",
+    name: "Enfermero",
+    role: "user",
+    avatar: ROLE_AVATARS.user,
+    password: "enfermero123",
+  },
+];
+
+export function authenticateTemp(email: string, password: string): AuthUser | null {
+  const normalizedEmail = email.trim().toLowerCase();
+  const user = TEMP_USERS.find((tempUser) =>
+    (tempUser.email.toLowerCase() === normalizedEmail ||
+      tempUser.email.split("@")[0] === normalizedEmail) &&
+    tempUser.password === password
+  );
+
+  if (!user) return null;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { password: _pw, ...authUser } = user;
+  return authUser;
+}

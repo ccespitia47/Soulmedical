@@ -29,8 +29,6 @@ interface UsersState {
   deleteUser: (id: number) => void;
   toggleActive: (id: number) => void;
   updateAssignments: (id: number, assignments: UserAssignment[]) => void;
-
-  // Autenticar usuario externo creado por admin
   authenticateUser: (email: string, password: string) => AppUser | null;
 }
 

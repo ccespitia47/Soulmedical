@@ -2,214 +2,247 @@ import { useState } from "react";
 import BuilderCanvas from "./BuilderCanvas";
 import WidgetPalette from "./WidgetPalette";
 import PropertyPanel from "../properties/PropertyPanel";
+import RulesPanel from "./RulesPanel";
 import { useBuilderStore } from "../../store/useBuilderStore";
+import { useRulesStore } from "../../store/useRulesStore";
+import { useAuthStore } from "../../store/useAuthStore";
+import { useTemplatesStore } from "../../store/useTemplatesStore";
 import PreviewPage from "@/pages/PreviewPage";
 import EmailConfigPanel from "../email/EmailConfigPanel";
 import logo from "../../assets/Logo_GrupoSoul.png";
 import { useFolderStore } from "../../store/useFolderStore";
+import type { FormVersion } from "../../types/folder.types";
 
+// ── Modal de éxito ────────────────────────────────────────────────────────────
+function SuccessModal({ title, message, onClose }: { title: string; message: string; onClose: () => void }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "#fff", borderRadius: 20, padding: "40px 32px", width: "100%", maxWidth: 380, textAlign: "center", boxShadow: "0 24px 64px rgba(0,0,0,0.2)" }}>
+        <div style={{ width: 72, height: 72, borderRadius: "50%", background: "linear-gradient(135deg, #00c2a8, #0891b2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", boxShadow: "0 8px 24px rgba(0,194,168,0.35)" }}>
+          <span style={{ fontSize: 36, color: "#fff" }}>✓</span>
+        </div>
+        <h2 style={{ fontSize: 20, fontWeight: 800, color: "#111827", margin: "0 0 10px" }}>{title}</h2>
+        <p style={{ fontSize: 14, color: "#6b7280", margin: "0 0 28px", lineHeight: 1.6 }}>{message}</p>
+        <button onClick={onClose} style={{ width: "100%", padding: "13px", background: "linear-gradient(135deg, #00c2a8, #0891b2)", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer" }}>Entendido</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Modal guardar como plantilla ──────────────────────────────────────────────
+function SaveTemplateModal({ onSave, onClose, templateFolders }: {
+  onSave: (name: string, folderId: string, description: string, icon: string) => void;
+  onClose: () => void;
+  templateFolders: Array<{ id: string; name: string }>;
+}) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [folderId, setFolderId] = useState(templateFolders[0]?.id ?? "");
+  const [icon, setIcon] = useState("📋");
+  const icons = ["📋","📝","🏥","👥","📊","⚙️","🎯","📦","💊","🔬"];
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "#fff", borderRadius: 16, padding: 24, width: "100%", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: "0 0 20px" }}>💾 Guardar como plantilla</h2>
+        <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 6, textTransform: "uppercase" }}>Nombre *</label>
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="Ej: Registro de pacientes" style={{ width: "100%", padding: "9px 12px", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 13, boxSizing: "border-box", marginBottom: 14 }} autoFocus />
+        <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 6, textTransform: "uppercase" }}>Descripción</label>
+        <input value={description} onChange={e => setDescription(e.target.value)} placeholder="Descripción opcional..." style={{ width: "100%", padding: "9px 12px", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 13, boxSizing: "border-box", marginBottom: 14 }} />
+        <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 6, textTransform: "uppercase" }}>Carpeta *</label>
+        {templateFolders.length === 0 ? (
+          <div style={{ padding: "10px 14px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, fontSize: 12, color: "#dc2626", marginBottom: 14 }}>⚠️ Primero crea una carpeta en la sección de Plantillas</div>
+        ) : (
+          <select value={folderId} onChange={e => setFolderId(e.target.value)} style={{ width: "100%", padding: "9px 12px", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 13, boxSizing: "border-box", marginBottom: 14 }}>
+            {templateFolders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+        )}
+        <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 8, textTransform: "uppercase" }}>Ícono</label>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>
+          {icons.map(ic => <button key={ic} onClick={() => setIcon(ic)} style={{ width: 38, height: 38, borderRadius: 8, fontSize: 20, cursor: "pointer", border: icon === ic ? "2px solid #00c2a8" : "2px solid #e2e8f0", background: icon === ic ? "#e6faf7" : "#fff" }}>{ic}</button>)}
+        </div>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={{ padding: "10px 20px", background: "none", color: "#6b7280", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+          <button onClick={() => { if (name.trim() && folderId) onSave(name.trim(), folderId, description, icon); }} disabled={!name.trim() || !folderId}
+            style={{ padding: "10px 20px", background: !name.trim() || !folderId ? "#e2e8f0" : "#00c2a8", color: !name.trim() || !folderId ? "#9ca3af" : "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: !name.trim() || !folderId ? "not-allowed" : "pointer" }}>
+            💾 Guardar plantilla
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Modal publicar ────────────────────────────────────────────────────────────
+function PublishModal({ currentVersion, onPublish, onClose }: { currentVersion: number; onPublish: (note: string) => void; onClose: () => void }) {
+  const [note, setNote] = useState("");
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "#fff", borderRadius: 16, padding: 24, width: "100%", maxWidth: 400, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: "0 0 8px" }}>🚀 Publicar formulario</h2>
+        <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 20px" }}>Se creará la versión <strong>v{currentVersion + 1}</strong> y será visible para los usuarios.</p>
+        <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 6, textTransform: "uppercase" }}>Nota del cambio (opcional)</label>
+        <input value={note} onChange={e => setNote(e.target.value)} placeholder="Ej: Se agregó campo de diagnóstico"
+          style={{ width: "100%", padding: "9px 12px", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 13, boxSizing: "border-box", marginBottom: 20 }} autoFocus onKeyDown={e => e.key === "Enter" && onPublish(note)} />
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={{ padding: "10px 20px", background: "none", color: "#6b7280", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+          <button onClick={() => onPublish(note)} style={{ padding: "10px 20px", background: "#00c2a8", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>🚀 Publicar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Panel historial ───────────────────────────────────────────────────────────
+function VersionHistoryPanel({ versions, currentVersion, onRevert, onClose }: { versions: FormVersion[]; currentVersion: number; onRevert: (v: number) => void; onClose: () => void }) {
+  const [confirmRevert, setConfirmRevert] = useState<number | null>(null);
+  const sorted = [...versions].sort((a, b) => b.versionNumber - a.versionNumber);
+  return (
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "#fff" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", borderBottom: "1px solid #e2e8f0" }}>
+        <div>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: "#111827", margin: 0 }}>📋 Historial de versiones</h2>
+          <p style={{ fontSize: 11, color: "#9ca3af", margin: "2px 0 0" }}>{versions.length} versión{versions.length !== 1 ? "es" : ""}</p>
+        </div>
+        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "#9ca3af" }}>✕</button>
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: "12px 18px" }}>
+        {sorted.length === 0 && <div style={{ padding: "24px 16px", textAlign: "center", color: "#9ca3af", background: "#f9fafb", borderRadius: 10 }}><span style={{ fontSize: 32, display: "block", marginBottom: 8 }}>📋</span><p style={{ fontSize: 13, margin: 0 }}>Sin versiones publicadas</p></div>}
+        {sorted.map((v) => {
+          const isCurrent = v.versionNumber === currentVersion;
+          return (
+            <div key={v.versionNumber} style={{ border: `1.5px solid ${isCurrent ? "#00c2a8" : "#e2e8f0"}`, borderRadius: 10, padding: "12px 14px", marginBottom: 10, background: isCurrent ? "#e6faf7" : "#fff" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: isCurrent ? "#00c2a8" : "#f3f4f6", color: isCurrent ? "#fff" : "#374151" }}>v{v.versionNumber}</span>
+                  {isCurrent && <span style={{ fontSize: 11, color: "#00c2a8", fontWeight: 600 }}>● Actual</span>}
+                </div>
+                {!isCurrent && <button onClick={() => setConfirmRevert(v.versionNumber)} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, background: "#f3f4f6", color: "#374151", border: "1px solid #e2e8f0", cursor: "pointer", fontWeight: 600 }}>↩ Revertir</button>}
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 3 }}>{v.note || `Versión ${v.versionNumber}`}</div>
+              <div style={{ fontSize: 11, color: "#9ca3af" }}>👤 {v.publishedBy} · 🕐 {v.publishedAt}</div>
+              <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4 }}>{v.widgets.length} campo{v.widgets.length !== 1 ? "s" : ""}</div>
+            </div>
+          );
+        })}
+      </div>
+      {confirmRevert !== null && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: 24, width: "100%", maxWidth: 380, textAlign: "center", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
+            <span style={{ fontSize: 48, display: "block", marginBottom: 12 }}>↩</span>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: "0 0 10px" }}>¿Revertir a v{confirmRevert}?</h2>
+            <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 20px", lineHeight: 1.6 }}>El borrador y la versión publicada volverán a los campos de esa versión.</p>
+            <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+              <button onClick={() => setConfirmRevert(null)} style={{ padding: "10px 20px", background: "none", color: "#6b7280", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+              <button onClick={() => { onRevert(confirmRevert); setConfirmRevert(null); }} style={{ padding: "10px 20px", background: "#f97316", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>↩ Confirmar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 export default function BuilderLayout({ folderId, formId, onBack }: { folderId?: string; formId?: string; onBack?: () => void }) {
-  const [mobilePanel, setMobilePanel] = useState<"palette" | "props" | null>(null);
   const widgets = useBuilderStore((s) => s.widgets);
-  const { saveFormWidgets } = useFolderStore();
+  const { folders, saveFormWidgets, publishForm, revertToVersion } = useFolderStore();
+  const { getRules, setRules } = useRulesStore();
+  const { currentUser } = useAuthStore();
+  const { templateFolders, addTemplate } = useTemplatesStore();
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
-
-  const selectedWidgetId = useBuilderStore((s) => s.selectedWidgetId);
   const [showPreview, setShowPreview] = useState(false);
   const [showEmailConfig, setShowEmailConfig] = useState(false);
-  const closePanel = () => setMobilePanel(null);
+  const [showRulesPanel, setShowRulesPanel] = useState(false);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [successModal, setSuccessModal] = useState<{ title: string; message: string } | null>(null);
+
+  const rules = formId ? getRules(formId) : [];
+  const folder = folders.find(f => f.id === folderId);
+  const form = folder?.forms.find(fm => fm.id === formId);
+  const versions = form?.versions ?? [];
+  const currentVersion = form?.currentVersion ?? 0;
+  const formStatus = form?.status ?? "draft";
 
   const handleSave = () => {
-    if (!folderId || !formId) {
-      alert("No se puede guardar: formulario no identificado");
-      return;
-    }
+    if (!folderId || !formId) return;
     setSaveStatus("saving");
     saveFormWidgets(folderId, formId, widgets);
-    
-    setTimeout(() => {
-      setSaveStatus("saved");
-      setTimeout(() => setSaveStatus("idle"), 2000);
-    }, 500);
+    setTimeout(() => { setSaveStatus("saved"); setTimeout(() => setSaveStatus("idle"), 2000); }, 500);
   };
+
+  // ── PUNTO 1: al publicar, guardar y volver a formularios ──────────────────
+  const handlePublish = (note: string) => {
+    if (!folderId || !formId) return;
+    saveFormWidgets(folderId, formId, widgets);
+    publishForm(folderId, formId, currentUser?.name ?? "Admin", note);
+    setShowPublishModal(false);
+    onBack?.();
+  };
+
+  const handleRevert = (versionNumber: number) => {
+    if (!folderId || !formId) return;
+    revertToVersion(folderId, formId, versionNumber);
+    setShowVersionHistory(false);
+  };
+
+  const handleSaveAsTemplate = (name: string, tfolderId: string, description: string, icon: string) => {
+    addTemplate({ name, description, icon, folderId: tfolderId, widgets, createdBy: currentUser?.name ?? "Admin" });
+    setShowTemplateModal(false);
+    setSuccessModal({ title: "¡Plantilla guardada!", message: `La plantilla "${name}" fue guardada correctamente y ya está disponible en la sección de Plantillas.` });
+  };
+
+  const rightPanelMode = showVersionHistory ? "versions" : showRulesPanel ? "rules" : "properties";
+  const rightPanelWidth = showVersionHistory ? 320 : showRulesPanel ? 480 : 288;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
-
-      {/* ── Topbar ── */}
-      <header style={{
-        height: 56, background: "#ffffff",
-        borderBottom: "1px solid #e2e8f0",
-        display: "flex", alignItems: "center",
-        justifyContent: "space-between",
-        padding: "0 20px", flexShrink: 0, zIndex: 10,
-      }}>
+      <header style={{ height: 56, background: "#ffffff", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px", flexShrink: 0, zIndex: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {onBack && (
-            <button onClick={onBack} style={{
-              background: "none", border: "1.5px solid #e2e8f0",
-              borderRadius: 8, padding: "6px 12px",
-              cursor: "pointer", fontSize: 13,
-              color: "#6b7280", fontFamily: "inherit", fontWeight: 600,
-            }}>
-              ← Volver
-            </button>
-          )}
           <img src={logo} alt="Grupo Soul" style={{ height: 32, objectFit: "contain" }} />
-          <span style={{ fontWeight: 600, fontSize: 15, color: "#111827" }}>
-            Editor de Formulario
+          <span style={{ fontWeight: 600, fontSize: 15, color: "#111827" }}>Editor de Formulario</span>
+          <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, fontWeight: 700, background: formStatus === "published" ? "#e6faf7" : "#fffbeb", color: formStatus === "published" ? "#00c2a8" : "#d97706", border: `1px solid ${formStatus === "published" ? "#00c2a8" : "#fde68a"}` }}>
+            {formStatus === "published" ? "✅ Publicado" : "📝 Borrador"}{currentVersion > 0 && ` · v${currentVersion}`}
           </span>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => setShowPreview(true)} style={{
-            padding: "6px 14px", borderRadius: 6,
-            border: "1.5px solid #e2e8f0", background: "none",
-            cursor: "pointer", fontSize: 13, fontWeight: 600,
-            color: "#6b7280", fontFamily: "inherit",
-          }}>
-            👁️ Vista previa
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={() => setShowPreview(true)} style={{ padding: "6px 12px", borderRadius: 6, border: "1.5px solid #e2e8f0", background: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#6b7280", fontFamily: "inherit" }}>👁️ Preview</button>
+          <button onClick={() => setShowEmailConfig(true)} style={{ padding: "6px 12px", borderRadius: 6, border: "1.5px solid #e2e8f0", background: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#6b7280", fontFamily: "inherit" }}>📧 Email</button>
+          <button onClick={() => { setShowRulesPanel(!showRulesPanel); setShowVersionHistory(false); }} style={{ padding: "6px 12px", borderRadius: 6, position: "relative", border: `1.5px solid ${showRulesPanel ? "#00c2a8" : "#e2e8f0"}`, background: showRulesPanel ? "#e6faf7" : "none", cursor: "pointer", fontSize: 12, fontWeight: 600, color: showRulesPanel ? "#00c2a8" : "#6b7280", fontFamily: "inherit" }}>
+            ⚙️ Reglas
+            {rules.length > 0 && <span style={{ position: "absolute", top: -6, right: -6, background: "#00c2a8", color: "#fff", fontSize: 9, fontWeight: 700, width: 16, height: 16, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>{rules.length}</span>}
           </button>
-          <button onClick={() => setShowEmailConfig(true)} style={{
-            padding: "6px 14px", borderRadius: 6,
-            border: "1.5px solid #e2e8f0", background: "none",
-            cursor: "pointer", fontSize: 13, fontWeight: 600,
-            color: "#6b7280", fontFamily: "inherit",
-          }}>
-            📧 Email
+          <button onClick={() => { setShowVersionHistory(!showVersionHistory); setShowRulesPanel(false); }} style={{ padding: "6px 12px", borderRadius: 6, position: "relative", border: `1.5px solid ${showVersionHistory ? "#8b5cf6" : "#e2e8f0"}`, background: showVersionHistory ? "#f5f3ff" : "none", cursor: "pointer", fontSize: 12, fontWeight: 600, color: showVersionHistory ? "#8b5cf6" : "#6b7280", fontFamily: "inherit" }}>
+            📋 Versiones
+            {versions.length > 0 && <span style={{ position: "absolute", top: -6, right: -6, background: "#8b5cf6", color: "#fff", fontSize: 9, fontWeight: 700, width: 16, height: 16, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>{versions.length}</span>}
           </button>
-          <button onClick={handleSave} disabled={saveStatus === "saving"} style={{
-            padding: "6px 14px", borderRadius: 6, border: "none",
-            background: saveStatus === "saved" ? "#10b981" : "#00c2a8",
-            color: "#fff",
-            cursor: saveStatus === "saving" ? "not-allowed" : "pointer",
-            fontSize: 13,
-            fontWeight: 600, fontFamily: "inherit",
-            transition: "all 0.3s",
-          }}>
+          <button onClick={() => setShowTemplateModal(true)} style={{ padding: "6px 12px", borderRadius: 6, border: "1.5px solid #e2e8f0", background: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#6b7280", fontFamily: "inherit" }}>📑 Plantilla</button>
+          <div style={{ width: 1, background: "#e2e8f0", margin: "8px 4px" }} />
+          <button onClick={handleSave} disabled={saveStatus === "saving"} style={{ padding: "6px 14px", borderRadius: 6, border: "1.5px solid #e2e8f0", background: saveStatus === "saved" ? "#e6faf7" : "#fff", color: saveStatus === "saved" ? "#00c2a8" : "#374151", cursor: saveStatus === "saving" ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}>
             {saveStatus === "saving" ? "💾 Guardando..." : saveStatus === "saved" ? "✅ Guardado" : "💾 Guardar"}
           </button>
+          <button onClick={() => setShowPublishModal(true)} style={{ padding: "6px 16px", borderRadius: 6, border: "none", background: "linear-gradient(135deg, #00c2a8, #0891b2)", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 700, fontFamily: "inherit", boxShadow: "0 2px 8px rgba(0,194,168,0.35)" }}>🚀 Guardar y Publicar</button>
+          <button onClick={onBack} style={{ padding: "6px 14px", borderRadius: 6, border: "1.5px solid #e2e8f0", background: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#6b7280", fontFamily: "inherit" }}>✕ Cerrar</button>
         </div>
       </header>
 
-      {/* ── Cuerpo ── */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-
-        {/* Panel izquierdo — solo desktop */}
-        <div style={{
-          width: 256, flexShrink: 0,
-          borderRight: "1px solid #e2e8f0",
-          overflowY: "auto", background: "#ffffff",
-          display: "flex", flexDirection: "column",
-        }}
-          className="sf-hide-mobile"
-        >
-          <WidgetPalette />
-        </div>
-
-        {/* Canvas central */}
-        <main style={{ flex: 1, overflowY: "auto", padding: 24, background: "#f0f4f8" }}>
-          <BuilderCanvas />
-        </main>
-
-        {/* Panel derecho — solo desktop */}
-        <div style={{
-          width: 288, flexShrink: 0,
-          borderLeft: "1px solid #e2e8f0",
-          overflowY: "auto", background: "#ffffff",
-        }}
-          className="sf-hide-mobile"
-        >
-          <PropertyPanel />
+        <div style={{ width: 256, flexShrink: 0, borderRight: "1px solid #e2e8f0", overflowY: "auto", background: "#ffffff", display: "flex", flexDirection: "column" }} className="sf-hide-mobile"><WidgetPalette /></div>
+        <main style={{ flex: 1, overflowY: "auto", padding: 24, background: "#f0f4f8" }}><BuilderCanvas /></main>
+        <div style={{ width: rightPanelWidth, flexShrink: 0, borderLeft: "1px solid #e2e8f0", overflowY: "auto", background: "#ffffff", transition: "width 0.2s ease" }} className="sf-hide-mobile">
+          {rightPanelMode === "versions" ? <VersionHistoryPanel versions={versions} currentVersion={currentVersion} onRevert={handleRevert} onClose={() => setShowVersionHistory(false)} />
+            : rightPanelMode === "rules" ? <RulesPanel widgets={widgets} rules={rules} onChange={(r) => formId && setRules(formId, r)} onClose={() => setShowRulesPanel(false)} />
+            : <PropertyPanel />}
         </div>
       </div>
 
-      {/* ── Botones flotantes móvil ── */}
-      <div style={{
-        position: "fixed", bottom: 20, right: 16,
-        display: "flex", flexDirection: "column", gap: 10,
-        zIndex: 50,
-      }}
-        className="sf-show-mobile"
-      >
-        {selectedWidgetId && (
-          <button
-            onClick={() => setMobilePanel("props")}
-            style={{
-              display: "flex", alignItems: "center", gap: 8,
-              padding: "12px 18px", borderRadius: 50, border: "none",
-              background: "#00c2a8", color: "#fff",
-              fontSize: 13.5, fontWeight: 600, fontFamily: "inherit",
-              cursor: "pointer", boxShadow: "0 4px 16px rgba(0,194,168,0.4)",
-            }}
-          >
-            ⚙️ Editar campo
-          </button>
-        )}
-        <button
-          onClick={() => setMobilePanel("palette")}
-          style={{
-            display: "flex", alignItems: "center", gap: 8,
-            padding: "12px 18px", borderRadius: 50, border: "none",
-            background: "#ffffff", color: "#111827",
-            fontSize: 13.5, fontWeight: 600, fontFamily: "inherit",
-            cursor: "pointer", boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
-          }}
-        >
-          ➕ Agregar campo
-        </button>
-      </div>
-
-      {/* ── Drawer móvil ── */}
-      {mobilePanel && (
-        <>
-          <div
-            onClick={closePanel}
-            style={{
-              position: "fixed", inset: 0,
-              background: "rgba(0,0,0,0.4)", zIndex: 60,
-            }}
-          />
-          <div style={{
-            position: "fixed", bottom: 0, left: 0, right: 0,
-            maxHeight: "80vh", background: "#ffffff",
-            borderRadius: "16px 16px 0 0",
-            zIndex: 70, overflowY: "auto",
-            boxShadow: "0 -4px 24px rgba(0,0,0,0.15)",
-          }}>
-            {mobilePanel === "palette" ? (
-              <WidgetPalette onClose={closePanel} />
-            ) : (
-              <PropertyPanel onClose={closePanel} />
-            )}
-          </div>
-        </>
-      )}
-
-      <style>{`
-        @media (max-width: 768px) {
-          .sf-hide-mobile { display: none !important; }
-          main { padding: 16px 12px 100px !important; }
-        }
-        @media (min-width: 769px) {
-          .sf-show-mobile { display: none !important; }
-        }
-      `}</style>
-      
-      {/* ── Vista Previa ── */}
-      {showPreview && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 200 }}>
-          <PreviewPage onClose={() => setShowPreview(false)} />
-        </div>
-      )}
-
-      {/* ── Configuración de Email ── */}
-      {showEmailConfig && (
-        <EmailConfigPanel 
-          folderId={folderId} 
-          formId={formId} 
-          onClose={() => setShowEmailConfig(false)} 
-        />
-      )}
+      {showPublishModal && <PublishModal currentVersion={currentVersion} onPublish={handlePublish} onClose={() => setShowPublishModal(false)} />}
+      {showTemplateModal && <SaveTemplateModal templateFolders={templateFolders} onSave={handleSaveAsTemplate} onClose={() => setShowTemplateModal(false)} />}
+      {successModal && <SuccessModal title={successModal.title} message={successModal.message} onClose={() => setSuccessModal(null)} />}
+      {showPreview && <div style={{ position: "fixed", inset: 0, zIndex: 200 }}><PreviewPage onClose={() => setShowPreview(false)} /></div>}
+      {showEmailConfig && <EmailConfigPanel folderId={folderId} formId={formId} onClose={() => setShowEmailConfig(false)} />}
+      <style>{`@media (max-width: 768px) { .sf-hide-mobile { display: none !important; } main { padding: 16px 12px 100px !important; } }`}</style>
     </div>
   );
 }

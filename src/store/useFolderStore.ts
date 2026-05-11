@@ -23,6 +23,7 @@ function mapForm(f: FormApiData): FormItem {
     updatedAt: new Date(f.updatedAt).toLocaleDateString("es-CO"),
     widgets: (f.schema?.widgets ?? []) as WidgetInstance[],
     emailTemplate: (f.emailTemplate ?? undefined) as EmailTemplate | undefined,
+    status: "published",
   };
 }
 
@@ -57,6 +58,8 @@ interface FolderState {
   duplicateForm: (folderId: string, formId: string) => Promise<void>;
   saveFormWidgets: (folderId: string, formId: string, widgets: WidgetInstance[]) => Promise<void>;
   updateFormEmailTemplate: (folderId: string, formId: string, emailTemplate: EmailTemplate) => Promise<void>;
+  publishForm: (folderId: string, formId: string, publishedBy: string, note?: string) => void;
+  revertToVersion: (folderId: string, formId: string, versionNumber: number) => void;
 }
 
 export const useFolderStore = create<FolderState>()((set, get) => ({
@@ -258,5 +261,62 @@ export const useFolderStore = create<FolderState>()((set, get) => ({
         ),
       }));
     }
+  },
+
+  // Operaciones de versionado locales (TODO: persistir en backend).
+  publishForm: (folderId, formId, publishedBy, note) => {
+    set((state) => ({
+      folders: state.folders.map((f) => {
+        if (f.id !== folderId) return f;
+        return {
+          ...f,
+          forms: f.forms.map((fm) => {
+            if (fm.id !== formId) return fm;
+            const versions = fm.versions ?? [];
+            const nextNumber = (fm.currentVersion ?? 0) + 1;
+            const newVersion = {
+              versionNumber: nextNumber,
+              publishedAt: new Date().toLocaleString("es-CO"),
+              publishedBy,
+              widgets: fm.widgets ?? [],
+              emailTemplate: fm.emailTemplate,
+              note,
+            };
+            return {
+              ...fm,
+              status: "published" as const,
+              publishedWidgets: fm.widgets ?? [],
+              publishedEmailTemplate: fm.emailTemplate,
+              versions: [...versions, newVersion],
+              currentVersion: nextNumber,
+            };
+          }),
+        };
+      }),
+    }));
+  },
+
+  revertToVersion: (folderId, formId, versionNumber) => {
+    set((state) => ({
+      folders: state.folders.map((f) => {
+        if (f.id !== folderId) return f;
+        return {
+          ...f,
+          forms: f.forms.map((fm) => {
+            if (fm.id !== formId) return fm;
+            const version = fm.versions?.find((v) => v.versionNumber === versionNumber);
+            if (!version) return fm;
+            return {
+              ...fm,
+              widgets: version.widgets,
+              emailTemplate: version.emailTemplate,
+              publishedWidgets: version.widgets,
+              publishedEmailTemplate: version.emailTemplate,
+              currentVersion: versionNumber,
+            };
+          }),
+        };
+      }),
+    }));
   },
 }));

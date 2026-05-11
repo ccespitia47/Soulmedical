@@ -12,7 +12,7 @@ import { UsersModule } from '../users/users.module';
     PassportModule,
     JwtModule.register({
       secret: JWT_SECRET,
-      signOptions: { expiresIn: '8h' },
+      signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || '30m' },
     }),
   ],
   providers: [AuthService, JwtStrategy],

@@ -1,10 +1,11 @@
 import { useState } from "react";
 import HomePage from "./HomePage";
 import UsersPage from "./UsersPage";
+import TemplatesPage from "./TemplatesPage";
 import type { AuthUser } from "../types/auth.types";
 import logo from "../assets/Logo_GrupoSoul.png";
 
-type AdminSection = "formularios" | "usuarios";
+type AdminSection = "formularios" | "plantillas" | "usuarios";
 
 type AdminLayoutProps = {
   currentUser: Pick<AuthUser, "name" | "role" | "avatar">;
@@ -16,7 +17,8 @@ type AdminLayoutProps = {
 
 const NAV_ITEMS: { id: AdminSection; icon: string; label: string }[] = [
   { id: "formularios", icon: "📋", label: "Formularios" },
-  { id: "usuarios", icon: "👥", label: "Usuarios" },
+  { id: "plantillas",  icon: "📑", label: "Plantillas"  },
+  { id: "usuarios",    icon: "👥", label: "Usuarios"    },
 ];
 
 export default function AdminLayout({
@@ -31,7 +33,7 @@ export default function AdminLayout({
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "#f0f4f8", fontFamily: "'Segoe UI', sans-serif" }}>
 
-      {/* ── Sidebar CLARO ── */}
+      {/* ── Sidebar ── */}
       <aside style={{
         width: 220, minHeight: "100vh", background: "#ffffff",
         borderRight: "1px solid #e2e8f0",
@@ -41,8 +43,7 @@ export default function AdminLayout({
 
         {/* Logo */}
         <div style={{
-          padding: "16px 18px",
-          borderBottom: "1px solid #e2e8f0",
+          padding: "16px 18px", borderBottom: "1px solid #e2e8f0",
           display: "flex", alignItems: "center", gap: 10,
         }}>
           <img src={logo} alt="Grupo Soul" style={{ height: 32, objectFit: "contain" }} />
@@ -93,10 +94,8 @@ export default function AdminLayout({
           </div>
         </nav>
 
-        {/* Footer: usuario + versión + cerrar sesión */}
+        {/* Footer */}
         <div style={{ padding: "12px 14px", borderTop: "1px solid #e2e8f0" }}>
-
-          {/* Info usuario */}
           <div style={{
             display: "flex", alignItems: "center", gap: 10,
             padding: "8px 10px", background: "#f8fafc",
@@ -119,7 +118,6 @@ export default function AdminLayout({
             </div>
           </div>
 
-          {/* Cerrar sesión */}
           <button onClick={onLogout} style={{
             width: "100%", padding: "8px 14px",
             background: "none", color: "#ef4444",
@@ -135,7 +133,6 @@ export default function AdminLayout({
             🚪 Cerrar sesión
           </button>
 
-          {/* Versión */}
           <div style={{ fontSize: 10, color: "#9ca3af", textAlign: "center" }}>
             SoulForms v1.0
           </div>
@@ -148,6 +145,12 @@ export default function AdminLayout({
           <HomePage
             onOpenBuilder={onOpenBuilder}
             onOpenForm={onOpenForm}
+            currentUser={currentUser}
+          />
+        )}
+        {section === "plantillas" && (
+          <TemplatesPage
+            onUseTemplate={(_widgets, folderId, formId) => onOpenBuilder(folderId, formId)}
             currentUser={currentUser}
           />
         )}
