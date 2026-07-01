@@ -39,14 +39,14 @@ export class ReportDownload {
   @Prop({ default: false })
   consumed: boolean;
 
-  @Prop({ default: null })
+  @Prop({ type: Date, default: null })
   consumedAt: Date | null;
 
   // Contador de intentos TOTP fallidos. Al llegar a 3 se marca consumed=true.
   @Prop({ default: 0 })
   totpAttempts: number;
 
-  @Prop({ default: null })
+  @Prop({ type: String, default: null })
   createdIp: string | null;
 }
 
