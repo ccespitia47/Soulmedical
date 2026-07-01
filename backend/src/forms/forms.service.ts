@@ -28,7 +28,8 @@ export class FormsService {
     if (role === 'user' && userId) {
       const assignments = await this.assignmentModel.find({ userId });
       const assignedFormIds = assignments.map((a) => a.formId);
-      return this.formModel.find({ folderId, isActive: true, _id: { $in: assignedFormIds } }).sort({ createdAt: 1 });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (this.formModel as any).find({ folderId, isActive: true, _id: { $in: assignedFormIds } }).sort({ createdAt: 1 });
     }
     return this.formModel.find({ folderId, isActive: true }).sort({ createdAt: 1 });
   }

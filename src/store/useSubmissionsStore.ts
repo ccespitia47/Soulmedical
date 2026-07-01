@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { submitFormApi, type SubmissionData } from "../services/api";
+import { randomUUID } from "../utils/uuid";
 
 export type FormSubmission = {
   id: string;
@@ -50,7 +51,7 @@ export const useSubmissionsStore = create<SubmissionsState>()((set, get) => ({
       // Si falla el API, guardar localmente como fallback
       const fallback: FormSubmission = {
         ...submission,
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         submittedAt: new Date().toISOString(),
       };
       console.error("Error al guardar respuesta en servidor:", error);

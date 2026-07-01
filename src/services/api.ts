@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:3001/api';
+const API_URL = `${import.meta.env.VITE_API_URL ?? 'http://localhost:3001'}/api`;
 
 type ApiResponse<T> = {
   data: T | null;
@@ -27,19 +27,20 @@ async function request<T>(
     });
 
     if (response.status === 401) {
-      // Token expirado o inválido → limpiar sesión y redirigir al login
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/';
-      return { data: null, error: 'Sesión expirada' };
+      const isAuthEndpoint = endpoint.startsWith('/auth/login') || endpoint.startsWith('/auth/register');
+      if (!isAuthEndpoint) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/';
+        return { data: null, error: 'Sesión expirada' };
+      }
+      const body = await response.json().catch(() => ({}));
+      return { data: null, error: body.message || 'Credenciales incorrectas' };
     }
 
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
-      return {
-        data: null,
-        error: body.message || `Error ${response.status}`,
-      };
+      return { data: null, error: body.message || `Error ${response.status}` };
     }
 
     if (response.status === 204) return { data: null, error: null };
@@ -66,22 +67,21 @@ type LoginResponse = {
 };
 
 export async function login(email: string, password: string): Promise<ApiResponse<LoginResponse>> {
-  return request<LoginResponse>('/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ email, password }),
-  });
+  return request<LoginResponse>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
 }
 
-export async function register(
-  name: string,
-  email: string,
-  password: string,
-  role?: string,
-): Promise<ApiResponse<LoginResponse>> {
-  return request<LoginResponse>('/auth/register', {
-    method: 'POST',
-    body: JSON.stringify({ name, email, password, role }),
-  });
+export type AuthMessageResponse = { success: boolean; message: string };
+
+export async function register(name: string, email: string, password: string): Promise<ApiResponse<AuthMessageResponse>> {
+  return request<AuthMessageResponse>('/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password }) });
+}
+
+export async function forgotPassword(email: string): Promise<ApiResponse<AuthMessageResponse>> {
+  return request<AuthMessageResponse>('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) });
+}
+
+export async function resetPassword(token: string, password: string): Promise<ApiResponse<AuthMessageResponse>> {
+  return request<AuthMessageResponse>('/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) });
 }
 
 export async function getProfile(): Promise<ApiResponse<AuthUser>> {
@@ -98,11 +98,7 @@ export function saveSession(token: string, user: AuthUser) {
 export function getStoredUser(): AuthUser | null {
   const raw = localStorage.getItem('user');
   if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
+  try { return JSON.parse(raw); } catch { return null; }
 }
 
 export function getToken(): string | null {
@@ -161,21 +157,29 @@ export async function getProjects() {
 }
 
 export async function createProject(dto: { name: string; color: string; icon: string }) {
-  return request<ProjectData>('/projects', {
-    method: 'POST',
-    body: JSON.stringify(dto),
-  });
+  return request<ProjectData>('/projects', { method: 'POST', body: JSON.stringify(dto) });
 }
 
 export async function updateProjectApi(id: string, dto: { name?: string; color?: string; icon?: string }) {
-  return request<ProjectData>(`/projects/${id}`, {
-    method: 'PATCH',
-    body: JSON.stringify(dto),
-  });
+  return request<ProjectData>(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(dto) });
 }
 
 export async function deleteProjectApi(id: string) {
   return request<void>(`/projects/${id}`, { method: 'DELETE' });
+}
+
+export async function getProjectAssignmentsApi(projectId: string) {
+  return request<{ projectId: string; userId: number }[]>(`/projects/${projectId}/assignments`);
+}
+
+export async function assignProjectToUserApi(projectId: string, userId: number) {
+  return request<{ projectId: string; userId: number }>(`/projects/${projectId}/assign`, {
+    method: 'POST', body: JSON.stringify({ userId }),
+  });
+}
+
+export async function unassignProjectFromUserApi(projectId: string, userId: number) {
+  return request<void>(`/projects/${projectId}/assign/${userId}`, { method: 'DELETE' });
 }
 
 // --- Carpetas ---
@@ -195,17 +199,11 @@ export async function getFoldersByProject(projectId: string) {
 }
 
 export async function createFolder(dto: { name: string; color: string; icon: string; projectId: string }) {
-  return request<FolderData>('/folders', {
-    method: 'POST',
-    body: JSON.stringify(dto),
-  });
+  return request<FolderData>('/folders', { method: 'POST', body: JSON.stringify(dto) });
 }
 
 export async function updateFolderApi(id: string, dto: { name?: string; color?: string; icon?: string }) {
-  return request<FolderData>(`/folders/${id}`, {
-    method: 'PATCH',
-    body: JSON.stringify(dto),
-  });
+  return request<FolderData>(`/folders/${id}`, { method: 'PATCH', body: JSON.stringify(dto) });
 }
 
 export async function deleteFolderApi(id: string) {
@@ -230,17 +228,11 @@ export async function getFormsByFolder(folderId: string) {
 }
 
 export async function createFormApi(dto: { name: string; folderId: string; schema?: object; emailTemplate?: object }) {
-  return request<FormApiData>('/forms', {
-    method: 'POST',
-    body: JSON.stringify(dto),
-  });
+  return request<FormApiData>('/forms', { method: 'POST', body: JSON.stringify(dto) });
 }
 
 export async function updateFormApi(id: string, dto: { name?: string; schema?: object; emailTemplate?: object }) {
-  return request<FormApiData>(`/forms/${id}`, {
-    method: 'PATCH',
-    body: JSON.stringify(dto),
-  });
+  return request<FormApiData>(`/forms/${id}`, { method: 'PATCH', body: JSON.stringify(dto) });
 }
 
 export async function deleteFormApi(id: string) {
@@ -271,8 +263,7 @@ export async function submitFormApi(
   metadata?: Record<string, unknown>,
 ) {
   return request<SubmissionData>(`/forms/${formId}/submit`, {
-    method: 'POST',
-    body: JSON.stringify({ data, metadata }),
+    method: 'POST', body: JSON.stringify({ data, metadata }),
   });
 }
 
@@ -282,8 +273,7 @@ export async function getFormAssignmentsApi(formId: string) {
 
 export async function assignFormToUserApi(formId: string, userId: number) {
   return request<{ formId: string; userId: number }>(`/forms/${formId}/assign`, {
-    method: 'POST',
-    body: JSON.stringify({ userId }),
+    method: 'POST', body: JSON.stringify({ userId }),
   });
 }
 
@@ -293,4 +283,69 @@ export async function unassignFormFromUserApi(formId: string, userId: number) {
 
 export async function getSubmissionsApi(formId: string, page = 1, limit = 50) {
   return request<SubmissionsPage>(`/forms/${formId}/submissions?page=${page}&limit=${limit}`);
+}
+
+// --- Grupos ---
+
+export type GroupData = {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  icon: string;
+  createdAt: string;
+};
+
+export async function getGroupsApi() {
+  return request<GroupData[]>('/groups');
+}
+
+export async function createGroupApi(dto: { name: string; description?: string; color?: string; icon?: string }) {
+  return request<GroupData>('/groups', { method: 'POST', body: JSON.stringify(dto) });
+}
+
+export async function updateGroupApi(id: string, dto: { name?: string; description?: string; color?: string; icon?: string }) {
+  return request<GroupData>(`/groups/${id}`, { method: 'PATCH', body: JSON.stringify(dto) });
+}
+
+export async function deleteGroupApi(id: string) {
+  return request<void>(`/groups/${id}`, { method: 'DELETE' });
+}
+
+export async function getGroupMembersApi(groupId: string) {
+  return request<{ groupId: string; userId: number }[]>(`/groups/${groupId}/members`);
+}
+
+export async function addGroupMemberApi(groupId: string, userId: number) {
+  return request<{ groupId: string; userId: number }>(`/groups/${groupId}/members`, {
+    method: 'POST', body: JSON.stringify({ userId }),
+  });
+}
+
+export async function removeGroupMemberApi(groupId: string, userId: number) {
+  return request<void>(`/groups/${groupId}/members/${userId}`, { method: 'DELETE' });
+}
+
+export async function getGroupAssignmentsApi(groupId: string) {
+  return request<{ groupId: string; projectId: string | null; formId: string | null }[]>(`/groups/${groupId}/assignments`);
+}
+
+export async function assignProjectToGroupApi(groupId: string, projectId: string) {
+  return request<void>(`/groups/${groupId}/assign/project`, {
+    method: 'POST', body: JSON.stringify({ projectId }),
+  });
+}
+
+export async function unassignProjectFromGroupApi(groupId: string, projectId: string) {
+  return request<void>(`/groups/${groupId}/assign/project/${projectId}`, { method: 'DELETE' });
+}
+
+export async function assignFormToGroupApi(groupId: string, formId: string) {
+  return request<void>(`/groups/${groupId}/assign/form`, {
+    method: 'POST', body: JSON.stringify({ formId }),
+  });
+}
+
+export async function unassignFormFromGroupApi(groupId: string, formId: string) {
+  return request<void>(`/groups/${groupId}/assign/form/${formId}`, { method: 'DELETE' });
 }

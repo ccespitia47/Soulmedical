@@ -2,14 +2,8 @@ import type { EmailTemplate } from "../types/email-template.types";
 import type { AppUser } from "../store/useUsersStore";
 import type { AuthUser } from "../types/auth.types";
 
-interface ViteImportMetaEnv {
-  readonly VITE_API_URL?: string;
-}
-interface ViteImportMeta {
-  readonly env: ViteImportMetaEnv;
-}
-
-const API_URL = ((import.meta as unknown) as ViteImportMeta).env.VITE_API_URL ?? "http://localhost:3001";
+const EMAIL_SERVICE_URL =
+  import.meta.env.VITE_EMAIL_SERVICE_URL ?? "http://localhost:3003";
 
 export type EmailAttachment = {
   name: string;
@@ -25,7 +19,7 @@ export type SendEmailPayload = {
   users: EmailUserRecipient[];
   currentUser?: AuthUser;
   attachments?: EmailAttachment[];
-  excelHtml?: string; // HTML del Excel para que Puppeteer genere el PDF en el servidor
+  excelHtml?: string;  // HTML del Excel para que el servidor genere el PDF
 };
 
 function replacePlaceholders(text: string, data: Record<string, string>): string {
@@ -58,18 +52,17 @@ export async function sendFormEmail({
     users,
     currentUserEmail: currentUser?.email ?? null,
     formData,
-    // PDF desde template HTML (modo html)
+    // PDF desde plantilla HTML
     attachPDF:    template.attachPDF ?? false,
     pdfTemplate:  template.pdfTemplate ?? "",
     pdfFilename:  template.pdfFilename ?? "formulario.pdf",
-    // Adjuntos pre-generados (modo upload)
-    attachments,
-    // HTML del Excel para que Puppeteer genere el PDF (modo excel)
-    excelHtml:    excelHtml ?? "",
+    // PDF desde Excel mapeado
+    excelHtml:    excelHtml ?? null,
     excelFilename: template.excelFilename?.replace(/\.xlsx?$/i, ".pdf") ?? "formulario.pdf",
+    attachments,
   };
 
-  const res = await fetch(`${API_URL}/api/send-email`, {
+  const res = await fetch(`${EMAIL_SERVICE_URL}/api/send-email`, {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
     body:    JSON.stringify(payload),

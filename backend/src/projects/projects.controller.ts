@@ -35,4 +35,19 @@ export class ProjectsController {
   remove(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.projectsService.remove(id, req.user.id, req.user.role);
   }
+
+  @Post(':id/assign')
+  assignUser(@Param('id') id: string, @Body() body: { userId: number }) {
+    return this.projectsService.assignUser(id, body.userId);
+  }
+
+  @Delete(':id/assign/:userId')
+  unassignUser(@Param('id') id: string, @Param('userId') userId: string) {
+    return this.projectsService.unassignUser(id, parseInt(userId));
+  }
+
+  @Get(':id/assignments')
+  getAssignments(@Param('id') id: string) {
+    return this.projectsService.getAssignedUsers(id);
+  }
 }

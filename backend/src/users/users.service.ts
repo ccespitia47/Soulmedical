@@ -24,6 +24,7 @@ export class UsersService {
     email: string,
     password: string,
     role: UserRole = UserRole.USER,
+    isActive = true,
   ): Promise<User> {
     const existing = await this.findByEmail(email);
     if (existing) {
@@ -37,9 +38,30 @@ export class UsersService {
       email,
       password: hashedPassword,
       role,
+      isActive,
     });
 
     return this.usersRepository.save(user);
+  }
+
+  async findByResetToken(token: string): Promise<User | null> {
+    return this.usersRepository.findOne({ where: { resetToken: token } });
+  }
+
+  async setResetToken(userId: number, token: string, expiresAt: Date): Promise<void> {
+    await this.usersRepository.update(userId, {
+      resetToken: token,
+      resetTokenExpiresAt: expiresAt,
+    });
+  }
+
+  async updatePasswordAndClearToken(userId: number, newPassword: string): Promise<void> {
+    const hashed = await bcrypt.hash(newPassword, 12);
+    await this.usersRepository.update(userId, {
+      password: hashed,
+      resetToken: null,
+      resetTokenExpiresAt: null,
+    });
   }
 
   async findAll(): Promise<Omit<User, 'password'>[]> {

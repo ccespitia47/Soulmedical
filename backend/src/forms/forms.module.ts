@@ -14,6 +14,6 @@ import { FormsController } from './forms.controller';
   ],
   controllers: [FormsController],
   providers: [FormsService],
-  exports: [FormsService],
+  exports: [FormsService, MongooseModule],
 })
 export class FormsModule {}

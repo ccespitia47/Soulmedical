@@ -45,6 +45,7 @@ interface FolderState {
   loading: boolean;
 
   loadFolders: (projectId: string) => Promise<void>;
+  loadAllFolders: (projectIds: string[]) => Promise<void>;
   addFolder: (name: string, color: string, icon: string, projectId: string) => Promise<void>;
   renameFolder: (id: string, name: string) => Promise<void>;
   deleteFolder: (id: string) => Promise<void>;
@@ -81,7 +82,19 @@ export const useFolderStore = create<FolderState>()((set, get) => ({
       })
     );
 
-    set({ folders: foldersWithForms, loading: false });
+    // Merge: conservar carpetas de otros proyectos y reemplazar solo las del actual.
+    // Sin esto, Promise.all(projects.map(p => loadFolders(p.id))) deja solo el último ganador.
+    set((state) => ({
+      folders: [
+        ...state.folders.filter((f) => f.projectId !== projectId),
+        ...foldersWithForms,
+      ],
+      loading: false,
+    }));
+  },
+
+  loadAllFolders: async (projectIds) => {
+    await Promise.all(projectIds.map((id) => get().loadFolders(id)));
   },
 
   addFolder: async (name, color, icon, projectId) => {

@@ -8,7 +8,13 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main"
+    "start:prod": "node dist/main",
+    "typeorm": "typeorm-ts-node-commonjs",
+    "migration:generate": "npm run typeorm -- -d ./src/data-source.ts migration:generate ./src/migrations/Migration",
+    "migration:create": "npm run typeorm -- migration:create ./src/migrations/Migration",
+    "migration:run": "npm run typeorm -- -d ./src/data-source.ts migration:run",
+    "migration:revert": "npm run typeorm -- -d ./src/data-source.ts migration:revert",
+    "migration:show": "npm run typeorm -- -d ./src/data-source.ts migration:show"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
@@ -18,24 +24,40 @@
     "@nestjs/mongoose": "^11.0.4",
     "@nestjs/passport": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
+    "@nestjs/throttler": "^6.5.0",
     "@nestjs/typeorm": "^11.0.0",
+    "archiver": "^5.3.2",
+    "archiver-zip-encrypted": "^2.0.0",
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "dotenv": "^17.4.2",
+    "exceljs": "^4.4.0",
+    "helmet": "^8.2.0",
     "mongoose": "^9.6.1",
+    "otplib": "^13.4.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.20.0",
+    "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "typeorm": "^0.3.21"
+    "secure-spreadsheet": "^0.3.0",
+    "typeorm": "^0.3.21",
+    "xlsx-populate": "^1.21.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.0",
+    "@types/archiver": "^8.0.0",
     "@types/bcrypt": "^5.0.2",
+    "@types/jest": "^30.0.0",
     "@types/node": "^22.0.0",
     "@types/passport-jwt": "^4.0.1",
     "@types/pg": "^8.20.0",
+    "@types/qrcode": "^1.5.6",
+    "jest": "^30.4.2",
+    "ts-jest": "^29.4.11",
+    "ts-node": "^10.9.2",
     "typescript": "~5.7.0"
   }
 }

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { TemplateItem, TemplateFolderItem } from "../types/folder.types";
 import type { WidgetInstance } from "../types/widget.types";
+import { randomUUID } from "../utils/uuid";
 
 interface TemplatesState {
   templates: TemplateItem[];
@@ -38,7 +39,7 @@ export const useTemplatesStore = create<TemplatesState>()(
           templateFolders: [
             ...state.templateFolders,
             {
-              id: crypto.randomUUID(),
+              id: randomUUID(),
               name, color, icon,
               createdAt: new Date().toLocaleDateString("es-CO"),
             },
@@ -66,7 +67,7 @@ export const useTemplatesStore = create<TemplatesState>()(
           templates: [
             ...state.templates,
             {
-              id: crypto.randomUUID(),
+              id: randomUUID(),
               name: data.name,
               description: data.description ?? "",
               icon: data.icon,

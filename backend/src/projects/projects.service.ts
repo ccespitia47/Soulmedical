@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Project, ProjectDocument } from './project.schema';
+import { UserFormAssignment, UserFormAssignmentDocument } from '../forms/user-form-assignment.schema';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 
@@ -9,6 +10,7 @@ import { UpdateProjectDto } from './dto/update-project.dto';
 export class ProjectsService {
   constructor(
     @InjectModel(Project.name) private readonly projectModel: Model<ProjectDocument>,
+    @InjectModel(UserFormAssignment.name) private readonly assignmentModel: Model<UserFormAssignmentDocument>,
   ) {}
 
   async create(dto: CreateProjectDto, userId: number): Promise<ProjectDocument> {
@@ -22,10 +24,13 @@ export class ProjectsService {
   }
 
   async findAll(userId: number, role: string): Promise<ProjectDocument[]> {
-    const filter = role === 'admin'
-      ? { isActive: true }
-      : { isActive: true, ownerId: userId };
-    return this.projectModel.find(filter).sort({ createdAt: -1 });
+    if (role === 'admin') {
+      return this.projectModel.find({ isActive: true }).sort({ createdAt: -1 });
+    }
+    const assignments = await this.assignmentModel.find({ userId });
+    const assignedIds = assignments.map((a) => a.projectId).filter(Boolean);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (this.projectModel as any).find({ isActive: true, _id: { $in: assignedIds } }).sort({ createdAt: -1 });
   }
 
   async findOne(id: string): Promise<ProjectDocument> {
@@ -50,5 +55,21 @@ export class ProjectsService {
     }
     project.isActive = false;
     await project.save();
+  }
+
+  async assignUser(projectId: string, userId: number): Promise<UserFormAssignmentDocument> {
+    await this.findOne(projectId);
+    const exists = await this.assignmentModel.findOne({ projectId, userId });
+    if (exists) throw new ConflictException('El usuario ya está asignado a este proyecto');
+    const assignment = new this.assignmentModel({ projectId, userId });
+    return assignment.save();
+  }
+
+  async unassignUser(projectId: string, userId: number): Promise<void> {
+    await this.assignmentModel.deleteOne({ projectId, userId });
+  }
+
+  async getAssignedUsers(projectId: string): Promise<UserFormAssignmentDocument[]> {
+    return this.assignmentModel.find({ projectId });
   }
 }

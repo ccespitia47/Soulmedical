@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useFolderStore } from "../store/useFolderStore";
 import { useProjectStore } from "../store/useProjectStore";
 import type { AuthUser } from "../types/auth.types";
@@ -15,14 +15,30 @@ type UserAppPageProps = {
 };
 
 export default function UserAppPage({ user, onFillForm, onLogout, onSwitchToAdmin }: UserAppPageProps) {
-  const { folders } = useFolderStore();
-  const { projects } = useProjectStore();
+  const { folders, loadFolders } = useFolderStore();
+  const { projects, loadProjects } = useProjectStore();
 
   const [search, setSearch] = useState("");
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     projects.length > 0 ? projects[0].id : null
   );
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    loadProjects();
+  }, [loadProjects]);
+
+  useEffect(() => {
+    if (!selectedProjectId && projects.length > 0) {
+      setSelectedProjectId(projects[0].id);
+    }
+  }, [projects, selectedProjectId]);
+
+  useEffect(() => {
+    if (selectedProjectId) {
+      loadFolders(selectedProjectId);
+    }
+  }, [selectedProjectId, loadFolders]);
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId);
 

@@ -8,11 +8,11 @@ import { FoldersModule } from './folders/folders.module';
 import { FormsModule } from './forms/forms.module';
 import { SubmissionsModule } from './submissions/submissions.module';
 import { ApiKeysModule } from './api-keys/api-keys.module';
+import { GroupsModule } from './groups/groups.module';
 import { User } from './users/user.entity';
 
 @Module({
   imports: [
-    // PostgreSQL — solo para usuarios y autenticación
     TypeOrmModule.forRoot({
       type: 'postgres',
       host: process.env.DB_HOST || 'localhost',
@@ -23,7 +23,6 @@ import { User } from './users/user.entity';
       entities: [User],
       synchronize: true,
     }),
-    // MongoDB — proyectos, carpetas, formularios y respuestas
     MongooseModule.forRoot(
       process.env.MONGO_URI || 'mongodb://localhost:27017/soulformsdb',
     ),
@@ -34,6 +33,7 @@ import { User } from './users/user.entity';
     FormsModule,
     SubmissionsModule,
     ApiKeysModule,
+    GroupsModule,
   ],
 })
 export class AppModule {}

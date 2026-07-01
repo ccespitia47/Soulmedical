@@ -8,17 +8,20 @@ export class UserFormAssignment {
   @Prop({ type: String, default: () => crypto.randomUUID() })
   _id: string;
 
-  @Prop({ required: true, index: true })
-  formId: string;
+  @Prop({ type: String, required: false, index: true, default: null })
+  formId: string | null;
 
-  @Prop({ required: true, index: true })
-  userId: number;
+  @Prop({ type: String, required: false, index: true, default: null })
+  projectId: string | null;
+
+  @Prop({ type: Number, required: false, index: true, default: null })
+  userId: number | null;
+
+  @Prop({ type: String, required: false, index: true, default: null })
+  groupId: string | null;
 }
 
 export const UserFormAssignmentSchema = SchemaFactory.createForClass(UserFormAssignment);
-
-// Índice compuesto para evitar asignaciones duplicadas
-UserFormAssignmentSchema.index({ formId: 1, userId: 1 }, { unique: true });
 
 UserFormAssignmentSchema.set('toJSON', {
   virtuals: true,

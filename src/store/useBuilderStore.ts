@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import { arrayMove } from "@dnd-kit/sortable";
 import type { WidgetInstance } from "../types/widget.types";
 import { widgetRegistry } from "../components/widgets/registry";
+import { randomUUID } from "../utils/uuid";
 
 interface BuilderState {
   widgets: WidgetInstance[];
@@ -38,7 +39,7 @@ export const useBuilderStore = create<BuilderState>()(
           const def = widgetRegistry[type];
           if (!def) return state;
           const newWidget: WidgetInstance = {
-            id: crypto.randomUUID(),
+            id: randomUUID(),
             type,
             label: def.label,
             required: false,

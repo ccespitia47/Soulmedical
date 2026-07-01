@@ -11,6 +11,7 @@ import { IdScannerWidget } from "./idscanner/IdScannerWidget.ts";
 import { SignatureWidget } from "./signature/SignatureWidget.ts";
 import { PhotoWidget } from "./photo/PhotoWidget.ts";
 import { HeaderWidget } from "./header/HeaderWidget.ts";
+import { HtmlBlockWidget } from "./htmlblock/HtmlBlockWidget.ts";
 import type { WidgetDefinition } from "../../types/widget.types";
 
 export const widgetRegistry: Record<string, WidgetDefinition> = {
@@ -31,4 +32,5 @@ export const widgetRegistry: Record<string, WidgetDefinition> = {
   photo: PhotoWidget,
   // Diseño
   header: HeaderWidget,
+  html_block: HtmlBlockWidget,
 };
