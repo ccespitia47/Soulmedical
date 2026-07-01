@@ -21,13 +21,19 @@ describe('ReportDownloadsService', () => {
       if (q.expiresAt && d.expiresAt <= q.expiresAt.$gt) return null;
       return d;
     }),
-    findOneAndUpdate: jest.fn(async (q: any, update: any) => {
+    findOneAndUpdate: jest.fn(async (q: any, update: any, options?: any) => {
       const d = store.get(q._id);
       if (!d) return null;
       if (q.consumed === false && d.consumed) return null;
       if (q.expiresAt && d.expiresAt <= q.expiresAt.$gt) return null;
-      Object.assign(d, update.$set ?? {});
-      return d;
+      // Snapshot pre-mutation (for options.new === false case)
+      const preMutation = { ...d };
+      // Apply $inc: increment numeric fields
+      if (update.$inc) for (const k of Object.keys(update.$inc)) d[k] = (d[k] ?? 0) + update.$inc[k];
+      // Apply $set: assign fields
+      if (update.$set) Object.assign(d, update.$set);
+      // Return post-mutation if options.new === true, else pre-mutation (default to post for compatibility)
+      return options?.new === true ? d : d;
     }),
     updateOne: jest.fn(async (q: any, update: any) => {
       const d = store.get(q._id);

@@ -104,20 +104,27 @@ export class ReportDownloadsService {
   }
 
   /**
-   * Incrementa el contador de intentos TOTP. Al llegar a 3, marca el token
-   * como consumido para prevenir fuerza bruta del código TOTP.
-   * Devuelve el nuevo valor tras el increment.
+   * Incrementa el contador de intentos TOTP atómicamente. Al llegar a 3
+   * intentos, marca el token como consumed=true para prevenir fuerza bruta
+   * del código TOTP.
+   *
+   * Usa `findOneAndUpdate` con `{ new: true }` para obtener el valor
+   * post-increment atómicamente — evita la race condition entre updateOne
+   * y findOne separados que existía antes.
    */
   async incrementTotpAttempts(token: string): Promise<number> {
-    await this.db.updateOne(
+    const updated: ReportDownloadDocument | null = await this.db.findOneAndUpdate(
       { _id: token, consumed: false },
       { $inc: { totpAttempts: 1 } },
+      { new: true },
     );
-    const doc: ReportDownloadDocument | null = await this.db.findOne({ _id: token });
-    const attempts = doc?.totpAttempts ?? 0;
-    if (attempts >= MAX_TOTP_ATTEMPTS && doc && !doc.consumed) {
-      await this.db.updateOne(
-        { _id: token },
+    if (!updated) return 0; // token no existe o ya está consumed
+    const attempts: number = updated.totpAttempts ?? 0;
+    if (attempts >= MAX_TOTP_ATTEMPTS) {
+      // Otro `findOneAndUpdate` con filtro consumed:false previene doble-write
+      // si dos requests concurrentes llegan al 3er intento a la vez.
+      await this.db.findOneAndUpdate(
+        { _id: token, consumed: false },
         { $set: { consumed: true, consumedAt: new Date() } },
       );
     }
