@@ -43,10 +43,10 @@ function box(checked: boolean): string {
   return `<span style="display:inline-block;width:11px;height:11px;border:${BORDER};text-align:center;line-height:10px;font-size:9px;font-weight:700;">${checked ? "X" : ""}</span>`;
 }
 
-/** Valor con subrayado dibujado por debajo (inline-block: html2canvas lo
- *  renderiza como subrayado real, no como tachado). */
-function underline(value: string, minWidth = "70px"): string {
-  return `<span style="display:inline-block;min-width:${minWidth};border-bottom:1px solid #333;line-height:1.15;padding:0 3px;">${escapeHtml(value)}</span>`;
+/** Valor diligenciado, sin subrayado (evita el artefacto de "tachado" que
+ *  html2canvas produce con border-bottom en spans). Se resalta en negrita. */
+function fieldValue(value: string): string {
+  return `<span style="font-weight:600;color:#111;">${escapeHtml(value)}</span>`;
 }
 
 /** Tres celdas de casilla alineadas al valor de la pregunta. */
@@ -75,7 +75,7 @@ function questionRow(q: TriStateQ, values: Record<string, string>): string {
   const note = q.note ? (values[q.note.id] ?? "").trim() : "";
   const noteHtml =
     q.note !== undefined
-      ? `<div style="margin-top:2px;color:#333;">${escapeHtml(q.note.label)} ${underline(note, "160px")}</div>`
+      ? `<div style="margin-top:2px;color:#333;">${escapeHtml(q.note.label)} ${fieldValue(note)}</div>`
       : "";
   return `
     <tr>
@@ -92,14 +92,14 @@ function conditionsInline(options: string[], value: string): string {
     .join("&nbsp;&nbsp; ");
 }
 
-/** Datos generales: parejas etiqueta: valor en dos columnas con subrayado. */
+/** Datos generales: parejas etiqueta: valor en dos columnas. */
 function generalDataHtml(config: EntityConfig, values: Record<string, string>): string {
   const cells = config.datosGenerales
     .map(
       (f) => `
-      <td style="padding:3px 6px;font-size:10px;width:50%;">
+      <td style="padding:4px 8px;font-size:10px;width:50%;">
         <strong>${escapeHtml(f.label)}:</strong>
-        ${underline(values[f.id] ?? "", "120px")}
+        ${fieldValue(values[f.id] ?? "")}
       </td>`,
     )
     .map((cell, i) => (i % 2 === 0 ? `<tr>${cell}` : `${cell}</tr>`))
@@ -115,7 +115,7 @@ function seccionAHtml(config: EntityConfig, values: Record<string, string>): str
   const third = a.antineumococica.thirdLabel;
 
   const tetanosRow = a.tetanosAnios
-    ? `<tr><td style="${TD}" colspan="4"><strong>1.</strong> ¿Cuánto tiempo ha pasado desde su última inyección contra el TÉTANOS? ${underline(values[a.tetanosAnios.id] ?? "", "50px")} años</td></tr>`
+    ? `<tr><td style="${TD}" colspan="4"><strong>1.</strong> ¿Cuánto tiempo ha pasado desde su última inyección contra el TÉTANOS? ${fieldValue(values[a.tetanosAnios.id] ?? "")} años</td></tr>`
     : "";
 
   const fecha = (values[a.antineumococicaFecha.id] ?? "").trim();
@@ -124,7 +124,7 @@ function seccionAHtml(config: EntityConfig, values: Record<string, string>): str
       <div style="margin-bottom:3px;">${escapeHtml(a.condiciones.label)}</div>
       <div style="margin-bottom:3px;">${conditionsInline(a.condiciones.options, values[a.condiciones.id] ?? "")}</div>
       <div><strong>${a.antineumococica.num}.</strong> ${escapeHtml(a.antineumococica.text)}</div>
-      <div style="margin-top:2px;color:#333;">${escapeHtml(a.antineumococicaFecha.label)} ${underline(fecha, "90px")}</div>
+      <div style="margin-top:2px;color:#333;">${escapeHtml(a.antineumococicaFecha.label)} ${fieldValue(fecha)}</div>
     </td>`;
 
   return `
