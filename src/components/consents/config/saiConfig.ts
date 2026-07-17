@@ -9,6 +9,7 @@ export const saiConfig: EntityConfig = {
     displayName: "SAI",
     codigo: "SV-FT-01",
     version: "02",
+    fechaFormato: "19-09-2022",
     logo,
   },
   datosGenerales: [

@@ -48,6 +48,8 @@ export type EntityConfig = {
     displayName: string;
     codigo: string;
     version: string;
+    /** Fecha de emisión del formato oficial (recuadro del encabezado). */
+    fechaFormato: string;
     /** URL importada del logo (Vite resuelve el import a string). */
     logo: string;
   };

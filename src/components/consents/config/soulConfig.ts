@@ -9,6 +9,7 @@ export const soulConfig: EntityConfig = {
     displayName: "SOUL",
     codigo: "SV-FT-B01",
     version: "01",
+    fechaFormato: "19-11-2019",
     logo,
   },
   datosGenerales: [
