@@ -17,7 +17,11 @@ separado para reportería/auditoría independientes.
   `consent-vaccination-soul` y `consent-vaccination-sai`.
 - **Selector:** desplegable (dropdown) de entidad arriba del formulario; cambia
   contenido, textos y campos en vivo.
-- **Marca/correo:** mismo correo de clínica para ambas; sin logos (solo texto).
+- **Marca/correo:** mismo correo de clínica para ambas. **Con logo por entidad**:
+  cada config referencia su logo, mostrado en el encabezado del formulario y
+  junto a la opción del dropdown. Los archivos viven en
+  `src/assets/consents/soul-logo.png` y `src/assets/consents/sai-logo.png`
+  (los provee el usuario; el config los importa).
 
 ## Arquitectura
 
@@ -98,6 +102,7 @@ type EntityConfig = {
     displayName: string;      // "SOUL" | "SAI" (para el dropdown y encabezado)
     codigo: string;           // SV-FT-B01 | SV-FT-01
     version: string;          // 01 | 02
+    logo: string;             // import de src/assets/consents/<entidad>-logo.png
   };
   datosGenerales: ConsentField[];
   seccionA: {
@@ -174,11 +179,11 @@ label legible) + notas "indique" + condiciones + tabla de vacunas +
 - `SignaturePad`, `MissingFieldsModal`, `SuccessModal`.
 - Ruta y entrada desde `Consientify.tsx` (sigue abriendo Consentimientos).
 - Flujo de email y correo de clínica.
-- Logos/imágenes (solo texto por ahora).
 
 ## Criterios de éxito
 
-1. Al abrir Consentimientos, un dropdown permite elegir SOUL o SAI.
+1. Al abrir Consentimientos, un dropdown permite elegir SOUL o SAI, cada opción
+   con su logo; el logo de la entidad activa se muestra en el encabezado.
 2. Cada entidad muestra sus secciones fieles al PDF (A, B, virus vivos, C,
    legal, habeas data; SAI además efectos adversos).
 3. Cambiar de entidad intercambia contenido; con datos escritos pide confirmar.
