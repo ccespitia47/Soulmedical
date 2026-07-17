@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { getEntityConfig, ENTITY_ORDER, ENTITIES, type EntityKey } from "./config";
 import { useVaccinationConsent } from "./useVaccinationConsent";
 import { collectMissing, flattenConsent } from "./flattenConsent";
+import { buildVaccinationConsentHtml } from "./vaccinationConsentPdf";
+import { htmlToPdfBase64 } from "../../utils/pdfExporter";
 import GeneralDataSection from "./sections/GeneralDataSection";
 import SectionA from "./sections/SectionA";
 import SectionB from "./sections/SectionB";
@@ -32,6 +34,7 @@ export default function VaccinationConsentForm({ onBack }: Props) {
   const [resetKey, setResetKey] = useState(0);
   const [missing, setMissing] = useState<string[]>([]);
   const [pendingEntity, setPendingEntity] = useState<EntityKey | null>(null);
+  const [previewing, setPreviewing] = useState(false);
 
   const setValue = (id: string, v: string) => setValues((prev) => ({ ...prev, [id]: v }));
 
@@ -78,6 +81,29 @@ export default function VaccinationConsentForm({ onBack }: Props) {
   };
 
   const handleNew = () => doResetForm();
+
+  // Genera el mismo PDF que se adjunta al correo y lo abre en una pestaña,
+  // sin enviar nada. Útil para revisar el formato con lo diligenciado hasta ahora.
+  const handlePreview = async () => {
+    if (previewing) return;
+    setPreviewing(true);
+    try {
+      const flat = flattenConsent(config, { values, firma, firmaResp, accepted });
+      const html = buildVaccinationConsentHtml(config, flat);
+      const base64 = await htmlToPdfBase64(html);
+      const bytes = atob(base64);
+      const arr = new Uint8Array(bytes.length);
+      for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([arr], { type: "application/pdf" }));
+      window.open(url, "_blank");
+      // Liberar el objeto URL tras un margen para que la pestaña alcance a cargarlo.
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (err) {
+      console.error("Error generando la vista previa del consentimiento:", err);
+    } finally {
+      setPreviewing(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#f0f4f8] font-sans dark:bg-slate-950">
@@ -133,13 +159,23 @@ export default function VaccinationConsentForm({ onBack }: Props) {
           resetKey={resetKey}
         />
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full rounded-xl bg-[#00c2a8] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_4px_16px_rgba(0,194,168,0.3)] transition-opacity hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {submitting ? "Procesando…" : "Firmar y enviar consentimiento"}
-        </button>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <button
+            type="button"
+            onClick={handlePreview}
+            disabled={previewing}
+            className="rounded-xl border-[1.5px] border-[#00c2a8] bg-transparent px-6 py-3.5 text-sm font-semibold text-[#00c2a8] transition-colors hover:bg-[#00c2a8]/5 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+          >
+            {previewing ? "Generando…" : "Vista previa PDF"}
+          </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="flex-1 rounded-xl bg-[#00c2a8] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_4px_16px_rgba(0,194,168,0.3)] transition-opacity hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {submitting ? "Procesando…" : "Firmar y enviar consentimiento"}
+          </button>
+        </div>
       </form>
 
       {missing.length > 0 && <MissingFieldsModal fields={missing} onClose={() => setMissing([])} />}
