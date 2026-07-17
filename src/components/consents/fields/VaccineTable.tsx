@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { VaccineTableColumn } from "../config/entityConfig";
 
 type Row = Record<string, string>;
@@ -7,20 +7,15 @@ type Props = {
   columns: VaccineTableColumn[];
   /** Emite las filas no vacías como JSON legible. */
   onChange: (json: string) => void;
-  /** Al cambiar, reinicia a una fila vacía (patrón de SignaturePad). */
-  resetKey?: number;
 };
 
 const emptyRow = (columns: VaccineTableColumn[]): Row =>
   Object.fromEntries(columns.map((c) => [c.id, ""]));
 
-export default function VaccineTable({ columns, onChange, resetKey = 0 }: Props) {
+// El reinicio se hace desde el padre remontando el componente con una `key`
+// distinta (ver SectionC), por lo que el estado interno vuelve a su inicial.
+export default function VaccineTable({ columns, onChange }: Props) {
   const [rows, setRows] = useState<Row[]>([emptyRow(columns)]);
-
-  useEffect(() => {
-    if (resetKey === 0) return;
-    setRows([emptyRow(columns)]);
-  }, [resetKey, columns]);
 
   const emit = (next: Row[]) => {
     const filled = next.filter((r) => Object.values(r).some((v) => v.trim() !== ""));
