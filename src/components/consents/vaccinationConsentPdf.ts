@@ -28,14 +28,25 @@ const INTRO_CONFIDENCIAL =
 // Estilos base reutilizados.
 const BORDER = "1px solid #333";
 const TD = `padding:4px 6px;border:${BORDER};font-size:10px;vertical-align:top;`;
-const TH = `padding:4px 6px;border:${BORDER};font-size:9px;font-weight:700;text-align:center;background:#e9edf2;`;
-const BOX_TD = `padding:4px;border:${BORDER};text-align:center;width:34px;`;
+const TH = `padding:4px 6px;border:${BORDER};font-size:9px;font-weight:700;text-align:center;background:#e9edf2;vertical-align:middle;`;
+const BOX_TD = `padding:4px;border:${BORDER};text-align:center;vertical-align:middle;`;
 const BAR = `padding:4px 6px;border:${BORDER};background:#5b636b;color:#fff;font-size:10px;font-weight:700;`;
 const SUBBAR = `padding:3px 6px;border:${BORDER};background:#d9dee4;font-size:9px;font-weight:700;`;
+
+// Anchos deterministas para las tablas de preguntas (pregunta + 3 casillas).
+// Evita que el auto-layout infle la altura de las filas de encabezado.
+const TRI_COLGROUP =
+  '<colgroup><col/><col style="width:38px"/><col style="width:38px"/><col style="width:54px"/></colgroup>';
 
 /** Casilla cuadrada; muestra una X si está marcada. */
 function box(checked: boolean): string {
   return `<span style="display:inline-block;width:11px;height:11px;border:${BORDER};text-align:center;line-height:10px;font-size:9px;font-weight:700;">${checked ? "X" : ""}</span>`;
+}
+
+/** Valor con subrayado dibujado por debajo (inline-block: html2canvas lo
+ *  renderiza como subrayado real, no como tachado). */
+function underline(value: string, minWidth = "70px"): string {
+  return `<span style="display:inline-block;min-width:${minWidth};border-bottom:1px solid #333;line-height:1.15;padding:0 3px;">${escapeHtml(value)}</span>`;
 }
 
 /** Tres celdas de casilla alineadas al valor de la pregunta. */
@@ -64,7 +75,7 @@ function questionRow(q: TriStateQ, values: Record<string, string>): string {
   const note = q.note ? (values[q.note.id] ?? "").trim() : "";
   const noteHtml =
     q.note !== undefined
-      ? `<div style="margin-top:2px;color:#333;">${escapeHtml(q.note.label)} <span style="border-bottom:1px solid #999;">${escapeHtml(note)}</span></div>`
+      ? `<div style="margin-top:2px;color:#333;">${escapeHtml(q.note.label)} ${underline(note, "160px")}</div>`
       : "";
   return `
     <tr>
@@ -88,7 +99,7 @@ function generalDataHtml(config: EntityConfig, values: Record<string, string>): 
       (f) => `
       <td style="padding:3px 6px;font-size:10px;width:50%;">
         <strong>${escapeHtml(f.label)}:</strong>
-        <span style="border-bottom:1px solid #333;">&nbsp;${escapeHtml(values[f.id] ?? "")}&nbsp;</span>
+        ${underline(values[f.id] ?? "", "120px")}
       </td>`,
     )
     .map((cell, i) => (i % 2 === 0 ? `<tr>${cell}` : `${cell}</tr>`))
@@ -104,7 +115,7 @@ function seccionAHtml(config: EntityConfig, values: Record<string, string>): str
   const third = a.antineumococica.thirdLabel;
 
   const tetanosRow = a.tetanosAnios
-    ? `<tr><td style="${TD}" colspan="4"><strong>1.</strong> ¿Cuánto tiempo ha pasado desde su última inyección contra el TÉTANOS? <span style="border-bottom:1px solid #333;">&nbsp;${escapeHtml(values[a.tetanosAnios.id] ?? "")}&nbsp;</span> años</td></tr>`
+    ? `<tr><td style="${TD}" colspan="4"><strong>1.</strong> ¿Cuánto tiempo ha pasado desde su última inyección contra el TÉTANOS? ${underline(values[a.tetanosAnios.id] ?? "", "50px")} años</td></tr>`
     : "";
 
   const fecha = (values[a.antineumococicaFecha.id] ?? "").trim();
@@ -113,11 +124,12 @@ function seccionAHtml(config: EntityConfig, values: Record<string, string>): str
       <div style="margin-bottom:3px;">${escapeHtml(a.condiciones.label)}</div>
       <div style="margin-bottom:3px;">${conditionsInline(a.condiciones.options, values[a.condiciones.id] ?? "")}</div>
       <div><strong>${a.antineumococica.num}.</strong> ${escapeHtml(a.antineumococica.text)}</div>
-      <div style="margin-top:2px;color:#333;">${escapeHtml(a.antineumococicaFecha.label)} <span style="border-bottom:1px solid #999;">&nbsp;${escapeHtml(fecha)}&nbsp;</span></div>
+      <div style="margin-top:2px;color:#333;">${escapeHtml(a.antineumococicaFecha.label)} ${underline(fecha, "90px")}</div>
     </td>`;
 
   return `
-    <table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
+    <table style="width:100%;border-collapse:collapse;margin-bottom:10px;table-layout:fixed;">
+      ${TRI_COLGROUP}
       <tr><td style="${BAR}" colspan="4">Sección A: Historial de vacunas (obligatorio)</td></tr>
       ${headerRow("Responda las preguntas marcando las casillas correspondientes.", third)}
       <tr><td style="${SUBBAR}" colspan="4">Todas las vacunas</td></tr>
@@ -136,7 +148,8 @@ function questionsTableHtml(
   thirdLabel: string,
 ): string {
   return `
-    <table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
+    <table style="width:100%;border-collapse:collapse;margin-bottom:10px;table-layout:fixed;">
+      ${TRI_COLGROUP}
       <tr><td style="${BAR}" colspan="4">${escapeHtml(title)}</td></tr>
       ${headerRow("Responda las preguntas marcando las casillas correspondientes.", thirdLabel)}
       <tr><td style="${SUBBAR}" colspan="4">${escapeHtml(subBar)}</td></tr>
