@@ -24,6 +24,7 @@ describe('ReportDownloadsService', () => {
     findOneAndUpdate: jest.fn(async (q: any, update: any, options?: any) => {
       const d = store.get(q._id);
       if (!d) return null;
+      if (q.userId !== undefined && d.userId !== q.userId) return null;
       if (q.consumed === false && d.consumed) return null;
       if (q.expiresAt && d.expiresAt <= q.expiresAt.$gt) return null;
       // Snapshot pre-mutation (for options.new === false case)
@@ -106,10 +107,24 @@ describe('ReportDownloadsService', () => {
       userId: 1, formId: 'f', formName: 'F',
       encryptedBuffer: Buffer.from('x'), filename: 'x.xlsx', ttlMinutes: 2,
     });
-    expect(await svc.incrementTotpAttempts(token)).toBe(1);
-    expect(await svc.incrementTotpAttempts(token)).toBe(2);
-    expect(await svc.incrementTotpAttempts(token)).toBe(3);
+    expect(await svc.incrementTotpAttempts(token, 1)).toBe(1);
+    expect(await svc.incrementTotpAttempts(token, 1)).toBe(2);
+    expect(await svc.incrementTotpAttempts(token, 1)).toBe(3);
     // Después del 3er intento, consume() debe fallar con Gone.
     await expect(svc.consume(token, 1)).rejects.toBeInstanceOf(GoneException);
+  });
+
+  it('incrementTotpAttempts NO afecta token de otro user (fix C1)', async () => {
+    const { token } = await svc.create({
+      userId: 1, formId: 'f', formName: 'F',
+      encryptedBuffer: Buffer.from('x'), filename: 'x.xlsx', ttlMinutes: 2,
+    });
+    // Otro user intenta quemar el token 3 veces
+    expect(await svc.incrementTotpAttempts(token, 999)).toBe(0);
+    expect(await svc.incrementTotpAttempts(token, 999)).toBe(0);
+    expect(await svc.incrementTotpAttempts(token, 999)).toBe(0);
+    // El dueño legítimo aún puede consumirlo
+    const out = await svc.consume(token, 1);
+    expect(out.buffer).toBeDefined();
   });
 });

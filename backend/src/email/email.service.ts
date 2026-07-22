@@ -234,6 +234,21 @@ export class EmailService {
 
   // ── Helpers privados ───────────────────────────────────────────────────────
 
+  /**
+   * Escapa caracteres HTML especiales. Usado en TODOS los `build*Html` para
+   * neutralizar inyección HTML vía datos controlados por el usuario (nombres
+   * de formulario, nombres de usuario, actores, etc.) que se interpolan en
+   * los templates de correo.
+   */
+  private escapeHtml(str: string): string {
+    return String(str ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   private resolveRecipients(
     recipients: EmailRecipient[],
     users: EmailUserRef[],
@@ -351,6 +366,8 @@ export class EmailService {
     code: string,
     ttlMinutes: number,
   ): string {
+    const safeFormName = this.escapeHtml(formName);
+    const safeCode = this.escapeHtml(code);
     return `<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"></head>
@@ -360,9 +377,9 @@ export class EmailService {
       <h1 style="margin:0; font-size:20px;">Código de acceso</h1>
     </div>
     <div style="padding:28px; color:#374151; line-height:1.6; font-size:14px;">
-      <p>Para acceder al formulario <strong>${formName}</strong> usa el siguiente código:</p>
+      <p>Para acceder al formulario <strong>${safeFormName}</strong> usa el siguiente código:</p>
       <div style="text-align:center; margin:24px 0;">
-        <div style="display:inline-block; padding:14px 28px; background:#f1f5f9; border:2px solid #00c2a8; border-radius:10px; font-family:'Courier New',monospace; font-size:32px; font-weight:700; letter-spacing:8px; color:#0f766e;">${code}</div>
+        <div style="display:inline-block; padding:14px 28px; background:#f1f5f9; border:2px solid #00c2a8; border-radius:10px; font-family:'Courier New',monospace; font-size:32px; font-weight:700; letter-spacing:8px; color:#0f766e;">${safeCode}</div>
       </div>
       <p style="font-size:13px; color:#6b7280;">El código expira en <strong>${ttlMinutes} minuto${ttlMinutes === 1 ? '' : 's'}</strong>. Tienes hasta 3 intentos.</p>
       <p style="font-size:12px; color:#9ca3af; margin-top:24px;">Si no solicitaste este código, ignora este correo.</p>
@@ -373,7 +390,8 @@ export class EmailService {
   }
 
   private buildReportEmailHtml(userName: string, formName: string): string {
-    const safeUser = (userName ?? '').trim() || 'usuario';
+    const safeUser = this.escapeHtml((userName ?? '').trim() || 'usuario');
+    const safeFormName = this.escapeHtml(formName);
     return `<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"></head>
@@ -384,7 +402,7 @@ export class EmailService {
     </div>
     <div style="padding:28px; color:#374151; line-height:1.6; font-size:14px;">
       <p>Hola ${safeUser},</p>
-      <p>Adjunto encontrarás el reporte de envíos del formulario <strong>${formName}</strong> que solicitaste.</p>
+      <p>Adjunto encontrarás el reporte de envíos del formulario <strong>${safeFormName}</strong> que solicitaste.</p>
       <div style="background:#eff6ff; border-left:4px solid #0891b2; padding:12px 14px; margin:18px 0; border-radius:0 6px 6px 0;">
         <strong>🔐 Archivo protegido con contraseña</strong><br>
         El adjunto es un archivo <strong>.zip</strong>. Al descomprimirlo (doble click en Windows/Mac) el sistema te pedirá una contraseña: ingresa tu <strong>número de documento</strong>, el mismo que tienes registrado en tu perfil.
@@ -401,9 +419,9 @@ export class EmailService {
     userName: string,
     actorName?: string,
   ): string {
-    const safeUser = (userName ?? '').trim() || 'usuario';
+    const safeUser = this.escapeHtml((userName ?? '').trim() || 'usuario');
     const actor = actorName?.trim()
-      ? `por <strong>${actorName.trim()}</strong>`
+      ? `por <strong>${this.escapeHtml(actorName.trim())}</strong>`
       : 'por un administrador';
     return `<!DOCTYPE html>
 <html>
@@ -429,6 +447,7 @@ export class EmailService {
   }
 
   private buildResetPasswordHtml(name: string, resetUrl: string): string {
+    const safeName = this.escapeHtml(name);
     return `<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"></head>
@@ -438,7 +457,7 @@ export class EmailService {
       <h1 style="margin:0; font-size:22px;">Restablecer contraseña</h1>
     </div>
     <div style="padding:28px; color:#374151; line-height:1.6; font-size:14px;">
-      <p>Hola ${name},</p>
+      <p>Hola ${safeName},</p>
       <p>Solicitaste restablecer tu contraseña de SoulForms. Haz clic en el botón para crear una nueva. El enlace expira en 30 minutos.</p>
       <p style="text-align:center; margin:28px 0;">
         <a href="${resetUrl}" style="display:inline-block; padding:12px 28px; background:#00c2a8; color:#fff; text-decoration:none; border-radius:8px; font-weight:600;">Restablecer contraseña</a>
@@ -456,7 +475,8 @@ export class EmailService {
     url: string,
     expiresInMinutes: number,
   ): string {
-    const safeUser = (userName ?? '').trim() || 'usuario';
+    const safeUser = this.escapeHtml((userName ?? '').trim() || 'usuario');
+    const safeFormName = this.escapeHtml(formName);
     return `<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"></head>
@@ -467,7 +487,7 @@ export class EmailService {
     </div>
     <div style="padding:28px; color:#374151; line-height:1.6; font-size:14px;">
       <p>Hola ${safeUser},</p>
-      <p>Ya está disponible tu reporte del formulario <strong>${formName}</strong>. Para descargarlo haz click en el botón:</p>
+      <p>Ya está disponible tu reporte del formulario <strong>${safeFormName}</strong>. Para descargarlo haz click en el botón:</p>
       <p style="text-align:center; margin:24px 0;">
         <a href="${url}" style="display:inline-block; padding:14px 32px; background:#00c2a8; color:#fff; text-decoration:none; border-radius:10px; font-weight:700; font-size:15px;">Descargar reporte</a>
       </p>

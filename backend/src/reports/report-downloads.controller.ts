@@ -85,7 +85,10 @@ export class ReportDownloadsController {
     }
     const valid = await this.totpService.verifyToken(cleaned, user.totpSecret);
     if (!valid) {
-      const attempts = await this.reportDownloads.incrementTotpAttempts(token);
+      const attempts = await this.reportDownloads.incrementTotpAttempts(
+        token,
+        userId,
+      );
       await failLog(attempts >= 3 ? 'exhausted' : 'invalid_totp');
       throw new UnauthorizedException('Código incorrecto.');
     }

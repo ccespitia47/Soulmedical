@@ -112,19 +112,19 @@ export class ReportDownloadsService {
    * post-increment atómicamente — evita la race condition entre updateOne
    * y findOne separados que existía antes.
    */
-  async incrementTotpAttempts(token: string): Promise<number> {
+  async incrementTotpAttempts(token: string, userId: number): Promise<number> {
     const updated: ReportDownloadDocument | null = await this.db.findOneAndUpdate(
-      { _id: token, consumed: false },
+      { _id: token, userId, consumed: false },
       { $inc: { totpAttempts: 1 } },
       { new: true },
     );
-    if (!updated) return 0; // token no existe o ya está consumed
+    if (!updated) return 0; // no existe, no es del user, o ya está consumed
     const attempts: number = updated.totpAttempts ?? 0;
     if (attempts >= MAX_TOTP_ATTEMPTS) {
       // Otro `findOneAndUpdate` con filtro consumed:false previene doble-write
       // si dos requests concurrentes llegan al 3er intento a la vez.
       await this.db.findOneAndUpdate(
-        { _id: token, consumed: false },
+        { _id: token, userId, consumed: false },
         { $set: { consumed: true, consumedAt: new Date() } },
       );
     }
