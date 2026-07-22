@@ -15,7 +15,11 @@ interface SubmissionsState {
   submissions: FormSubmission[];
   submitting: boolean;
 
-  addSubmission: (submission: Omit<FormSubmission, "id" | "submittedAt">) => Promise<void>;
+  addSubmission: (
+    submission: Omit<FormSubmission, "id" | "submittedAt">,
+    templateSnapshot?: string,
+    pdfFilename?: string,
+  ) => Promise<void>;
   getSubmissions: (formId: string) => FormSubmission[];
   deleteSubmission: (id: string) => void;
   clearFormSubmissions: (formId: string) => void;
@@ -35,11 +39,14 @@ export const useSubmissionsStore = create<SubmissionsState>()((set, get) => ({
   submissions: [],
   submitting: false,
 
-  addSubmission: async (submission) => {
+  addSubmission: async (submission, templateSnapshot, pdfFilename) => {
     set({ submitting: true });
     const { data, error } = await submitFormApi(
       submission.formId,
       submission.data as Record<string, unknown>,
+      undefined,
+      templateSnapshot,
+      pdfFilename,
     );
 
     if (data) {
@@ -48,7 +55,6 @@ export const useSubmissionsStore = create<SubmissionsState>()((set, get) => ({
         submitting: false,
       }));
     } else {
-      // Si falla el API, guardar localmente como fallback
       const fallback: FormSubmission = {
         ...submission,
         id: randomUUID(),
@@ -62,19 +68,15 @@ export const useSubmissionsStore = create<SubmissionsState>()((set, get) => ({
     }
   },
 
-  getSubmissions: (formId) => {
-    return get().submissions.filter((s) => s.formId === formId);
-  },
+  getSubmissions: (formId) => get().submissions.filter((s) => s.formId === formId),
 
-  deleteSubmission: (id) => {
+  deleteSubmission: (id) =>
     set((state) => ({
       submissions: state.submissions.filter((s) => s.id !== id),
-    }));
-  },
+    })),
 
-  clearFormSubmissions: (formId) => {
+  clearFormSubmissions: (formId) =>
     set((state) => ({
       submissions: state.submissions.filter((s) => s.formId !== formId),
-    }));
-  },
+    })),
 }));

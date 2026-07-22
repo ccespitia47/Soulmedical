@@ -25,16 +25,27 @@ export class FormSubmission {
 
   @Prop({ default: () => new Date(), index: true })
   submittedAt: Date;
+
+  // ── Snapshot del template HTML del momento del envío ─────────────────────
+  // Se guarda el pdfTemplate con placeholders ${label} SIN interpolar,
+  // para poder regenerar el PDF con el formato original aunque el template
+  // del formulario cambie más adelante. Peso típico 2-20 KB (no incluye
+  // binarios: firmas/fotos siguen en GridFS con referencia gridfs:<id>).
+  // null si el formulario no tiene pdfTemplate configurado.
+  @Prop({ type: String, default: null })
+  templateSnapshot: string | null;
+
+  // Nombre del archivo PDF sugerido al descargar
+  @Prop({ type: String, default: null })
+  pdfFilename: string | null;
 }
 
 export const FormSubmissionSchema = SchemaFactory.createForClass(FormSubmission);
 
-// Índice compuesto para consultas frecuentes: respuestas de un form ordenadas por fecha
 FormSubmissionSchema.index({ formId: 1, submittedAt: -1 });
 
 FormSubmissionSchema.set('toJSON', {
   virtuals: true,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   transform: (_doc: any, ret: any) => {
     ret.id = ret._id;
     delete ret.__v;

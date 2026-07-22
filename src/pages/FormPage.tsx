@@ -1,13 +1,15 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSubmissionsStore } from "../store/useSubmissionsStore";
-import { useRulesStore } from "../store/useRulesStore";
 import { useFolderStore } from "../store/useFolderStore";
 import { useUsersStore } from "../store/useUsersStore";
 import { useAuthStore } from "../store/useAuthStore";
-import { sendFormEmail } from "../services/emailService";
+import { sendFormEmail, type EmailAttachment } from "../services/emailService";
 import { generateExcelHtml } from "../utils/excelToHtml";
 import { evaluateRules } from "../utils/formRules";
-import type { WidgetInstance } from "../types/widget.types";
+import { htmlToPdfBase64 } from "../utils/pdfExporter";
+import { saveDraft, loadDraft, deleteDraft } from "../utils/formDrafts";
+import { expandFormData, renderFilename } from "../utils/placeholders";
+import type { FormRule, WidgetInstance } from "../types/widget.types";
 import FormHeader from "../components/form/FormHeader";
 import FormBody from "../components/form/FormBody";
 import MissingFieldsModal from "../components/form/MissingFieldsModal";
@@ -18,6 +20,7 @@ type FormPageProps = {
   folderId: string;
   formName: string;
   widgets: WidgetInstance[];
+  rules?: FormRule[];
   onClose?: () => void;
   isPublic?: boolean;
 };
@@ -27,15 +30,19 @@ export default function FormPage({
   folderId,
   formName,
   widgets,
+  rules = [],
   onClose,
   isPublic = false,
 }: FormPageProps) {
   const { addSubmission } = useSubmissionsStore();
-  const { getRules } = useRulesStore();
   const { folders } = useFolderStore();
-  const { users } = useUsersStore();
+  const { users, loadUsers, loaded: usersLoaded } = useUsersStore();
   const { currentUser } = useAuthStore();
   const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    if (!usersLoaded) loadUsers();
+  }, [usersLoaded, loadUsers]);
 
   const [showSuccess, setShowSuccess] = useState(false);
   const [missingFields, setMissingFields] = useState<string[]>([]);
@@ -44,8 +51,26 @@ export default function FormPage({
   const [emailError, setEmailError] = useState<string | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
 
-  const rules = getRules(formId);
   const hiddenWidgetIds = evaluateRules(rules, fieldValues);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const draft = loadDraft(currentUser.id, folderId, formId);
+    if (!draft) return;
+    requestAnimationFrame(() => {
+      const form = formRef.current;
+      if (!form) return;
+      for (const [key, value] of Object.entries(draft.values)) {
+        const input = form.elements.namedItem(key) as
+          | HTMLInputElement
+          | HTMLTextAreaElement
+          | HTMLSelectElement
+          | null;
+        if (input && "value" in input) input.value = value;
+      }
+      setFieldValues(draft.values);
+    });
+  }, [currentUser?.id, folderId, formId]);
 
   const handleFormChange = () => {
     if (!formRef.current) return;
@@ -55,6 +80,17 @@ export default function FormPage({
       values[w.id] = String(fd.get(w.id) ?? "");
     });
     setFieldValues(values);
+
+    if (currentUser?.id) {
+      saveDraft({
+        userId: currentUser.id,
+        folderId,
+        formId,
+        formName,
+        values,
+        updatedAt: new Date().toISOString(),
+      });
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -83,61 +119,95 @@ export default function FormPage({
     widgets.forEach((widget) => {
       if (hiddenWidgetIds.has(widget.id)) return;
       const value = formData.get(widget.id);
-      if (!value) {
-        data[widget.id] = "";
-        return;
-      }
+      if (!value) { data[widget.id] = ""; return; }
       const str = String(value);
       if (str.startsWith("{") || str.startsWith("[")) {
-        try {
-          data[widget.id] = JSON.parse(str);
-          return;
-        } catch {
-          /* usar como string */
-        }
+        try { data[widget.id] = JSON.parse(str); return; } catch { /* string */ }
       }
       data[widget.id] = str;
     });
 
-    addSubmission({ formId, folderId, data: data as Record<string, string> });
-
+    // ── Capturar HTML snapshot para historial de PDFs ───────────────────────
+    // Se hace ANTES de addSubmission para que quede persistido junto al envío.
+    // Si no hay template HTML configurado, templateSnapshot queda undefined.
     const folder = folders.find((f) => f.id === folderId);
     const formConfig = folder?.forms.find((fm) => fm.id === formId);
     const template = formConfig?.emailTemplate;
 
+    let templateSnapshot: string | undefined;
+    let pdfFilename: string | undefined;
+
+    if (template?.attachPDF && template?.pdfTemplate?.trim()) {
+      try {
+        // Se guarda el TEMPLATE sin interpolar; la interpolación se hace en el
+        // backend al momento de generar el PDF, combinando template + data +
+        // resolución de imágenes desde GridFS.
+        templateSnapshot = template.pdfTemplate;
+        const labeledDataForSnapshot = expandFormData(widgets, data, hiddenWidgetIds);
+        pdfFilename = renderFilename(template.pdfFilename, labeledDataForSnapshot);
+      } catch (e) {
+        console.warn("No se pudo capturar el snapshot del PDF:", e);
+      }
+    }
+
+    addSubmission(
+      { formId, folderId, data: data as Record<string, string> },
+      templateSnapshot,
+      pdfFilename,
+    );
+
+    if (currentUser?.id) deleteDraft(currentUser.id, folderId, formId);
+
     if (template?.enabled) {
       setEmailStatus("sending");
       try {
-        const labeledData: Record<string, string> = {};
-        widgets.forEach((widget) => {
-          if (!hiddenWidgetIds.has(widget.id)) {
-            const key = widget.label
-              .toLowerCase()
-              .replace(/\s+/g, "")
-              .replace(/[^a-z0-9]/gi, "");
-            const val = data[widget.id];
-            labeledData[key] =
-              val == null
-                ? ""
-                : typeof val === "string"
-                ? val
-                : JSON.stringify(val);
-          }
-        });
+        const labeledData = expandFormData(widgets, data, hiddenWidgetIds);
+        const attachments: EmailAttachment[] = [];
 
-        let excelHtml: string | undefined;
-        if (
-          template.attachPDF &&
-          template.excelBase64 &&
-          (template.excelMappings?.length ?? 0) > 0
-        ) {
+        // Excel mapeado → PDF
+        if (template.excelBase64 && (template.excelMappings?.length ?? 0) > 0) {
           const html = generateExcelHtml(
             template.excelBase64,
             template.excelMappings!,
             labeledData,
-            template.excelLogoBase64
+            template.excelLogoBase64,
           );
-          if (html) excelHtml = html;
+          if (html) {
+            try {
+              const base64 = await htmlToPdfBase64(html);
+              attachments.push({
+                name: template.excelFilename?.replace(/\.xlsx?$/i, ".pdf") ?? "formulario.pdf",
+                contentType: "application/pdf",
+                contentBytes: base64,
+              });
+            } catch (e) {
+              console.error("Error generando PDF del Excel:", e);
+            }
+          }
+        }
+
+        // HTML template → PDF
+        if (template.attachPDF && template.pdfTemplate?.trim()) {
+          try {
+            const filled = template.pdfTemplate.replace(
+              /\$\{([^}]+)\}/g,
+              (_, key) => {
+                const raw = labeledData[key] ?? "";
+                if (raw.startsWith("data:image/")) {
+                  return `<img src="${raw}" style="max-height:80px;max-width:100%;object-fit:contain;display:block;">`;
+                }
+                return raw;
+              },
+            );
+            const base64 = await htmlToPdfBase64(filled);
+            attachments.push({
+              name: renderFilename(template.pdfFilename, labeledData),
+              contentType: "application/pdf",
+              contentBytes: base64,
+            });
+          } catch (e) {
+            console.error("Error generando PDF del template HTML:", e);
+          }
         }
 
         await sendFormEmail({
@@ -145,8 +215,7 @@ export default function FormPage({
           formData: labeledData,
           users,
           currentUser: currentUser ?? undefined,
-          attachments: [],
-          excelHtml,
+          attachments,
         });
         setEmailStatus("sent");
       } catch (err) {
@@ -172,7 +241,6 @@ export default function FormPage({
   return (
     <div className="flex min-h-screen flex-col bg-[#f0f4f8] font-sans">
       {!isPublic && <FormHeader formName={formName} onClose={onClose} />}
-
       <FormBody
         ref={formRef}
         formName={formName}
@@ -183,14 +251,9 @@ export default function FormPage({
         onChange={handleFormChange}
         onCancel={onClose}
       />
-
       {missingFields.length > 0 && (
-        <MissingFieldsModal
-          fields={missingFields}
-          onClose={() => setMissingFields([])}
-        />
+        <MissingFieldsModal fields={missingFields} onClose={() => setMissingFields([])} />
       )}
-
       {showSuccess && (
         <SuccessModal
           emailStatus={emailStatus}
