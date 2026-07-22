@@ -133,11 +133,9 @@ export default function ReportsPage() {
               📊 Reporte de envíos
             </h1>
             <p className="mt-1 text-[13px] text-gray-500">
-              Elige un formulario, marca los campos que quieres incluir
-              en el reporte. Se enviará a tu correo{currentUser?.email
-                ? ` (${currentUser.email})`
-                : ""}{" "}
-              como un archivo ZIP protegido.
+              Elige un formulario y marca los campos que quieres incluir
+              en el reporte. Te enviaremos un enlace de descarga a tu correo
+              {currentUser?.email ? ` (${currentUser.email})` : ""}.
             </p>
           </div>
 
