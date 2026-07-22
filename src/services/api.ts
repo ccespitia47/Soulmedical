@@ -647,65 +647,9 @@ export async function submitFormApi(
   const body: Record<string, unknown> = { data };
   if (templateSnapshot) body.templateSnapshot = templateSnapshot;
   if (pdfFilename) body.pdfFilename = pdfFilename;
-  return request<SubmissionData>(`/forms/${formId}/submissions`, {
+  return request<SubmissionData>(`/forms/${formId}/submit`, {
     method: "POST",
     body: JSON.stringify(body),
     headers: apiKey ? { "X-API-Key": apiKey } : undefined,
   });
 }
-
-// Lista de registros de un formulario con filtro de fechas
-export async function getSubmissionsByFormApi(
-  formId: string,
-  page = 1,
-  limit = 50,
-  from?: string,
-  to?: string,
-) {
-  const params = new URLSearchParams({
-    page: String(page),
-    limit: String(limit),
-    ...(from ? { from } : {}),
-    ...(to ? { to } : {}),
-  });
-  return request<{
-    data: SubmissionListItem[];
-    total: number;
-    page: number;
-    limit: number;
-  }>(`/forms/${formId}/submissions?${params}`);
-}
-
-// HTML snapshot para preview en el frontend
-export async function getSubmissionHtmlSnapshotApi(submissionId: string) {
-  return request<{ html: string | null; pdfFilename: string | null }>(
-    `/submissions/${submissionId}/html-snapshot`,
-  );
-}
-
-// Solicitar descarga masiva de PDFs por correo
-export async function bulkPdfEmailApi(
-  formId: string,
-  from?: string,
-  to?: string,
-) {
-  return request<{ success: boolean; message: string; count: number }>(
-    `/forms/${formId}/submissions/bulk-pdf-email`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ from, to }),
-    },
-  );
-}
-
-// Tipo para el listado de submissions
-export type SubmissionListItem = {
-  id: string;
-  formId: string;
-  formVersion: number;
-  submittedById: number | null;
-  submittedAt: string;
-  data: Record<string, unknown>;
-  pdfFilename: string | null;
-  templateSnapshot: null; // nunca viene en la lista, solo en el detalle
-};
