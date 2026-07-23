@@ -93,17 +93,9 @@ export class SubmissionsService {
     formId: string,
     page = 1,
     limit = 50,
-    from?: string,
-    to?: string,
   ): Promise<SubmissionsPage> {
     const skip = (page - 1) * limit;
     const query: Record<string, unknown> = { formId };
-    if (from || to) {
-      const dateFilter: Record<string, unknown> = {};
-      if (from) dateFilter['$gte'] = new Date(from);
-      if (to) dateFilter['$lte'] = new Date(to + 'T23:59:59.999Z');
-      query['submittedAt'] = dateFilter;
-    }
     const [data, total] = await Promise.all([
       this.submissionModel
         .find(query)
@@ -111,6 +103,25 @@ export class SubmissionsService {
         .skip(skip)
         .limit(limit)
         .select('-templateSnapshot'), // no enviamos el snapshot en la lista
+      this.submissionModel.countDocuments(query),
+    ]);
+    return { data, total, page, limit };
+  }
+
+  async findByUser(
+    userId: number,
+    page = 1,
+    limit = 50,
+  ): Promise<SubmissionsPage> {
+    const skip = (page - 1) * limit;
+    const query = { submittedById: userId };
+    const [data, total] = await Promise.all([
+      this.submissionModel
+        .find(query)
+        .sort({ submittedAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .select('-templateSnapshot'),
       this.submissionModel.countDocuments(query),
     ]);
     return { data, total, page, limit };
