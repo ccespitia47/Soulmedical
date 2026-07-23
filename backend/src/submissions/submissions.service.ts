@@ -1,15 +1,10 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import * as archiver from 'archiver';
-import { PassThrough } from 'stream';
 import { FormSubmission, FormSubmissionDocument } from './form-submission.schema';
 import { FormsService } from '../forms/forms.service';
 import { CreateSubmissionDto } from './dto/create-submission.dto';
 import { FilesService } from '../files/files.service';
-import { PdfRendererService } from './pdf-renderer.service';
-import { EmailService } from '../email/email.service';
-import { UsersService } from '../users/users.service';
 
 const BINARY_WIDGET_TYPES = new Set(['signature', 'photo']);
 const GRIDFS_PREFIX = 'gridfs:';
@@ -37,16 +32,11 @@ export interface ExportPage {
 
 @Injectable()
 export class SubmissionsService {
-  private readonly logger = new Logger(SubmissionsService.name);
-
   constructor(
     @InjectModel(FormSubmission.name)
     private readonly submissionModel: Model<FormSubmissionDocument>,
     private readonly formsService: FormsService,
     private readonly filesService: FilesService,
-    private readonly pdfRenderer: PdfRendererService,
-    private readonly emailService: EmailService,
-    private readonly usersService: UsersService,
   ) {}
 
   async submit(
@@ -147,174 +137,8 @@ export class SubmissionsService {
     return { data, total, page, limit };
   }
 
-  async findByUser(
-    userId: number,
-    page = 1,
-    limit = 50,
-  ): Promise<SubmissionsPage> {
-    const skip = (page - 1) * limit;
-    const query = { submittedById: userId };
-    const [data, total] = await Promise.all([
-      this.submissionModel
-        .find(query)
-        .sort({ submittedAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .select('-templateSnapshot'),
-      this.submissionModel.countDocuments(query),
-    ]);
-    return { data, total, page, limit };
-  }
-
   async countByForm(formId: string): Promise<number> {
     return this.submissionModel.countDocuments({ formId });
-  }
-
-  // ── PDF individual ────────────────────────────────────────────────────────
-
-  async getHtmlSnapshot(id: string): Promise<{ html: string | null; pdfFilename: string | null }> {
-    const sub = await this.submissionModel.findById(id).select('templateSnapshot pdfFilename');
-    if (!sub) throw new NotFoundException(`Respuesta ${id} no encontrada`);
-    return { html: sub.templateSnapshot ?? null, pdfFilename: sub.pdfFilename ?? null };
-  }
-
-  async generatePdf(id: string): Promise<{ buffer: Buffer; filename: string }> {
-    const sub = await this.submissionModel.findById(id).select('templateSnapshot pdfFilename formId submittedAt');
-    if (!sub) throw new NotFoundException(`Respuesta ${id} no encontrada`);
-
-    if (!sub.templateSnapshot) {
-      throw new NotFoundException(
-        'Este registro no tiene snapshot de PDF. Solo los registros enviados después de activar esta función tienen PDF disponible.',
-      );
-    }
-
-    const buffer = await this.pdfRenderer.htmlToPdfBuffer(sub.templateSnapshot);
-    const filename =
-      sub.pdfFilename ??
-      `registro_${sub.formId}_${sub.submittedAt.toISOString().slice(0, 10)}.pdf`;
-
-    return { buffer, filename };
-  }
-
-  // ── Descarga masiva por correo ─────────────────────────────────────────────
-
-  async bulkPdfEmail(
-    formId: string,
-    userId: number,
-    from?: string,
-    to?: string,
-  ): Promise<{ success: boolean; message: string; count: number }> {
-    const user = await this.usersService.findById(userId);
-    if (!user) throw new NotFoundException('Usuario no encontrado');
-
-    const form = await this.formsService.findOne(formId);
-
-    // Buscar todas las submissions con snapshot en el rango de fechas
-    const query: Record<string, unknown> = {
-      formId,
-      templateSnapshot: { $ne: null },
-    };
-    if (from || to) {
-      const dateFilter: Record<string, unknown> = {};
-      if (from) dateFilter['$gte'] = new Date(from);
-      if (to) dateFilter['$lte'] = new Date(to + 'T23:59:59.999Z');
-      query['submittedAt'] = dateFilter;
-    }
-
-    const submissions = await this.submissionModel
-      .find(query)
-      .select('templateSnapshot pdfFilename formId submittedAt')
-      .sort({ submittedAt: -1 })
-      .limit(500); // máximo 500 PDFs por envío
-
-    if (submissions.length === 0) {
-      return {
-        success: false,
-        message: 'No hay registros con PDF disponible en el período seleccionado.',
-        count: 0,
-      };
-    }
-
-    // Generar PDFs y empacar en ZIP
-    this.logger.log(
-      `[bulkPdf] Generando ${submissions.length} PDFs para formulario "${form.name}"`,
-    );
-
-    const zipBuffer = await this.buildZip(submissions);
-
-    // Enviar por correo como adjunto
-    const period = from && to
-      ? `${from} al ${to}`
-      : from
-      ? `desde ${from}`
-      : to
-      ? `hasta ${to}`
-      : 'todos los registros';
-
-    await this.emailService.sendEmail({
-      subject: `📦 PDFs de "${form.name}" — ${period}`,
-      emailBody: `
-        <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;">
-          <h2 style="color:#00c2a8;">Descarga masiva de PDFs</h2>
-          <p>Se adjuntan <strong>${submissions.length} PDF(s)</strong> del formulario
-          <strong>${form.name}</strong> correspondientes al período: ${period}.</p>
-          <p style="color:#6b7280;font-size:13px;">
-            Cada PDF corresponde a un registro enviado y refleja el formato
-            exacto del formulario en el momento del envío.
-          </p>
-        </div>
-      `,
-      toRecipients: [{ type: 'static', email: user.email }],
-      senderName: 'SoulForms',
-      attachments: [
-        {
-          name: `PDFs_${this.sanitize(form.name)}_${this.timestamp()}.zip`,
-          contentType: 'application/zip',
-          contentBytes: zipBuffer.toString('base64'),
-        },
-      ],
-    });
-
-    return {
-      success: true,
-      message: `Se enviaron ${submissions.length} PDF(s) a ${user.email}. Revisa tu correo.`,
-      count: submissions.length,
-    };
-  }
-
-  private async buildZip(
-    submissions: FormSubmissionDocument[],
-  ): Promise<Buffer> {
-    return new Promise(async (resolve, reject) => {
-      const chunks: Buffer[] = [];
-      const passThrough = new PassThrough();
-      passThrough.on('data', (chunk: Buffer) => chunks.push(chunk));
-      passThrough.on('end', () => resolve(Buffer.concat(chunks)));
-      passThrough.on('error', reject);
-
-      const archive = archiver('zip', { zlib: { level: 6 } });
-      archive.on('error', reject);
-      archive.pipe(passThrough);
-
-      for (const sub of submissions) {
-        if (!sub.templateSnapshot) continue;
-        try {
-          const pdfBuffer = await this.pdfRenderer.htmlToPdfBuffer(
-            sub.templateSnapshot,
-          );
-          const filename =
-            sub.pdfFilename ??
-            `registro_${sub.submittedAt.toISOString().slice(0, 10)}_${sub.id}.pdf`;
-          archive.append(pdfBuffer, { name: filename });
-        } catch (err) {
-          this.logger.warn(
-            `[bulkPdf] Error generando PDF para submission ${sub.id}: ${err}`,
-          );
-        }
-      }
-
-      await archive.finalize();
-    });
   }
 
   // ── Export para Power BI ──────────────────────────────────────────────────
@@ -436,13 +260,5 @@ export class SubmissionsService {
     });
 
     return { data, total, page, limit };
-  }
-
-  private sanitize(name: string): string {
-    return name.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, '_').slice(0, 60) || 'formulario';
-  }
-
-  private timestamp(): string {
-    return new Date().toISOString().slice(0, 10);
   }
 }

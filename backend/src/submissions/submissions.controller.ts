@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards, Request, UnauthorizedException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  Request,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
 import { ApiKeyGuard } from '../auth/api-key.guard';
@@ -6,7 +15,6 @@ import { SubmissionsService } from './submissions.service';
 import { CreateSubmissionDto } from './dto/create-submission.dto';
 
 interface OptionalAuthRequest { user?: { id: number } }
-interface AuthedRequest { user?: { id: number } }
 
 @Controller('')
 export class SubmissionsController {
@@ -28,8 +36,16 @@ export class SubmissionsController {
     @Param('formId') formId: string,
     @Query('page') page = '1',
     @Query('limit') limit = '50',
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
-    return this.submissionsService.findByForm(formId, parseInt(page), parseInt(limit));
+    return this.submissionsService.findByForm(
+      formId,
+      parseInt(page),
+      parseInt(limit),
+      from,
+      to,
+    );
   }
 
   // Endpoint para Power BI y herramientas externas — usa X-Api-Key
@@ -64,18 +80,5 @@ export class SubmissionsController {
     @Query('limit') limit = '50',
   ) {
     return this.submissionsService.findAll(parseInt(page), parseInt(limit));
-  }
-
-  // Envíos hechos por el usuario logueado (vista "Enviados")
-  @UseGuards(JwtAuthGuard)
-  @Get('submissions/mine/list')
-  findMine(
-    @Request() req: AuthedRequest,
-    @Query('page') page = '1',
-    @Query('limit') limit = '50',
-  ) {
-    const user = req.user;
-    if (!user) throw new UnauthorizedException('Usuario no autenticado');
-    return this.submissionsService.findByUser(user.id, parseInt(page), parseInt(limit));
   }
 }
