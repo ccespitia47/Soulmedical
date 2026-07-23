@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MongooseModule } from '@nestjs/mongoose';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { ProjectsModule } from './projects/projects.module';
@@ -9,20 +11,24 @@ import { FormsModule } from './forms/forms.module';
 import { SubmissionsModule } from './submissions/submissions.module';
 import { ApiKeysModule } from './api-keys/api-keys.module';
 import { GroupsModule } from './groups/groups.module';
-import { User } from './users/user.entity';
+import { EmailModule } from './email/email.module';
+import { ConsentsModule } from './consents/consents.module';
+import { AdminAuditModule } from './admin-audit/admin-audit.module';
+import { ReportsModule } from './reports/reports.module';
+import { dataSourceOptions } from './data-source';
+import {TasksModule} from './tasks/tasks.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forRoot({
-      type: 'postgres',
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT || '5434'),
-      username: process.env.DB_USERNAME || 'postgres',
-      password: process.env.DB_PASSWORD || 'postgres',
-      database: process.env.DB_DATABASE || 'soulformsdb',
-      entities: [User],
-      synchronize: true,
-    }),
+    // Rate limiting global. Por defecto 100 req/min por IP. /auth/login y
+    // /auth/forgot-password tienen sus propios @Throttle más estrictos.
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60_000, // 1 min
+        limit: 100,
+      },
+    ]),
+    TypeOrmModule.forRoot(dataSourceOptions),
     MongooseModule.forRoot(
       process.env.MONGO_URI || 'mongodb://localhost:27017/soulformsdb',
     ),
@@ -34,6 +40,17 @@ import { User } from './users/user.entity';
     SubmissionsModule,
     ApiKeysModule,
     GroupsModule,
+    EmailModule,
+    ConsentsModule,
+    AdminAuditModule,
+    ReportsModule,
+    TasksModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}

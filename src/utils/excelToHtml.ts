@@ -89,7 +89,17 @@ export function generateExcelHtml(
 
         let value = "";
         if (valueMap[coord] !== undefined) {
-          value = valueMap[coord];
+          const raw = valueMap[coord];
+          // Firmas y demás campos que devuelven data URL de imagen se
+          // renderizan como <img> en lugar de imprimir el base64 como texto.
+          if (typeof raw === "string" && raw.startsWith("data:image/")) {
+            value = `<img src="${raw}" style="max-height:80px;max-width:100%;object-fit:contain;display:block;margin:0 auto;">`;
+          } else {
+            value = String(raw ?? "")
+              .replace(/&/g, "&amp;")
+              .replace(/</g, "&lt;")
+              .replace(/>/g, "&gt;");
+          }
         } else if (cell?.v !== undefined && cell.v !== null) {
           value = String(cell.v)
             .replace(/&/g, "&amp;")

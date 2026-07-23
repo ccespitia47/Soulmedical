@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { FolderItem, FormItem } from "../types/folder.types";
-import type { WidgetInstance } from "../types/widget.types";
+import type { FormRule, WidgetInstance } from "../types/widget.types";
 import type { EmailTemplate } from "../types/email-template.types";
 import {
   getFoldersByProject,
@@ -22,7 +22,11 @@ function mapForm(f: FormApiData): FormItem {
     createdAt: new Date(f.createdAt).toLocaleDateString("es-CO"),
     updatedAt: new Date(f.updatedAt).toLocaleDateString("es-CO"),
     widgets: (f.schema?.widgets ?? []) as WidgetInstance[],
+    rules: (f.schema?.rules ?? []) as FormRule[],
     emailTemplate: (f.emailTemplate ?? undefined) as EmailTemplate | undefined,
+    isPublic: f.isPublic ?? false,
+    sendConfirmationEmail: f.sendConfirmationEmail ?? true,
+    requiresEmailVerification: f.requiresEmailVerification ?? false,
     status: "published",
   };
 }
@@ -54,11 +58,28 @@ interface FolderState {
   duplicateFolder: (id: string) => Promise<void>;
 
   addForm: (folderId: string, name: string) => Promise<void>;
+  /** Crea un form atómicamente con todo el snapshot (widgets + rules + emailTemplate) y devuelve su id. */
+  addFormFromTemplate: (
+    folderId: string,
+    name: string,
+    widgets: WidgetInstance[],
+    rules?: FormRule[],
+    emailTemplate?: EmailTemplate,
+  ) => Promise<string | null>;
   deleteForm: (folderId: string, formId: string) => Promise<void>;
   renameForm: (folderId: string, formId: string, name: string) => Promise<void>;
   duplicateForm: (folderId: string, formId: string) => Promise<void>;
   saveFormWidgets: (folderId: string, formId: string, widgets: WidgetInstance[]) => Promise<void>;
+  saveFormRules: (folderId: string, formId: string, rules: FormRule[]) => Promise<void>;
   updateFormEmailTemplate: (folderId: string, formId: string, emailTemplate: EmailTemplate) => Promise<void>;
+  /** Actualiza solo en memoria los flags de compartir; el PATCH al backend lo hace ShareFormModal. */
+  setFormShareFlags: (
+    folderId: string,
+    formId: string,
+    isPublic: boolean,
+    sendConfirmationEmail: boolean,
+    requiresEmailVerification: boolean,
+  ) => void;
   publishForm: (folderId: string, formId: string, publishedBy: string, note?: string) => void;
   revertToVersion: (folderId: string, formId: string, versionNumber: number) => void;
 }
@@ -185,6 +206,32 @@ export const useFolderStore = create<FolderState>()((set, get) => ({
     }
   },
 
+  // Crea un formulario en UNA sola llamada al backend, mandando widgets,
+  // rules y emailTemplate juntos en el schema. Evita el patrón frágil de
+  // "addForm + setTimeout + saveFormWidgets" que dependía de adivinar
+  // cuánto tarda el API en responder.
+  addFormFromTemplate: async (folderId, name, widgets, rules, emailTemplate) => {
+    const { data, error } = await createFormApi({
+      name,
+      folderId,
+      schema: { widgets, rules: rules ?? [] },
+      emailTemplate: emailTemplate as object | undefined,
+    });
+    if (error) {
+      console.error('[FolderStore] addFormFromTemplate:', error);
+      alert(`Error al crear formulario desde plantilla: ${error}`);
+      return null;
+    }
+    if (!data) return null;
+    const form = mapForm(data);
+    set((state) => ({
+      folders: state.folders.map((f) =>
+        f.id === folderId ? { ...f, forms: [...f.forms, form] } : f,
+      ),
+    }));
+    return form.id;
+  },
+
   deleteForm: async (folderId, formId) => {
     await deleteFormApi(formId);
     set((state) => ({
@@ -224,7 +271,7 @@ export const useFolderStore = create<FolderState>()((set, get) => ({
     const { data } = await createFormApi({
       name: `${form.name} (copia)`,
       folderId,
-      schema: { widgets: form.widgets ?? [] },
+      schema: { widgets: form.widgets ?? [], rules: form.rules ?? [] },
       emailTemplate: form.emailTemplate as object | undefined,
     });
     if (data) {
@@ -239,7 +286,13 @@ export const useFolderStore = create<FolderState>()((set, get) => ({
   },
 
   saveFormWidgets: async (folderId, formId, widgets) => {
-    const { data } = await updateFormApi(formId, { schema: { widgets } });
+    // Preservar rules ya guardadas en el schema para no perderlas al guardar
+    // solo widgets desde el builder.
+    const currentForm = get()
+      .folders.find((f) => f.id === folderId)
+      ?.forms.find((fm) => fm.id === formId);
+    const rules = currentForm?.rules ?? [];
+    const { data } = await updateFormApi(formId, { schema: { widgets, rules } });
     if (data) {
       set((state) => ({
         folders: state.folders.map((f) =>
@@ -256,6 +309,59 @@ export const useFolderStore = create<FolderState>()((set, get) => ({
         ),
       }));
     }
+  },
+
+  saveFormRules: async (folderId, formId, rules) => {
+    // Preservar widgets ya guardados para no perderlos al guardar solo rules.
+    const currentForm = get()
+      .folders.find((f) => f.id === folderId)
+      ?.forms.find((fm) => fm.id === formId);
+    const widgets = currentForm?.widgets ?? [];
+    const { data } = await updateFormApi(formId, { schema: { widgets, rules } });
+    if (data) {
+      set((state) => ({
+        folders: state.folders.map((f) =>
+          f.id === folderId
+            ? {
+                ...f,
+                forms: f.forms.map((fm) =>
+                  fm.id === formId
+                    ? { ...fm, rules, updatedAt: new Date().toLocaleDateString("es-CO") }
+                    : fm
+                ),
+              }
+            : f
+        ),
+      }));
+    }
+  },
+
+  setFormShareFlags: (
+    folderId,
+    formId,
+    isPublic,
+    sendConfirmationEmail,
+    requiresEmailVerification,
+  ) => {
+    set((state) => ({
+      folders: state.folders.map((f) =>
+        f.id === folderId
+          ? {
+              ...f,
+              forms: f.forms.map((fm) =>
+                fm.id === formId
+                  ? {
+                      ...fm,
+                      isPublic,
+                      sendConfirmationEmail,
+                      requiresEmailVerification,
+                    }
+                  : fm,
+              ),
+            }
+          : f,
+      ),
+    }));
   },
 
   updateFormEmailTemplate: async (folderId, formId, emailTemplate) => {

@@ -3,6 +3,15 @@ import type { WidgetRenderProps } from "../../../types/widget.types";
 export default function CheckboxRender({ widget }: WidgetRenderProps) {
   const options = (widget.config.options as string[]) || [];
 
+  // El prefill puede llegar como CSV ("a,b,c") o como string único.
+  const raw = (widget.config.defaultValue as string) || "";
+  const selected = new Set(
+    raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+
   return (
     <div>
       <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
@@ -26,6 +35,7 @@ export default function CheckboxRender({ widget }: WidgetRenderProps) {
               type="checkbox"
               name={widget.id}
               value={option}
+              defaultChecked={selected.has(option)}
               style={{ accentColor: "#00c2a8" }}
             />
             <span>{option}</span>

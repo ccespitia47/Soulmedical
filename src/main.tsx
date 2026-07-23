@@ -5,6 +5,14 @@ import App from "./App.tsx";
 import { ThemeProvider } from "./context/ThemeContext.tsx";
 import "./index.css";
 
+// Migración: el viejo useUsersStore persistía contraseñas en localStorage.
+// La nueva versión es solo caché en memoria. Limpiamos cualquier residuo.
+try {
+  localStorage.removeItem("soulforms-users");
+} catch {
+  // ignore
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>

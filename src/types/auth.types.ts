@@ -2,17 +2,101 @@
 
 export type UserRole = "admin" | "coordinator" | "user";
 
+// ─── Permisos granulares ─────────────────────────────────────────────────────
+// Catálogo idéntico al del backend (backend/src/auth/permissions.ts).
+// Si se modifica aquí, hay que sincronizar el backend.
+
+export type Permission =
+  | "consientify_access"
+  | "forms_create"
+  | "forms_edit"
+  | "forms_delete"
+  | "audit_view"
+  | "reports_view";
+
+export const ALL_PERMISSIONS: Permission[] = [
+  "consientify_access",
+  "forms_create",
+  "forms_edit",
+  "forms_delete",
+  "audit_view",
+  "reports_view",
+];
+
+export const PERMISSION_LABELS: Record<Permission, string> = {
+  consientify_access: "Acceso a Consientify",
+  forms_create: "Crear formularios",
+  forms_edit: "Editar formularios",
+  forms_delete: "Eliminar formularios",
+  audit_view: "Ver reporte de acciones",
+  reports_view: "Solicitar reportes de formularios",
+};
+
+export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
+  consientify_access: "Permite ingresar al módulo Consientify.",
+  forms_create: "Permite crear nuevos formularios.",
+  forms_edit: "Permite modificar formularios existentes.",
+  forms_delete: "Permite eliminar formularios.",
+  audit_view:
+    "Permite ver la bitácora de acciones administrativas (Reporte de acciones).",
+  reports_view:
+    "Permite solicitar los envíos de un formulario por correo como ZIP cifrado.",
+};
+
+/**
+ * Permisos que cada rol tiene por defecto. Debe espejar el catálogo del
+ * backend (ROLE_BASE_PERMISSIONS en auth/permissions.ts).
+ */
+export const ROLE_BASE_PERMISSIONS: Record<UserRole, Permission[]> = {
+  admin: [
+    "consientify_access",
+    "forms_create",
+    "forms_edit",
+    "forms_delete",
+    "audit_view",
+    "reports_view",
+  ],
+  coordinator: [],
+  user: [],
+};
+
 export type AuthUser = {
   id: number;
   email: string;
   name: string;
   role: UserRole;
   avatar: string;
+  /** Permisos efectivos = rol base + extras explícitos. Vienen del backend. */
+  permissions?: Permission[];
   assignments?: {
     folderId: string;
     formIds: string[];
   }[];
 };
+
+/**
+ * Filtra una lista cualquiera dejando solo permisos válidos del catálogo.
+ * Útil al construir AuthUser desde una respuesta JSON (string[] → Permission[]).
+ */
+export function sanitizePermissions(input: readonly unknown[] | undefined): Permission[] {
+  if (!input) return [];
+  return input.filter((p): p is Permission =>
+    typeof p === "string" && (ALL_PERMISSIONS as string[]).includes(p),
+  );
+}
+
+/**
+ * Devuelve true si el usuario tiene el permiso pedido. Mismo criterio que
+ * el backend: suma de rol base + permisos explícitos del usuario.
+ */
+export function userHasPermission(
+  user: { role: UserRole; permissions?: Permission[] } | null | undefined,
+  perm: Permission,
+): boolean {
+  if (!user) return false;
+  if ((user.permissions ?? []).includes(perm)) return true;
+  return ROLE_BASE_PERMISSIONS[user.role]?.includes(perm) ?? false;
+}
 
 // ─── Permisos por rol ─────────────────────────────────────────────────────────
 
@@ -65,44 +149,3 @@ export const ROLE_AVATARS: Record<UserRole, string> = {
   coordinator: "👩‍⚕️",
   user: "👤",
 };
-
-const TEMP_USERS: Array<AuthUser & { password: string }> = [
-  {
-    id: 1,
-    email: "admin@soulforms.com",
-    name: "Administrador",
-    role: "admin",
-    avatar: ROLE_AVATARS.admin,
-    password: "admin123",
-  },
-  {
-    id: 2,
-    email: "coordinacion@soulforms.com",
-    name: "Coordinación",
-    role: "coordinator",
-    avatar: ROLE_AVATARS.coordinator,
-    password: "coordinacion123",
-  },
-  {
-    id: 3,
-    email: "enfermero@soulforms.com",
-    name: "Enfermero",
-    role: "user",
-    avatar: ROLE_AVATARS.user,
-    password: "enfermero123",
-  },
-];
-
-export function authenticateTemp(email: string, password: string): AuthUser | null {
-  const normalizedEmail = email.trim().toLowerCase();
-  const user = TEMP_USERS.find((tempUser) =>
-    (tempUser.email.toLowerCase() === normalizedEmail ||
-      tempUser.email.split("@")[0] === normalizedEmail) &&
-    tempUser.password === password
-  );
-
-  if (!user) return null;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { password: _pw, ...authUser } = user;
-  return authUser;
-}

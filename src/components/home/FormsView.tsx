@@ -11,6 +11,8 @@ type FormsHeaderProps = {
   folder: FolderItem;
   viewMode: "grid" | "list";
   currentUser: CurrentUser;
+  /** Si false, el botón "Nuevo formulario" se oculta. */
+  canCreate?: boolean;
   onChangeViewMode: (m: "grid" | "list") => void;
   onCreateForm: () => void;
 };
@@ -19,6 +21,7 @@ function FormsHeader({
   folder,
   viewMode,
   currentUser,
+  canCreate = true,
   onChangeViewMode,
   onCreateForm,
 }: FormsHeaderProps) {
@@ -67,13 +70,15 @@ function FormsHeader({
             <Icon name="list" size={14} />
           </button>
         </div>
-        <button
-          onClick={onCreateForm}
-          className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border-none px-3.5 py-2 text-[13px] font-semibold text-white"
-          style={{ background: ACCENT }}
-        >
-          <Icon name="plus" size={14} /> Nuevo formulario
-        </button>
+        {canCreate && (
+          <button
+            onClick={onCreateForm}
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border-none px-3.5 py-2 text-[13px] font-semibold text-white"
+            style={{ background: ACCENT }}
+          >
+            <Icon name="plus" size={14} /> Nuevo formulario
+          </button>
+        )}
         {currentUser && (
           <div className="ml-1.5 flex items-center gap-1.5">
             <span className="text-sm">{currentUser.avatar}</span>
@@ -89,10 +94,14 @@ type FormCardActions = {
   T: ThemeTokens;
   isFav: boolean;
   onToggleFav: () => void;
-  onEdit: () => void;
+  /** Undefined → el botón se oculta (sin permiso forms_edit). */
+  onEdit?: () => void;
   onDuplicate: () => void;
   onAssign: () => void;
-  onDelete: () => void;
+  /** Undefined → el botón se oculta (sin permiso forms_delete). */
+  onDelete?: () => void;
+  onCreateTask: () => void;
+  onShare: () => void;
 };
 
 type FormsListProps = {
@@ -243,6 +252,7 @@ type FormsViewProps = {
   T: ThemeTokens;
   viewMode: "grid" | "list";
   currentUser: CurrentUser;
+  canCreate?: boolean;
   buildActions: (form: FormItem) => FormCardActions;
   onChangeViewMode: (m: "grid" | "list") => void;
   onCreateForm: () => void;
@@ -256,6 +266,7 @@ export function FormsView({
   T,
   viewMode,
   currentUser,
+  canCreate = true,
   buildActions,
   onChangeViewMode,
   onCreateForm,
@@ -268,6 +279,7 @@ export function FormsView({
         folder={folder}
         viewMode={viewMode}
         currentUser={currentUser}
+        canCreate={canCreate}
         onChangeViewMode={onChangeViewMode}
         onCreateForm={onCreateForm}
       />
@@ -276,13 +288,15 @@ export function FormsView({
           <div className="rounded-2xl border-2 border-dashed border-slate-200 px-6 py-20 text-center text-gray-400">
             <span className="mb-3 block text-5xl">📋</span>
             <p className="text-[15px] font-semibold">No hay formularios</p>
-            <button
-              onClick={onCreateForm}
-              className="mt-3 cursor-pointer rounded-lg border-none px-3.5 py-2 text-[13px] font-semibold text-white"
-              style={{ background: ACCENT }}
-            >
-              Crear formulario
-            </button>
+            {canCreate && (
+              <button
+                onClick={onCreateForm}
+                className="mt-3 cursor-pointer rounded-lg border-none px-3.5 py-2 text-[13px] font-semibold text-white"
+                style={{ background: ACCENT }}
+              >
+                Crear formulario
+              </button>
+            )}
           </div>
         ) : viewMode === "grid" ? (
           <FormGrid
@@ -335,3 +349,5 @@ export function FormsEmptyState({
     </main>
   );
 }
+
+export type { FormCardActions };

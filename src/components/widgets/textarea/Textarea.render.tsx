@@ -8,10 +8,12 @@ export default function TextareaRender({ widget }: WidgetRenderProps) {
         {widget.required && <span style={{ color: "#ef4444", marginLeft: 3 }}>*</span>}
       </label>
       <textarea
+        name={widget.id}
         required={widget.required}
         placeholder={(widget.config.placeholder as string) || ""}
         maxLength={(widget.config.maxLength as number) || undefined}
         rows={(widget.config.rows as number) || 4}
+        defaultValue={(widget.config.defaultValue as string) || ""}
         style={{
           width: "100%",
           padding: "8px 12px",

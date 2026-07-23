@@ -12,6 +12,7 @@ export default function EmailRender({ widget }: WidgetRenderProps) {
         name={widget.id}
         required={widget.required}
         placeholder={(widget.config.placeholder as string) || "correo@ejemplo.com"}
+        defaultValue={(widget.config.defaultValue as string) || ""}
         style={{
           width: "100%",
           padding: "8px 12px",
@@ -21,12 +22,7 @@ export default function EmailRender({ widget }: WidgetRenderProps) {
           boxSizing: "border-box",
         }}
       />
-      <span style={{
-        display: "block",
-        fontSize: 11.5,
-        color: "#9ca3af",
-        marginTop: 4,
-      }}>
+      <span style={{ display: "block", fontSize: 11.5, color: "#9ca3af", marginTop: 4 }}>
         Formato: ejemplo@dominio.com
       </span>
     </div>

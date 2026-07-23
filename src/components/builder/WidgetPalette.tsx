@@ -17,12 +17,13 @@ const WIDGET_ICONS: Record<string, string> = {
   photo: "📷",
   header: "🏷️",
   html_block: "🧩",
+  subform: "🗂️",   // ← NUEVO
 };
 
 const CATEGORIES: { label: string; types: string[] }[] = [
   { label: "BÁSICOS", types: ["text", "textarea", "number", "email", "phone", "date"] },
   { label: "SELECCIÓN", types: ["select", "checkbox", "radio"] },
-  { label: "AVANZADOS", types: ["id_scanner", "signature", "photo"] },
+  { label: "AVANZADOS", types: ["id_scanner", "signature", "photo", "subform"] }, // ← NUEVO
   { label: "DISEÑO", types: ["header", "html_block"] },
 ];
 

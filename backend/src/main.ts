@@ -1,11 +1,23 @@
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { json, urlencoded } from 'express';
 import type { Request, Response, NextFunction } from 'express';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Helmet: agrega headers HTTP de seguridad (HSTS, X-DNS-Prefetch-Control,
+  // X-Frame-Options, Permitted-Cross-Domain-Policies, etc.). CSP la
+  // dejamos OFF porque la API no sirve HTML.
+  app.use(helmet({ contentSecurityPolicy: false }));
+
+  // Aumentar el límite del body parser (default 100kb es muy bajo).
+  // Las plantillas con Excel/PDF base64 pueden pesar varios MB.
+  app.use(json({ limit: '50mb' }));
+  app.use(urlencoded({ extended: true, limit: '50mb' }));
 
   // Prefijo global para todas las rutas: /api/...
   app.setGlobalPrefix('api');

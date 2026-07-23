@@ -1,4 +1,5 @@
 import type { WidgetPreviewProps } from "../../../types/widget.types";
+import { sanitizeHtml } from "../../../utils/sanitize";
 
 export default function HtmlBlockPreview({ widget }: WidgetPreviewProps) {
   const html = (widget.config.html as string) || "";
@@ -18,7 +19,7 @@ export default function HtmlBlockPreview({ widget }: WidgetPreviewProps) {
     >
       {html ? (
         <div
-          dangerouslySetInnerHTML={{ __html: html }}
+          dangerouslySetInnerHTML={{ __html: sanitizeHtml(html) }}
           style={{ pointerEvents: "none", fontSize: 11 }}
         />
       ) : (

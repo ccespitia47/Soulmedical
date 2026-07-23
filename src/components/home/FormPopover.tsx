@@ -5,10 +5,14 @@ type FormPopoverProps = {
   T: ThemeTokens;
   isFav: boolean;
   onToggleFav: () => void;
-  onEdit: () => void;
+  /** Si es undefined no se muestra el item (sin permiso para editar). */
+  onEdit?: () => void;
   onDuplicate: () => void;
   onAssign: () => void;
-  onDelete: () => void;
+  /** Si es undefined no se muestra el item (sin permiso para eliminar). */
+  onDelete?: () => void;
+  onCreateTask: () => void;
+  onShare: () => void;
 };
 
 export default function FormPopover({
@@ -19,17 +23,19 @@ export default function FormPopover({
   onDuplicate,
   onAssign,
   onDelete,
+  onCreateTask,
+  onShare,
 }: FormPopoverProps) {
-  return (
-    <PopoverMenu
-      T={T}
-      items={[
-        { label: isFav ? "Quitar de favoritos" : "Agregar a favoritos", icon: "star", onClick: onToggleFav },
-        { label: "Editar", icon: "edit", onClick: onEdit },
-        { label: "Duplicar", icon: "copy", onClick: onDuplicate },
-        { label: "Asignar usuarios", icon: "users", onClick: onAssign },
-        { label: "Eliminar", icon: "trash", onClick: onDelete, destructive: true },
-      ]}
-    />
-  );
+  const items = [
+    { label: isFav ? "Quitar de favoritos" : "Agregar a favoritos", icon: "star", onClick: onToggleFav },
+    { label: "Compartir", icon: "link", onClick: onShare },
+    { label: "Agregar tarea", icon: "clock", onClick: onCreateTask },
+    ...(onEdit ? [{ label: "Editar", icon: "edit", onClick: onEdit }] : []),
+    { label: "Duplicar", icon: "copy", onClick: onDuplicate },
+    { label: "Asignar usuarios", icon: "users", onClick: onAssign },
+    ...(onDelete
+      ? [{ label: "Eliminar", icon: "trash", onClick: onDelete, destructive: true }]
+      : []),
+  ];
+  return <PopoverMenu T={T} items={items} />;
 }

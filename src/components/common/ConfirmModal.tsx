@@ -1,3 +1,5 @@
+import { sanitizeHtml } from "../../utils/sanitize";
+
 type ConfirmModalProps = {
   title: string;
   message: string;
@@ -31,7 +33,7 @@ export default function ConfirmModal({
         <h2 className="m-0 mb-3 text-xl font-bold text-gray-900">{title}</h2>
         <p
           className="m-0 mb-6 text-sm leading-relaxed text-gray-500"
-          dangerouslySetInnerHTML={{ __html: message }}
+          dangerouslySetInnerHTML={{ __html: sanitizeHtml(message) }}
         />
         <div className="flex justify-center gap-2.5">
           <button

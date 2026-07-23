@@ -1,8 +1,17 @@
 import { useState, useEffect } from "react";
 import { useFolderStore } from "../store/useFolderStore";
 import { useProjectStore } from "../store/useProjectStore";
+import { useAuthStore } from "../store/useAuthStore";
+import { getMyTasksApi, getMySubmissionsApi } from "../services/api";
+import { listDrafts } from "../utils/formDrafts";
+import MyTasksList from "../components/userapp/MyTasksList";
+import MySubmissionsList from "../components/userapp/MySubmissionsList";
+import MyDraftsList from "../components/userapp/MyDraftsList";
+import MyTwoFactorButton from "../components/auth/MyTwoFactorButton";
 import type { AuthUser } from "../types/auth.types";
 import logo from "../assets/Logo_GrupoSoul.png";
+
+type AppSection = "forms" | "tasks" | "drafts" | "sent";
 
 // Usamos Pick para aceptar tanto AuthUser como AppUser
 type UserForApp = Pick<AuthUser, "name" | "role" | "avatar" | "assignments"> & { id?: number; email?: string };
@@ -18,11 +27,49 @@ export default function UserAppPage({ user, onFillForm, onLogout, onSwitchToAdmi
   const { folders, loadFolders } = useFolderStore();
   const { projects, loadProjects } = useProjectStore();
 
+  const { currentUser } = useAuthStore();
+  const [section, setSection] = useState<AppSection>("forms");
+  const [pendingCount, setPendingCount] = useState(0);
+  const [draftsCount, setDraftsCount] = useState(0);
+  const [sentCount, setSentCount] = useState(0);
   const [search, setSearch] = useState("");
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     projects.length > 0 ? projects[0].id : null
   );
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+
+  // Contadores para los badges del sidebar.
+  useEffect(() => {
+    let cancelled = false;
+    const loadCounts = async () => {
+      // Tareas pendientes (mi turno)
+      const tasksRes = await getMyTasksApi();
+      if (cancelled) return;
+      const mineTasks = (tasksRes.data ?? []).filter(
+        (t) => t.myStatus === "in_progress",
+      );
+      setPendingCount(mineTasks.length);
+
+      // Borradores en localStorage (por usuario)
+      if (currentUser?.id) {
+        setDraftsCount(listDrafts(currentUser.id).length);
+      }
+
+      // Envíos hechos por el usuario
+      const subsRes = await getMySubmissionsApi(1, 1);
+      if (cancelled) return;
+      setSentCount(subsRes.data?.total ?? 0);
+    };
+    loadCounts();
+    const handler = () => {
+      if (!document.hidden) loadCounts();
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", handler);
+    };
+  }, [section, currentUser?.id]);
 
   useEffect(() => {
     loadProjects();
@@ -87,23 +134,44 @@ export default function UserAppPage({ user, onFillForm, onLogout, onSwitchToAdmi
         {/* Nav */}
         <nav style={{ flex: 1, padding: "12px 8px" }}>
           {[
-            { icon: "📋", label: "Formularios", active: true },
-            { icon: "📝", label: "Borradores", active: false },
-            { icon: "📤", label: "Enviados", active: false },
-          ].map((item) => (
-            <div key={item.label} style={{
-              display: "flex", alignItems: "center", gap: 10,
-              padding: "11px 14px", borderRadius: 8, marginBottom: 2,
-              background: item.active ? "rgba(0,194,168,0.15)" : "transparent",
-              borderLeft: item.active ? "3px solid #00c2a8" : "3px solid transparent",
-              cursor: "pointer", transition: "all 0.15s",
-            }}>
-              <span style={{ fontSize: 17 }}>{item.icon}</span>
-              <span style={{ fontSize: 13, fontWeight: item.active ? 700 : 400, color: item.active ? "#00c2a8" : "rgba(255,255,255,0.5)" }}>
-                {item.label}
-              </span>
-            </div>
-          ))}
+            { id: "forms" as AppSection, icon: "📋", label: "Formularios", badge: 0 },
+            { id: "tasks" as AppSection, icon: "✅", label: "Tareas", badge: pendingCount },
+            { id: "drafts" as AppSection, icon: "📝", label: "Borradores", badge: draftsCount },
+            { id: "sent" as AppSection, icon: "📤", label: "Enviados", badge: sentCount },
+          ].map((item) => {
+            const active = section === item.id;
+            return (
+              <div
+                key={item.label}
+                onClick={() => setSection(item.id)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "11px 14px", borderRadius: 8, marginBottom: 2,
+                  background: active ? "rgba(0,194,168,0.15)" : "transparent",
+                  borderLeft: active ? "3px solid #00c2a8" : "3px solid transparent",
+                  cursor: "pointer", transition: "all 0.15s",
+                }}
+              >
+                <span style={{ fontSize: 17 }}>{item.icon}</span>
+                <span style={{
+                  flex: 1, fontSize: 13,
+                  fontWeight: active ? 700 : 400,
+                  color: active ? "#00c2a8" : "rgba(255,255,255,0.5)",
+                }}>
+                  {item.label}
+                </span>
+                {item.badge > 0 && (
+                  <span style={{
+                    background: "#ef4444", color: "#fff",
+                    borderRadius: 10, padding: "1px 7px",
+                    fontSize: 10, fontWeight: 700, minWidth: 18, textAlign: "center",
+                  }}>
+                    {item.badge}
+                  </span>
+                )}
+              </div>
+            );
+          })}
 
           {/* Botón volver al admin (solo si es admin) */}
           {onSwitchToAdmin && (
@@ -144,6 +212,9 @@ export default function UserAppPage({ user, onFillForm, onLogout, onSwitchToAdmi
               </div>
             </div>
           </div>
+          <MyTwoFactorButton
+            className="mb-2 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-[7px] border border-white/15 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+          />
           <button onClick={onLogout} style={{
             width: "100%", padding: "7px 12px",
             background: "rgba(239,68,68,0.1)", color: "#fca5a5",
@@ -169,15 +240,40 @@ export default function UserAppPage({ user, onFillForm, onLogout, onSwitchToAdmi
           display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0,
         }}>
           <div>
-            <h1 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", margin: 0 }}>Formularios</h1>
-            {selectedProject && (
+            <h1 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", margin: 0 }}>
+              {section === "forms"
+                ? "Formularios"
+                : section === "tasks"
+                ? "Tareas"
+                : section === "drafts"
+                ? "Borradores"
+                : "Enviados"}
+            </h1>
+            {section === "forms" && selectedProject && (
               <p style={{ fontSize: 11, color: "#94a3b8", margin: 0 }}>
                 {selectedProject.name} · {totalForms} formulario{totalForms !== 1 ? "s" : ""}
               </p>
             )}
+            {section === "tasks" && (
+              <p style={{ fontSize: 11, color: "#94a3b8", margin: 0 }}>
+                {pendingCount} tarea{pendingCount !== 1 ? "s" : ""} pendiente
+                {pendingCount !== 1 ? "s" : ""}
+              </p>
+            )}
+            {section === "drafts" && (
+              <p style={{ fontSize: 11, color: "#94a3b8", margin: 0 }}>
+                {draftsCount} borrador{draftsCount !== 1 ? "es" : ""} guardado
+                {draftsCount !== 1 ? "s" : ""}
+              </p>
+            )}
+            {section === "sent" && (
+              <p style={{ fontSize: 11, color: "#94a3b8", margin: 0 }}>
+                {sentCount} envío{sentCount !== 1 ? "s" : ""} en total
+              </p>
+            )}
           </div>
 
-          {projects.length > 1 && (
+          {section === "forms" && projects.length > 1 && (
             <select value={selectedProjectId ?? ""} onChange={(e) => setSelectedProjectId(e.target.value)}
               style={{ padding: "6px 12px", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 13, color: "#374151", background: "#f8fafc", cursor: "pointer", fontFamily: "inherit", outline: "none" }}>
               {projects.map((p) => <option key={p.id} value={p.id}>{p.icon} {p.name}</option>)}
@@ -185,6 +281,14 @@ export default function UserAppPage({ user, onFillForm, onLogout, onSwitchToAdmi
           )}
         </header>
 
+        {section === "tasks" ? (
+          <MyTasksList />
+        ) : section === "drafts" ? (
+          <MyDraftsList onContinue={onFillForm} />
+        ) : section === "sent" ? (
+          <MySubmissionsList />
+        ) : (
+          <>
         {/* Buscador */}
         <div style={{ padding: "14px 24px", background: "#fff", borderBottom: "1px solid #f1f5f9" }}>
           <div style={{ position: "relative", maxWidth: 400 }}>
@@ -280,6 +384,8 @@ export default function UserAppPage({ user, onFillForm, onLogout, onSwitchToAdmi
             </div>
           )}
         </div>
+          </>
+        )}
       </main>
     </div>
   );

@@ -42,6 +42,10 @@ export default function PhotoRender({ widget }: WidgetRenderProps) {
         {widget.required && <span style={{ color: "#ef4444", marginLeft: 3 }}>*</span>}
       </label>
 
+      {/* La foto (data URL base64) viaja al backend por este input; allí se
+          descarga a GridFS y se reemplaza por una referencia segura. */}
+      <input type="hidden" name={widget.id} value={imagePreview ?? ""} readOnly />
+
       {!imagePreview ? (
         <>
           <div

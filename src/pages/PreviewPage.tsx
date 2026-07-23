@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { useBuilderStore } from "../store/useBuilderStore";
-import { useRulesStore } from "../store/useRulesStore";
+import { useFolderStore } from "../store/useFolderStore";
 import { widgetRegistry } from "../components/widgets/registry";
 import type { FormRule } from "../types/widget.types";
 
@@ -60,14 +60,18 @@ function evaluateRules(rules: FormRule[], values: Record<string, string>): Set<s
 
 export default function PreviewPage({ onClose }: { onClose: () => void }) {
   const { widgets, currentFormId } = useBuilderStore();
-  const { getRules } = useRulesStore();
+  const { folders } = useFolderStore();
   const formRef = useRef<HTMLFormElement>(null);
 
   const [showSuccess, setShowSuccess] = useState(false);
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
 
-  const rules = currentFormId ? getRules(currentFormId) : [];
+  // Las reglas viven en el form (schema.rules), no en un store aparte.
+  const currentForm = currentFormId
+    ? folders.flatMap((f) => f.forms).find((fm) => fm.id === currentFormId)
+    : undefined;
+  const rules = currentForm?.rules ?? [];
   const hiddenWidgetIds = evaluateRules(rules, fieldValues);
 
   const handleSubmit = (e: React.FormEvent) => {

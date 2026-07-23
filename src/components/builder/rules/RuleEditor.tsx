@@ -18,6 +18,7 @@ const TRIGGER_TYPES = [
   "email",
   "phone",
   "date",
+  "subform",
 ];
 const UNTARGETABLE_TYPES: string[] = [];
 

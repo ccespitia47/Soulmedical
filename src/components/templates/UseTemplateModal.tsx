@@ -16,24 +16,30 @@ export default function UseTemplateModal({
   onUse,
   onClose,
 }: UseTemplateModalProps) {
-  const { folders, addForm, saveFormWidgets } = useFolderStore();
+  const { folders, addFormFromTemplate } = useFolderStore();
   const [selectedFolderId, setSelectedFolderId] = useState(folders[0]?.id ?? "");
   const [formName, setFormName] = useState(template.name);
+  const [creating, setCreating] = useState(false);
 
-  const handleUse = () => {
-    if (!selectedFolderId || !formName.trim()) return;
-    addForm(selectedFolderId, formName.trim());
-    setTimeout(() => {
-      const updatedFolder = useFolderStore
-        .getState()
-        .folders.find((f) => f.id === selectedFolderId);
-      const createdForm = updatedFolder?.forms[updatedFolder.forms.length - 1];
-      if (createdForm) {
-        saveFormWidgets(selectedFolderId, createdForm.id, template.widgets);
-        onUse(selectedFolderId, createdForm.id);
-      }
-    }, 100);
+  const handleUse = async () => {
+    if (!selectedFolderId || !formName.trim() || creating) return;
+    setCreating(true);
+    // Una sola llamada al backend con widgets + rules + emailTemplate.
+    // Esto reemplaza el patrón anterior addForm + setTimeout que era frágil
+    // ante cualquier latencia del backend.
+    const newFormId = await addFormFromTemplate(
+      selectedFolderId,
+      formName.trim(),
+      template.widgets,
+      template.rules,
+      template.emailTemplate,
+    );
+    setCreating(false);
+    if (newFormId) onUse(selectedFolderId, newFormId);
   };
+
+  const hasRules = (template.rules?.length ?? 0) > 0;
+  const hasEmail = !!template.emailTemplate?.enabled;
 
   const canSubmit = !!formName.trim() && !!selectedFolderId;
 
@@ -83,7 +89,22 @@ export default function UseTemplateModal({
           ✅ Se copiarán{" "}
           <strong>
             {template.widgets.length} campo{template.widgets.length !== 1 ? "s" : ""}
-          </strong>{" "}
+          </strong>
+          {hasRules && (
+            <>
+              ,{" "}
+              <strong>
+                {template.rules!.length} regla
+                {template.rules!.length !== 1 ? "s" : ""}
+              </strong>
+            </>
+          )}
+          {hasEmail && (
+            <>
+              {" "}
+              y la <strong>configuración de email</strong>
+            </>
+          )}{" "}
           de la plantilla
         </div>
 
@@ -96,14 +117,14 @@ export default function UseTemplateModal({
           </button>
           <button
             onClick={handleUse}
-            disabled={!canSubmit}
+            disabled={!canSubmit || creating}
             className="cursor-pointer rounded-lg border-none px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed"
             style={{
-              background: canSubmit ? "#00c2a8" : "#e2e8f0",
-              color: canSubmit ? "#fff" : "#9ca3af",
+              background: canSubmit && !creating ? "#00c2a8" : "#e2e8f0",
+              color: canSubmit && !creating ? "#fff" : "#9ca3af",
             }}
           >
-            ✅ Crear formulario
+            {creating ? "Creando..." : "✅ Crear formulario"}
           </button>
         </div>
       </div>

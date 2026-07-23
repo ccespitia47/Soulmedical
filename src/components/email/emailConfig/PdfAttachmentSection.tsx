@@ -25,6 +25,7 @@ type PdfAttachmentSectionProps = {
   onUploadExcel: (file: File) => void;
   onOpenExcelMapper: () => void;
   onPreviewExcel: () => void;
+  onOpenHtmlMapper: () => void;
 };
 
 const BTN_BASE = "cursor-pointer rounded-md border-none px-3 py-1 text-[11px] font-semibold";
@@ -50,6 +51,7 @@ export default function PdfAttachmentSection({
   onUploadExcel,
   onOpenExcelMapper,
   onPreviewExcel,
+  onOpenHtmlMapper,
 }: PdfAttachmentSectionProps) {
   const pdfTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const pdfFileRef = useRef<HTMLInputElement>(null);
@@ -134,6 +136,14 @@ export default function PdfAttachmentSection({
                 🗑️ Borrar plantilla
               </button>
             )}
+            <button
+              type="button"
+              onClick={onOpenHtmlMapper}
+              disabled={!pdfTemplate}
+              className={`${BTN_BASE} bg-[#00c2a8] text-white disabled:cursor-not-allowed disabled:opacity-50`}
+            >
+              📍 Mapear celdas
+            </button>
             <button
               type="button"
               onClick={onPreviewPdf}

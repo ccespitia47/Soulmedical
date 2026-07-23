@@ -1,4 +1,5 @@
 import type { WidgetPropertiesProps } from "../../../types/widget.types";
+import { sanitizeHtml } from "../../../utils/sanitize";
 
 export default function HtmlBlockProperties({ widget, updateWidget }: WidgetPropertiesProps) {
   const html = (widget.config.html as string) ?? "";
@@ -53,7 +54,11 @@ export default function HtmlBlockProperties({ widget, updateWidget }: WidgetProp
             background: "#ffffff",
             minHeight: 40,
           }}
-          dangerouslySetInnerHTML={{ __html: html || "<em style='color:#9ca3af'>Sin contenido</em>" }}
+          dangerouslySetInnerHTML={{
+            __html: html
+              ? sanitizeHtml(html)
+              : "<em style='color:#9ca3af'>Sin contenido</em>",
+          }}
         />
       </div>
     </div>

@@ -45,6 +45,7 @@ export default function PhoneRender({ widget }: WidgetRenderProps) {
           required={widget.required}
           placeholder={(widget.config.placeholder as string) || "300 123 4567"}
           maxLength={(widget.config.maxLength as number) || 10}
+          defaultValue={(widget.config.defaultValue as string) || ""}
           onKeyPress={handleKeyPress}
           onPaste={handlePaste}
           style={{

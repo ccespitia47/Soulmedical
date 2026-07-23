@@ -13,6 +13,7 @@ export default function DateRender({ widget }: WidgetRenderProps) {
         required={widget.required}
         min={(widget.config.min as string) || undefined}
         max={(widget.config.max as string) || undefined}
+        defaultValue={(widget.config.defaultValue as string) || ""}
         style={{
           width: "100%",
           padding: "8px 12px",

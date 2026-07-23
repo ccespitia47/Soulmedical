@@ -1,4 +1,4 @@
-import type { WidgetInstance } from "./widget.types";
+import type { FormRule, WidgetInstance } from "./widget.types";
 import type { EmailTemplate } from "./email-template.types";
 
 export type ProjectItem = {
@@ -28,9 +28,16 @@ export type FormItem = {
   updatedAt: string;
   // Widgets del borrador (lo que ve el admin en el builder)
   widgets?: WidgetInstance[];
+  // Reglas show/hide del formulario (persistidas con el schema en el backend)
+  rules?: FormRule[];
   emailTemplate?: EmailTemplate;
   // Estado de publicación
   status: FormStatus;
+  // Compartir público / confirmación
+  isPublic?: boolean;
+  sendConfirmationEmail?: boolean;
+  /** Si true, antes de mostrar el form al público se pide email + OTP. */
+  requiresEmailVerification?: boolean;
   // Versión publicada actual (lo que ven los usuarios)
   publishedWidgets?: WidgetInstance[];
   publishedEmailTemplate?: EmailTemplate;
@@ -57,6 +64,12 @@ export type TemplateItem = {
   icon: string;
   folderId: string;      // carpeta de plantillas donde está guardada
   widgets: WidgetInstance[];
+  // Snapshot completo del formulario al momento de guardar la plantilla:
+  // reglas show/hide y configuración de email (template, destinatarios,
+  // Excel mapeado, plantilla PDF). Opcionales para retrocompatibilidad
+  // con plantillas guardadas antes de este cambio.
+  rules?: FormRule[];
+  emailTemplate?: EmailTemplate;
   createdAt: string;
   createdBy: string;     // nombre del usuario que la creó
 };

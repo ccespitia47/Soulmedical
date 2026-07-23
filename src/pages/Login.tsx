@@ -5,7 +5,7 @@ import AuthLayout from "../components/auth/AuthLayout";
 import LoginModal, { type AppOption } from "../components/auth/LoginModal";
 
 type LoginProps = {
-  onLogin: (user: AuthUser, app: AppOption["id"]) => void;
+  onLogin: (user: AuthUser, app: AppOption["id"], token: string) => void;
   onGoRegister: () => void;
   onGoForgot: () => void;
 };

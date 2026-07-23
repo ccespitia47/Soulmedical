@@ -51,6 +51,21 @@ export default function UserListItem({
               Inactivo
             </span>
           )}
+          {user.totpEnabled ? (
+            <span
+              className="rounded-[20px] bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700"
+              title="El usuario tiene 2FA configurado"
+            >
+              🔐 2FA
+            </span>
+          ) : (
+            <span
+              className="rounded-[20px] bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-400"
+              title="El usuario aún no ha configurado 2FA — lo hará en su próximo login"
+            >
+              🔓 Sin 2FA
+            </span>
+          )}
         </div>
         <div className="mt-0.5 text-xs text-gray-500">{user.email}</div>
         <div className="mt-0.5 text-[11px] text-gray-400">

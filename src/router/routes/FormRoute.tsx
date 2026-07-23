@@ -61,6 +61,7 @@ export default function FormRoute() {
       folderId={folderId}
       formName={form?.name ?? "Formulario"}
       widgets={form?.widgets ?? []}
+      rules={form?.rules ?? []}
       onClose={() => navigate(backTo)}
     />
   );

@@ -2,6 +2,7 @@ import type { WidgetRenderProps } from "../../../types/widget.types";
 
 export default function SelectRender({ widget }: WidgetRenderProps) {
   const options = (widget.config.options as string[]) || [];
+  const defaultValue = (widget.config.defaultValue as string) || "";
 
   return (
     <div>
@@ -12,7 +13,7 @@ export default function SelectRender({ widget }: WidgetRenderProps) {
       <select
         name={widget.id}
         required={widget.required}
-        defaultValue=""
+        defaultValue={defaultValue}
         style={{
           width: "100%",
           padding: "8px 12px",

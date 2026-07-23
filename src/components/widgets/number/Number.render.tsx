@@ -7,6 +7,12 @@ export default function NumberRender({ widget }: WidgetRenderProps) {
     ? (widget.config.step as number) ?? 0.01
     : (widget.config.step as number) ?? 1;
 
+  const rawDefault = widget.config.defaultValue;
+  const defaultValue =
+    rawDefault === undefined || rawDefault === null || rawDefault === ""
+      ? ""
+      : String(rawDefault);
+
   return (
     <div>
       <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
@@ -21,6 +27,7 @@ export default function NumberRender({ widget }: WidgetRenderProps) {
         min={min}
         max={max}
         step={step}
+        defaultValue={defaultValue}
         style={{
           width: "100%",
           padding: "8px 12px",

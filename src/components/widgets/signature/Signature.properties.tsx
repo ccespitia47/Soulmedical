@@ -89,6 +89,7 @@ export default function SignatureProperties({ widget, updateWidget }: WidgetProp
           fontSize: 13,
           color: "#111827",
           cursor: "pointer",
+          marginBottom: 14,
         }}
       >
         <input
@@ -100,6 +101,39 @@ export default function SignatureProperties({ widget, updateWidget }: WidgetProp
         />
         <span>Campo obligatorio</span>
       </label>
+
+      <div style={{ marginBottom: 4 }}>
+        <label style={labelStyle}>Asignar al paso</label>
+        <input
+          type="number"
+          min={0}
+          step={1}
+          placeholder="0 = cualquier paso"
+          style={inputStyle}
+          value={(widget.config.assignedStep as number) ?? 0}
+          onChange={(e) => {
+            const n = parseInt(e.target.value, 10);
+            updateWidget(widget.id, {
+              config: {
+                ...widget.config,
+                assignedStep: Number.isFinite(n) && n > 0 ? n : 0,
+              },
+            });
+          }}
+        />
+        <p
+          style={{
+            margin: "6px 0 0",
+            fontSize: 11.5,
+            color: "#6b7280",
+            lineHeight: 1.4,
+          }}
+        >
+          Para tareas con varios destinatarios: número del paso (1, 2, 3…) en el
+          que esta firma debe completarse. Déjalo en 0 para permitir que
+          cualquiera la firme.
+        </p>
+      </div>
     </>
   );
 }

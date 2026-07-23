@@ -12,6 +12,7 @@ import { SignatureWidget } from "./signature/SignatureWidget.ts";
 import { PhotoWidget } from "./photo/PhotoWidget.ts";
 import { HeaderWidget } from "./header/HeaderWidget.ts";
 import { HtmlBlockWidget } from "./htmlblock/HtmlBlockWidget.ts";
+import { SubformWidget } from "./subform/SubformWidget";
 import type { WidgetDefinition } from "../../types/widget.types";
 
 export const widgetRegistry: Record<string, WidgetDefinition> = {
@@ -30,6 +31,7 @@ export const widgetRegistry: Record<string, WidgetDefinition> = {
   id_scanner: IdScannerWidget,
   signature: SignatureWidget,
   photo: PhotoWidget,
+  subform: SubformWidget,
   // Diseño
   header: HeaderWidget,
   html_block: HtmlBlockWidget,

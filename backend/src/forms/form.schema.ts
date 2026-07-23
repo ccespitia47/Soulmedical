@@ -28,13 +28,26 @@ export class Form {
 
   @Prop({ required: true })
   createdById: number;
+
+  // ── Acceso público ──────────────────────────────────────────────────────
+  @Prop({ default: false })
+  isPublic: boolean;
+
+  // Email de confirmación al usuario que envía (opcional)
+  @Prop({ default: true })
+  sendConfirmationEmail: boolean;
+
+  // Si true, antes de mostrar el formulario al público se exige que el
+  // visitante introduzca un correo registrado en la BD de usuarios y un
+  // código OTP de 6 dígitos enviado a ese correo (ver public-form-otp.schema).
+  @Prop({ default: false })
+  requiresEmailVerification: boolean;
 }
 
 export const FormSchema = SchemaFactory.createForClass(Form);
 
 FormSchema.set('toJSON', {
   virtuals: true,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   transform: (_doc: any, ret: any) => {
     ret.id = ret._id;
     delete ret.__v;

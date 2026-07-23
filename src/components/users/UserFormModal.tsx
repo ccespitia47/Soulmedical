@@ -2,6 +2,8 @@ import { useState } from "react";
 import type { UserApiData } from "../../services/api";
 import { ROLE_LABELS, ROLE_AVATARS, type UserRole } from "../../types/auth.types";
 import AssignmentsTab from "./AssignmentsTab";
+import PermissionsTab from "./PermissionsTab";
+import TwoFactorAdminPanel from "./TwoFactorAdminPanel";
 import { ROLE_COLORS } from "./UserListItem";
 
 const ROLES: UserRole[] = ["admin", "coordinator", "user"];
@@ -17,6 +19,8 @@ export type UserFormValues = {
   email: string;
   password: string;
   role: UserRole;
+  /** Número de documento (cédula/DNI). Usado como contraseña de reportes. */
+  documentNumber: string;
 };
 
 type UserFormModalProps = {
@@ -27,6 +31,8 @@ type UserFormModalProps = {
   error: string;
   onSubmit: (values: UserFormValues) => void;
   onClose: () => void;
+  /** Llamado tras acciones administrativas que invalidan la lista (ej. reset 2FA). */
+  onUserChanged?: () => void;
 };
 
 function FormFields({
@@ -77,6 +83,18 @@ function FormFields({
         value={values.password}
         onChange={(e) => onChange({ ...values, password: e.target.value })}
       />
+      <label className="mb-1.5 block text-xs font-semibold uppercase text-gray-500">
+        Número de documento{" "}
+        <span className="font-normal text-gray-400">
+          (requerido para solicitar reportes por correo)
+        </span>
+      </label>
+      <input
+        className={INPUT_CLASS}
+        placeholder="Ej: 1085123456"
+        value={values.documentNumber}
+        onChange={(e) => onChange({ ...values, documentNumber: e.target.value })}
+      />
       <label className="mb-1.5 block text-xs font-semibold uppercase text-gray-500">Rol</label>
       <select
         value={values.role}
@@ -101,9 +119,12 @@ export default function UserFormModal({
   error,
   onSubmit,
   onClose,
+  onUserChanged,
 }: UserFormModalProps) {
   const [values, setValues] = useState<UserFormValues>(initialValues);
-  const [editTab, setEditTab] = useState<"info" | "assignments">("info");
+  const [editTab, setEditTab] = useState<"info" | "assignments" | "permissions">(
+    "info",
+  );
 
   const role = editingUser?.role as UserRole | undefined;
   const color = role ? ROLE_COLORS[role] : "#00c2a8";
@@ -136,7 +157,7 @@ export default function UserFormModal({
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-5">
       <div
         className="flex max-h-[90vh] w-full flex-col rounded-2xl bg-white shadow-[0_20px_60px_rgba(0,0,0,0.2)]"
-        style={{ maxWidth: editTab === "assignments" ? 580 : 440 }}
+        style={{ maxWidth: editTab === "info" ? 440 : 580 }}
       >
         <div className="px-6 pt-5">
           <div className="mb-4 flex items-center justify-between">
@@ -166,8 +187,13 @@ export default function UserFormModal({
           </div>
 
           <div className="flex border-b border-slate-200">
-            {([["info", "👤 Información"], ["assignments", "🗂️ Asignaciones"]] as const).map(
-              ([tab, label]) => (
+            {(
+              [
+                ["info", "👤 Información"],
+                ["assignments", "🗂️ Asignaciones"],
+                ["permissions", "🔐 Permisos"],
+              ] as const
+            ).map(([tab, label]) => (
                 <button
                   key={tab}
                   onClick={() => setEditTab(tab)}
@@ -178,15 +204,14 @@ export default function UserFormModal({
                     color: editTab === tab ? "#00c2a8" : "#6b7280",
                   }}
                 >
-                  {label}
-                </button>
-              )
-            )}
+                {label}
+              </button>
+            ))}
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-5">
-          {editTab === "info" ? (
+          {editTab === "info" && (
             <>
               <FormFields values={values} mode="edit" onChange={setValues} />
               {error && <p className="m-0 mb-3 text-[13px] text-red-600">⚠️ {error}</p>}
@@ -202,9 +227,19 @@ export default function UserFormModal({
                   {saving ? "Guardando..." : "Guardar cambios"}
                 </button>
               </div>
+              {editingUser && (
+                <TwoFactorAdminPanel
+                  user={editingUser}
+                  onReset={onUserChanged}
+                />
+              )}
             </>
-          ) : (
-            editingUser && <AssignmentsTab userId={editingUser.id} />
+          )}
+          {editTab === "assignments" && editingUser && (
+            <AssignmentsTab userId={editingUser.id} />
+          )}
+          {editTab === "permissions" && editingUser && (
+            <PermissionsTab user={editingUser} />
           )}
         </div>
       </div>

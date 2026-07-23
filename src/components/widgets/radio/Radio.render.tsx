@@ -2,6 +2,7 @@ import type { WidgetRenderProps } from "../../../types/widget.types";
 
 export default function RadioRender({ widget }: WidgetRenderProps) {
   const options = (widget.config.options as string[]) || [];
+  const defaultValue = (widget.config.defaultValue as string) || "";
 
   return (
     <div>
@@ -27,6 +28,7 @@ export default function RadioRender({ widget }: WidgetRenderProps) {
               name={widget.id}
               value={option}
               required={widget.required && index === 0}
+              defaultChecked={option === defaultValue}
               style={{ accentColor: "#00c2a8" }}
             />
             <span>{option}</span>

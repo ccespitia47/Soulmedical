@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { TemplateItem, TemplateFolderItem } from "../types/folder.types";
-import type { WidgetInstance } from "../types/widget.types";
+import type { FormRule, WidgetInstance } from "../types/widget.types";
+import type { EmailTemplate } from "../types/email-template.types";
 import { randomUUID } from "../utils/uuid";
 
 interface TemplatesState {
@@ -20,6 +21,8 @@ interface TemplatesState {
     icon: string;
     folderId: string;
     widgets: WidgetInstance[];
+    rules?: FormRule[];
+    emailTemplate?: EmailTemplate;
     createdBy: string;
   }) => void;
   updateTemplate: (id: string, changes: Partial<TemplateItem>) => void;
@@ -73,6 +76,8 @@ export const useTemplatesStore = create<TemplatesState>()(
               icon: data.icon,
               folderId: data.folderId,
               widgets: data.widgets,
+              rules: data.rules ?? [],
+              emailTemplate: data.emailTemplate,
               createdAt: new Date().toLocaleDateString("es-CO"),
               createdBy: data.createdBy,
             },

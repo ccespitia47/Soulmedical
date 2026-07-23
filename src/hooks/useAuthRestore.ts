@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuthStore } from "../store/useAuthStore";
 import { clearSession, getStoredUser, getToken } from "../services/api";
-import { ROLE_AVATARS, type AuthUser } from "../types/auth.types";
+import { ROLE_AVATARS, sanitizePermissions, type AuthUser } from "../types/auth.types";
 
 type AuthRestoreState = {
   ready: boolean;
@@ -23,20 +23,22 @@ export function useAuthRestore(): AuthRestoreState {
       const payload = JSON.parse(atob(token.split(".")[1]));
       const expired = payload.exp && Date.now() / 1000 > payload.exp;
       if (expired) {
-        clearSession();
+        // No redirect — React Router ya muestra /login al setear user: null.
+        clearSession({ redirect: false });
         setState({ ready: true, user: null });
         return;
       }
     } catch {
-      clearSession();
+      clearSession({ redirect: false });
       setState({ ready: true, user: null });
       return;
     }
     const user: AuthUser = {
       ...stored,
       avatar: ROLE_AVATARS[stored.role as AuthUser["role"]] ?? "👤",
+      permissions: sanitizePermissions(stored.permissions),
     };
-    setAuthUser(user);
+    setAuthUser(user, token); // ← pasar token al store al restaurar sesión
     setState({ ready: true, user });
   }, [setAuthUser]);
 

@@ -17,6 +17,7 @@ const EMPTY_FORM: UserFormValues = {
   email: "",
   password: "",
   role: "user",
+  documentNumber: "",
 };
 
 export default function UsersPage() {
@@ -77,10 +78,17 @@ export default function UsersPage() {
     }
     setSaving(true);
     setFormError("");
-    const dto: { name: string; email: string; role: string; password?: string } = {
+    const dto: {
+      name: string;
+      email: string;
+      role: string;
+      password?: string;
+      documentNumber?: string;
+    } = {
       name: values.name,
       email: values.email,
       role: values.role,
+      documentNumber: values.documentNumber ?? "",
     };
     if (values.password.trim()) dto.password = values.password;
     const res = await updateUserApi(editingUser.id, dto);
@@ -215,6 +223,7 @@ export default function UsersPage() {
           initialValues={{
             name: editingUser.name,
             email: editingUser.email,
+            documentNumber: editingUser.documentNumber ?? "",
             password: "",
             role: editingUser.role as UserFormValues["role"],
           }}
@@ -222,6 +231,7 @@ export default function UsersPage() {
           error={formError}
           onSubmit={handleSaveEdit}
           onClose={() => setEditingUser(null)}
+          onUserChanged={loadUsers}
         />
       )}
 

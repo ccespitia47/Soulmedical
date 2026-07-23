@@ -1,3 +1,5 @@
+import { sanitizeHtml } from "../../../utils/sanitize";
+
 type PreviewModalProps = {
   title: string;
   html: string;
@@ -19,7 +21,7 @@ export default function PreviewModal({ title, html, onClose }: PreviewModalProps
         </div>
         <div className="flex-1 overflow-y-auto bg-[#f0f4f8] p-6">
           <div
-            dangerouslySetInnerHTML={{ __html: html }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(html) }}
             className="rounded-lg bg-white"
           />
         </div>

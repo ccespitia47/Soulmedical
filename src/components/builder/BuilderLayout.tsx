@@ -4,7 +4,6 @@ import WidgetPalette from "./WidgetPalette";
 import PropertyPanel from "../properties/PropertyPanel";
 import RulesPanel from "./RulesPanel";
 import { useBuilderStore } from "../../store/useBuilderStore";
-import { useRulesStore } from "../../store/useRulesStore";
 import { useAuthStore } from "../../store/useAuthStore";
 import { useTemplatesStore } from "../../store/useTemplatesStore";
 import PreviewPage from "@/pages/PreviewPage";
@@ -145,8 +144,7 @@ function VersionHistoryPanel({ versions, currentVersion, onRevert, onClose }: { 
 // ══════════════════════════════════════════════════════════════════════════════
 export default function BuilderLayout({ folderId, formId, onBack }: { folderId?: string; formId?: string; onBack?: () => void }) {
   const widgets = useBuilderStore((s) => s.widgets);
-  const { folders, saveFormWidgets, publishForm, revertToVersion } = useFolderStore();
-  const { getRules, setRules } = useRulesStore();
+  const { folders, saveFormWidgets, saveFormRules, publishForm, revertToVersion } = useFolderStore();
   const { currentUser } = useAuthStore();
   const { templateFolders, addTemplate } = useTemplatesStore();
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
@@ -158,9 +156,10 @@ export default function BuilderLayout({ folderId, formId, onBack }: { folderId?:
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [successModal, setSuccessModal] = useState<{ title: string; message: string } | null>(null);
 
-  const rules = formId ? getRules(formId) : [];
   const folder = folders.find(f => f.id === folderId);
   const form = folder?.forms.find(fm => fm.id === formId);
+  const rules = form?.rules ?? [];
+  const formEmailTemplate = form?.emailTemplate;
   const versions = form?.versions ?? [];
   const currentVersion = form?.currentVersion ?? 0;
   const formStatus = form?.status ?? "draft";
@@ -188,7 +187,18 @@ export default function BuilderLayout({ folderId, formId, onBack }: { folderId?:
   };
 
   const handleSaveAsTemplate = (name: string, tfolderId: string, description: string, icon: string) => {
-    addTemplate({ name, description, icon, folderId: tfolderId, widgets, createdBy: currentUser?.name ?? "Admin" });
+    addTemplate({
+      name,
+      description,
+      icon,
+      folderId: tfolderId,
+      widgets,
+      // Snapshot completo: reglas y configuración de email del formulario
+      // actual, para que al reutilizar la plantilla todo quede igual.
+      rules,
+      emailTemplate: formEmailTemplate,
+      createdBy: currentUser?.name ?? "Admin",
+    });
     setShowTemplateModal(false);
     setSuccessModal({ title: "¡Plantilla guardada!", message: `La plantilla "${name}" fue guardada correctamente y ya está disponible en la sección de Plantillas.` });
   };
@@ -232,7 +242,7 @@ export default function BuilderLayout({ folderId, formId, onBack }: { folderId?:
         <main style={{ flex: 1, overflowY: "auto", padding: 24, background: "#f0f4f8" }}><BuilderCanvas /></main>
         <div style={{ width: rightPanelWidth, flexShrink: 0, borderLeft: "1px solid #e2e8f0", overflowY: "auto", background: "#ffffff", transition: "width 0.2s ease" }} className="sf-hide-mobile">
           {rightPanelMode === "versions" ? <VersionHistoryPanel versions={versions} currentVersion={currentVersion} onRevert={handleRevert} onClose={() => setShowVersionHistory(false)} />
-            : rightPanelMode === "rules" ? <RulesPanel widgets={widgets} rules={rules} onChange={(r) => formId && setRules(formId, r)} onClose={() => setShowRulesPanel(false)} />
+            : rightPanelMode === "rules" ? <RulesPanel widgets={widgets} rules={rules} onChange={(r) => folderId && formId && saveFormRules(folderId, formId, r)} onClose={() => setShowRulesPanel(false)} />
             : <PropertyPanel />}
         </div>
       </div>

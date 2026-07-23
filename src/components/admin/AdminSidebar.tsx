@@ -1,21 +1,41 @@
 import type { AuthUser } from "../../types/auth.types";
+import { userHasPermission } from "../../types/auth.types";
 import { useTheme } from "../../context/ThemeContext";
 import logo from "../../assets/Logo_GrupoSoul.png";
+import MyTwoFactorButton from "../auth/MyTwoFactorButton";
 
-export type AdminSection = "formularios" | "plantillas" | "usuarios";
+export type AdminSection =
+  | "formularios"
+  | "plantillas"
+  | "usuarios"
+  | "auditoria"
+  | "reportes";
 
 type AdminSidebarProps = {
   section: AdminSection;
-  currentUser: Pick<AuthUser, "name" | "role" | "avatar">;
+  // Incluye `permissions` para filtrar items de menú según permisos EXTRA
+  // (no solo el rol base).
+  currentUser: Pick<AuthUser, "name" | "role" | "avatar" | "permissions">;
   onSelectSection: (s: AdminSection) => void;
   onSwitchToUserApp: () => void;
   onLogout: () => void;
 };
 
-const NAV_ITEMS: { id: AdminSection; icon: string; label: string }[] = [
+// `permission` opcional: si está presente el item solo se muestra a usuarios
+// que tengan ese permiso (rol base o extra). Sin permission → siempre visible.
+type NavItem = {
+  id: AdminSection;
+  icon: string;
+  label: string;
+  permission?: "audit_view" | "reports_view";
+};
+
+const NAV_ITEMS: NavItem[] = [
   { id: "formularios", icon: "📋", label: "Formularios" },
   { id: "plantillas", icon: "📑", label: "Plantillas" },
   { id: "usuarios", icon: "👥", label: "Usuarios" },
+  { id: "auditoria", icon: "🕵️", label: "Reporte de acciones", permission: "audit_view" },
+  { id: "reportes", icon: "📊", label: "Reporte", permission: "reports_view" },
 ];
 
 const ACCENT = "#00c2a8";
@@ -45,7 +65,9 @@ export default function AdminSidebar({
       </div>
 
       <nav className="flex-1 px-2 py-3">
-        {NAV_ITEMS.map((item) => {
+        {NAV_ITEMS.filter(
+          (item) => !item.permission || userHasPermission(currentUser, item.permission),
+        ).map((item) => {
           const active = section === item.id;
           return (
             <div
@@ -116,6 +138,8 @@ export default function AdminSidebar({
             </div>
           </div>
         </div>
+
+        <MyTwoFactorButton />
 
         <button
           onClick={onLogout}
