@@ -83,6 +83,20 @@ export class FilesService {
     };
   }
 
+  /**
+   * Wrapper que consume `openDownload` y devuelve el binario como Buffer.
+   * Útil para consumidores que necesitan el contenido completo en memoria
+   * (interpolador de PDF, generadores de miniaturas, etc.).
+   */
+  async download(fileId: string): Promise<{ buffer: Buffer; contentType: string }> {
+    const { stream, contentType } = await this.openDownload(fileId);
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return { buffer: Buffer.concat(chunks), contentType };
+  }
+
   async delete(fileId: string): Promise<void> {
     try {
       await this.bucket.delete(new Types.ObjectId(fileId));
