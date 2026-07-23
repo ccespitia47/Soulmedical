@@ -285,9 +285,14 @@ export type AdminAuditAction =
   | 'FORM_TOGGLE_PUBLIC'
   | 'REPORT_REQUESTED'
   | 'REPORT_DOWNLOADED'
-  | 'REPORT_DOWNLOAD_FAILED';
+  | 'REPORT_DOWNLOAD_FAILED'
+  | 'SUBMISSION_PDF_VIEWED'
+  | 'SUBMISSION_PDF_DOWNLOADED'
+  | 'SUBMISSIONS_BULK_PDF_REQUESTED'
+  | 'SUBMISSIONS_BULK_PDF_DOWNLOADED'
+  | 'SUBMISSIONS_BULK_PDF_FAILED';
 
-export type AdminAuditTargetType = 'USER' | 'FORM' | 'PROJECT' | 'FOLDER';
+export type AdminAuditTargetType = 'USER' | 'FORM' | 'PROJECT' | 'FOLDER' | 'SUBMISSION';
 
 export type AdminAuditEntry = {
   id: number;

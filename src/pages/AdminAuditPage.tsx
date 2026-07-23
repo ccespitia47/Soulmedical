@@ -18,6 +18,11 @@ const ACTION_LABELS: Record<AdminAuditAction, string> = {
   REPORT_REQUESTED: "Reporte solicitado",
   REPORT_DOWNLOADED: "Reporte descargado",
   REPORT_DOWNLOAD_FAILED: "Descarga de reporte fallida",
+  SUBMISSION_PDF_VIEWED: "Vio PDF de registro",
+  SUBMISSION_PDF_DOWNLOADED: "Descargó PDF de registro",
+  SUBMISSIONS_BULK_PDF_REQUESTED: "Solicitó descarga masiva de PDFs",
+  SUBMISSIONS_BULK_PDF_DOWNLOADED: "Descargó ZIP masivo de PDFs",
+  SUBMISSIONS_BULK_PDF_FAILED: "Falló descarga de PDFs (2FA o TTL)",
 };
 
 const ACTION_COLORS: Record<AdminAuditAction, string> = {
@@ -32,6 +37,11 @@ const ACTION_COLORS: Record<AdminAuditAction, string> = {
   REPORT_REQUESTED: "#00c2a8",
   REPORT_DOWNLOADED: "#10b981",
   REPORT_DOWNLOAD_FAILED: "#dc2626",
+  SUBMISSION_PDF_VIEWED: "#3b82f6",
+  SUBMISSION_PDF_DOWNLOADED: "#0d9488",
+  SUBMISSIONS_BULK_PDF_REQUESTED: "#7c3aed",
+  SUBMISSIONS_BULK_PDF_DOWNLOADED: "#059669",
+  SUBMISSIONS_BULK_PDF_FAILED: "#dc2626",
 };
 
 const TARGET_LABELS: Record<AdminAuditTargetType, string> = {
@@ -39,6 +49,7 @@ const TARGET_LABELS: Record<AdminAuditTargetType, string> = {
   FORM: "Formulario",
   PROJECT: "Proyecto",
   FOLDER: "Carpeta",
+  SUBMISSION: "Registro",
 };
 
 const PAGE_SIZE = 50;
