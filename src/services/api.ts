@@ -658,3 +658,59 @@ export async function submitFormApi(
     headers: apiKey ? { "X-API-Key": apiKey } : undefined,
   });
 }
+
+export type RecordRowDto = {
+  id: string;
+  submittedAt: string;
+  userName: string;
+  summary: Record<string, string>;
+  hasPdf: boolean;
+};
+
+export type RecordsPageDto = {
+  data: RecordRowDto[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
+export function getFormRecordsApi(
+  formId: string,
+  params: { page?: number; limit?: number; from?: string; to?: string; q?: string } = {},
+): Promise<ApiResponse<RecordsPageDto>> {
+  const qs = new URLSearchParams();
+  if (params.page) qs.set('page', String(params.page));
+  if (params.limit) qs.set('limit', String(params.limit));
+  if (params.from) qs.set('from', params.from);
+  if (params.to) qs.set('to', params.to);
+  if (params.q) qs.set('q', params.q);
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  return request<RecordsPageDto>(`/forms/${formId}/records${suffix}`);
+}
+
+export async function getSubmissionPdfBlobApi(
+  id: string,
+): Promise<{ blob: Blob | null; filename: string; error: string | null }> {
+  const token = localStorage.getItem('token');
+  try {
+    const resp = await fetch(`${API_URL}/submissions/${id}/pdf`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (resp.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/';
+      return { blob: null, filename: '', error: 'Sesión expirada' };
+    }
+    if (!resp.ok) {
+      const msg = await resp.text().catch(() => '');
+      return { blob: null, filename: '', error: msg || `Error ${resp.status}` };
+    }
+    const blob = await resp.blob();
+    const disp = resp.headers.get('Content-Disposition') ?? '';
+    const match = /filename="?([^"]+)"?/i.exec(disp);
+    return { blob, filename: match?.[1] ?? 'registro.pdf', error: null };
+  } catch {
+    return { blob: null, filename: '', error: 'No se pudo conectar con el servidor' };
+  }
+}
