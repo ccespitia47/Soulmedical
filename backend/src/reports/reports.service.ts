@@ -11,7 +11,7 @@ import { FormsService } from '../forms/forms.service';
 import { SubmissionsService } from '../submissions/submissions.service';
 import { EmailService } from '../email/email.service';
 import { encryptXlsxOoxml } from './xlsx-crypto';
-import { ReportDownloadsService } from './report-downloads.service';
+import { SecureDownloadsService } from './secure-downloads.service';
 import { AdminAuditService } from '../admin-audit/admin-audit.service';
 import {
   AdminActionTargetType,
@@ -35,7 +35,7 @@ export class ReportsService {
     private readonly formsService: FormsService,
     private readonly submissionsService: SubmissionsService,
     private readonly emailService: EmailService,
-    private readonly reportDownloads: ReportDownloadsService,
+    private readonly secureDownloads: SecureDownloadsService,
     private readonly auditService: AdminAuditService,
   ) {}
 
@@ -84,8 +84,9 @@ export class ReportsService {
     const ttlMinutes = 2;
 
     // 3) Guardar el blob en Mongo con TTL
-    const { token, expiresAt } = await this.reportDownloads.create({
+    const { token, expiresAt } = await this.secureDownloads.create({
       userId,
+      kind: 'excel',
       formId,
       formName: form.name,
       encryptedBuffer,

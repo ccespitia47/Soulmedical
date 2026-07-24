@@ -516,7 +516,7 @@ export type ReportDownloadMeta = {
 };
 
 export async function getReportDownloadMetaApi(token: string) {
-  return request<ReportDownloadMeta>(`/reports/download/${token}/meta`);
+  return request<ReportDownloadMeta>(`/secure-downloads/${token}/meta`);
 }
 
 /**
@@ -535,7 +535,7 @@ export async function downloadReportApi(
   if (jwt) headers['Authorization'] = `Bearer ${jwt}`;
 
   try {
-    const res = await fetch(`${API_URL}/reports/download/${token}`, {
+    const res = await fetch(`${API_URL}/secure-downloads/${token}`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ code }),

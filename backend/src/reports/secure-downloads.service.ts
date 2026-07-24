@@ -6,10 +6,15 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { ReportDownload, ReportDownloadDocument } from './report-download.schema';
+import {
+  SecureDownload,
+  SecureDownloadDocument,
+  SecureDownloadKind,
+} from './secure-download.schema';
 
-export type CreateReportDownloadInput = {
+export type CreateSecureDownloadInput = {
   userId: number;
+  kind: SecureDownloadKind;
   formId: string;
   formName: string;
   encryptedBuffer: Buffer;
@@ -21,25 +26,26 @@ export type CreateReportDownloadInput = {
 export const MAX_TOTP_ATTEMPTS = 3;
 
 @Injectable()
-export class ReportDownloadsService {
+export class SecureDownloadsService {
   // Cast to `any` to avoid Mongoose's strict `string & ObjectId` generic
   // conflicts when querying by a plain string _id (UUID).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private readonly db: any;
 
   constructor(
-    @InjectModel(ReportDownload.name)
-    model: Model<ReportDownloadDocument>,
+    @InjectModel(SecureDownload.name)
+    model: Model<SecureDownloadDocument>,
   ) {
     this.db = model;
   }
 
   async create(
-    input: CreateReportDownloadInput,
+    input: CreateSecureDownloadInput,
   ): Promise<{ token: string; expiresAt: Date }> {
     const expiresAt = new Date(Date.now() + input.ttlMinutes * 60_000);
-    const doc: ReportDownloadDocument = await this.db.create({
+    const doc: SecureDownloadDocument = await this.db.create({
       userId: input.userId,
+      kind: input.kind,
       formId: input.formId,
       formName: input.formName,
       encryptedBuffer: input.encryptedBuffer,
@@ -60,8 +66,13 @@ export class ReportDownloadsService {
   async getMeta(
     token: string,
     userId: number,
-  ): Promise<{ formName: string; expiresAt: Date; totpAttempts: number }> {
-    const doc: ReportDownloadDocument | null = await this.db.findOne({
+  ): Promise<{
+    formName: string;
+    expiresAt: Date;
+    totpAttempts: number;
+    kind: SecureDownloadKind;
+  }> {
+    const doc: SecureDownloadDocument | null = await this.db.findOne({
       _id: token,
       userId,
       consumed: false,
@@ -72,6 +83,7 @@ export class ReportDownloadsService {
       formName: doc.formName,
       expiresAt: doc.expiresAt,
       totpAttempts: doc.totpAttempts,
+      kind: doc.kind,
     };
   }
 
@@ -86,11 +98,11 @@ export class ReportDownloadsService {
     userId: number,
   ): Promise<{ buffer: Buffer; filename: string }> {
     // Verifica ownership primero para dar 403 explícito.
-    const preview: ReportDownloadDocument | null = await this.db.findOne({ _id: token });
+    const preview: SecureDownloadDocument | null = await this.db.findOne({ _id: token });
     if (preview && preview.userId !== userId) {
       throw new ForbiddenException('Enlace no válido');
     }
-    const doc: ReportDownloadDocument | null = await this.db.findOneAndUpdate(
+    const doc: SecureDownloadDocument | null = await this.db.findOneAndUpdate(
       {
         _id: token,
         userId,
@@ -113,7 +125,7 @@ export class ReportDownloadsService {
    * y findOne separados que existía antes.
    */
   async incrementTotpAttempts(token: string, userId: number): Promise<number> {
-    const updated: ReportDownloadDocument | null = await this.db.findOneAndUpdate(
+    const updated: SecureDownloadDocument | null = await this.db.findOneAndUpdate(
       { _id: token, userId, consumed: false },
       { $inc: { totpAttempts: 1 } },
       { new: true },

@@ -1,10 +1,10 @@
 import { Test } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { GoneException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { ReportDownloadsService } from './report-downloads.service';
-import { ReportDownload } from './report-download.schema';
+import { SecureDownloadsService } from './secure-downloads.service';
+import { SecureDownload } from './secure-download.schema';
 
-describe('ReportDownloadsService', () => {
+describe('SecureDownloadsService', () => {
   // Fake modelo mínimo con las operaciones que usa el service.
   const store = new Map<string, any>();
   const model: any = {
@@ -45,24 +45,24 @@ describe('ReportDownloadsService', () => {
     }),
   };
 
-  let svc: ReportDownloadsService;
+  let svc: SecureDownloadsService;
 
   beforeEach(async () => {
     store.clear();
     const mod = await Test.createTestingModule({
       providers: [
-        ReportDownloadsService,
-        { provide: getModelToken(ReportDownload.name), useValue: model },
+        SecureDownloadsService,
+        { provide: getModelToken(SecureDownload.name), useValue: model },
       ],
     }).compile();
-    svc = mod.get(ReportDownloadsService);
+    svc = mod.get(SecureDownloadsService);
     jest.clearAllMocks();
   });
 
   it('create devuelve token y expiresAt en el futuro', async () => {
     const before = Date.now();
     const { token, expiresAt } = await svc.create({
-      userId: 1, formId: 'f', formName: 'F',
+      userId: 1, kind: 'excel', formId: 'f', formName: 'F',
       encryptedBuffer: Buffer.from('x'), filename: 'x.xlsx',
       ttlMinutes: 2,
     });
@@ -76,16 +76,25 @@ describe('ReportDownloadsService', () => {
 
   it('getMeta 404 si user distinto', async () => {
     const { token } = await svc.create({
-      userId: 1, formId: 'f', formName: 'F',
+      userId: 1, kind: 'excel', formId: 'f', formName: 'F',
       encryptedBuffer: Buffer.from('x'), filename: 'x.xlsx', ttlMinutes: 2,
     });
     await expect(svc.getMeta(token, 999)).rejects.toBeInstanceOf(NotFoundException);
   });
 
+  it('getMeta incluye kind', async () => {
+    const { token } = await svc.create({
+      userId: 1, kind: 'bulk-pdf', formId: 'f', formName: 'F',
+      encryptedBuffer: Buffer.from('x'), filename: 'x.zip', ttlMinutes: 2,
+    });
+    const meta = await svc.getMeta(token, 1);
+    expect(meta.kind).toBe('bulk-pdf');
+  });
+
   it('consume entrega el buffer y marca consumed', async () => {
     const buf = Buffer.from('report');
     const { token } = await svc.create({
-      userId: 1, formId: 'f', formName: 'F',
+      userId: 1, kind: 'excel', formId: 'f', formName: 'F',
       encryptedBuffer: buf, filename: 'r.xlsx', ttlMinutes: 2,
     });
     const out = await svc.consume(token, 1);
@@ -96,7 +105,7 @@ describe('ReportDownloadsService', () => {
 
   it('consume 403 si user distinto', async () => {
     const { token } = await svc.create({
-      userId: 1, formId: 'f', formName: 'F',
+      userId: 1, kind: 'excel', formId: 'f', formName: 'F',
       encryptedBuffer: Buffer.from('x'), filename: 'x.xlsx', ttlMinutes: 2,
     });
     await expect(svc.consume(token, 999)).rejects.toBeInstanceOf(ForbiddenException);
@@ -104,7 +113,7 @@ describe('ReportDownloadsService', () => {
 
   it('incrementTotpAttempts marca consumed al 3er intento', async () => {
     const { token } = await svc.create({
-      userId: 1, formId: 'f', formName: 'F',
+      userId: 1, kind: 'excel', formId: 'f', formName: 'F',
       encryptedBuffer: Buffer.from('x'), filename: 'x.xlsx', ttlMinutes: 2,
     });
     expect(await svc.incrementTotpAttempts(token, 1)).toBe(1);
@@ -116,7 +125,7 @@ describe('ReportDownloadsService', () => {
 
   it('incrementTotpAttempts NO afecta token de otro user (fix C1)', async () => {
     const { token } = await svc.create({
-      userId: 1, formId: 'f', formName: 'F',
+      userId: 1, kind: 'excel', formId: 'f', formName: 'F',
       encryptedBuffer: Buffer.from('x'), filename: 'x.xlsx', ttlMinutes: 2,
     });
     // Otro user intenta quemar el token 3 veces

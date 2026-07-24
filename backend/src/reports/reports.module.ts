@@ -2,9 +2,9 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ReportsService } from './reports.service';
 import { ReportsController } from './reports.controller';
-import { ReportDownloadsService } from './report-downloads.service';
-import { ReportDownloadsController } from './report-downloads.controller';
-import { ReportDownload, ReportDownloadSchema } from './report-download.schema';
+import { SecureDownloadsService } from './secure-downloads.service';
+import { SecureDownloadsController } from './secure-downloads.controller';
+import { SecureDownload, SecureDownloadSchema } from './secure-download.schema';
 import { UsersModule } from '../users/users.module';
 import { FormsModule } from '../forms/forms.module';
 import { SubmissionsModule } from '../submissions/submissions.module';
@@ -16,7 +16,7 @@ import { PermissionsGuard } from '../auth/permissions.guard';
 @Module({
   imports: [
     MongooseModule.forFeature([
-      { name: ReportDownload.name, schema: ReportDownloadSchema },
+      { name: SecureDownload.name, schema: SecureDownloadSchema },
     ]),
     UsersModule,
     FormsModule,
@@ -25,7 +25,8 @@ import { PermissionsGuard } from '../auth/permissions.guard';
     AdminAuditModule,
     AuthModule, // para TotpService y JwtAuthGuard
   ],
-  providers: [ReportsService, ReportDownloadsService, PermissionsGuard],
-  controllers: [ReportsController, ReportDownloadsController],
+  providers: [ReportsService, SecureDownloadsService, PermissionsGuard],
+  controllers: [ReportsController, SecureDownloadsController],
+  exports: [SecureDownloadsService], // exportar para SubmissionsModule
 })
 export class ReportsModule {}

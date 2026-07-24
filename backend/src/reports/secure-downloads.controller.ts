@@ -14,7 +14,7 @@ import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TotpService } from '../auth/totp.service';
 import { UsersService } from '../users/users.service';
-import { ReportDownloadsService } from './report-downloads.service';
+import { SecureDownloadsService } from './secure-downloads.service';
 import { AdminAuditService } from '../admin-audit/admin-audit.service';
 import {
   AdminActionTargetType,
@@ -22,10 +22,10 @@ import {
 } from '../admin-audit/admin-action.entity';
 
 @UseGuards(JwtAuthGuard)
-@Controller('reports/download')
-export class ReportDownloadsController {
+@Controller('secure-downloads')
+export class SecureDownloadsController {
   constructor(
-    private readonly reportDownloads: ReportDownloadsService,
+    private readonly downloads: SecureDownloadsService,
     private readonly totpService: TotpService,
     private readonly usersService: UsersService,
     private readonly auditService: AdminAuditService,
@@ -39,7 +39,7 @@ export class ReportDownloadsController {
     @Param('token') token: string,
     @Req() req: { user: { id: number } },
   ) {
-    return this.reportDownloads.getMeta(token, Number(req.user.id));
+    return this.downloads.getMeta(token, Number(req.user.id));
   }
 
   /**
@@ -85,7 +85,7 @@ export class ReportDownloadsController {
     }
     const valid = await this.totpService.verifyToken(cleaned, user.totpSecret);
     if (!valid) {
-      const attempts = await this.reportDownloads.incrementTotpAttempts(
+      const attempts = await this.downloads.incrementTotpAttempts(
         token,
         userId,
       );
@@ -95,7 +95,7 @@ export class ReportDownloadsController {
 
     let out;
     try {
-      out = await this.reportDownloads.consume(token, userId);
+      out = await this.downloads.consume(token, userId);
     } catch (err) {
       // 410 Gone o 403; en ambos casos registramos.
       const reason =

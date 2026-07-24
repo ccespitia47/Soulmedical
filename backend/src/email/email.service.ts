@@ -201,7 +201,7 @@ export class EmailService {
 
   /**
    * Envía el correo con el link único de descarga del reporte. NO adjunta
-   * el archivo — el .xlsx cifrado vive en `report_downloads` y se entrega
+   * el archivo — el .xlsx cifrado vive en `secure_downloads` y se entrega
    * cuando el usuario clic el link, autentica con 2FA y consume el token.
    */
   async sendReportLink(
