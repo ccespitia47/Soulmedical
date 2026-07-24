@@ -7,6 +7,10 @@ import {
   Res,
   UseGuards,
   NotFoundException,
+  Post,
+  Body,
+  HttpException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
@@ -18,6 +22,7 @@ import { RequirePermission } from '../auth/permissions.decorator';
 import { Permission } from '../auth/permissions';
 import { RecordsService } from './records.service';
 import { PdfRendererService } from './pdf-renderer.service';
+import { BulkPdfService } from './bulk-pdf.service';
 import { FormsService } from '../forms/forms.service';
 import { FilesService } from '../files/files.service';
 import { interpolatePdfTemplate } from './pdf-interpolator';
@@ -53,6 +58,7 @@ export class RecordsController {
     private readonly filesService: FilesService,
     private readonly pdfRenderer: PdfRendererService,
     private readonly auditService: AdminAuditService,
+    private readonly bulkPdf: BulkPdfService,
   ) {}
 
   @Get('forms/:formId/records')
@@ -121,5 +127,28 @@ export class RecordsController {
       `attachment; filename="${filename.replace(/"/g, '')}"`,
     );
     res.send(buffer);
+  }
+
+  @Post('forms/:formId/records/bulk-pdf')
+  @RequirePermission(Permission.REPORTS_VIEW)
+  @Throttle({ default: { limit: 1, ttl: 60_000 } })
+  async requestBulk(
+    @Param('formId') formId: string,
+    @Body() body: { from?: string; to?: string; q?: string },
+    @Request() req: AuthRequest,
+  ) {
+    try {
+      return await this.bulkPdf.request(
+        formId,
+        req.user.id,
+        body ?? {},
+        req.ip ?? null,
+        { name: req.user.email ?? `user${req.user.id}`, role: req.user.role },
+      );
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
+      const message = err instanceof Error ? err.message : String(err);
+      throw new InternalServerErrorException(`Error generando PDFs masivos: ${message}`);
+    }
   }
 }
