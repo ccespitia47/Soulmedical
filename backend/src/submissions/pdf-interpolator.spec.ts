@@ -58,4 +58,31 @@ describe('interpolatePdfTemplate', () => {
     });
     expect(html).toBe('<p></p>');
   });
+
+  it('rechaza data-URL con caracteres inyectables (previene attribute injection)', async () => {
+    const html = await interpolatePdfTemplate({
+      template: '<div>${firma}</div>',
+      // Intento de inyección: cerrar el atributo src y agregar onerror.
+      data: { wsig: 'data:image/png;base64,ZZZ" onerror="alert(1)' },
+      widgets,
+      filesService,
+    });
+    expect(html).not.toContain('onerror');
+    expect(html).toContain('[imagen no disponible]');
+  });
+
+  it('sanitiza contentType malformado devuelto por GridFS (fallback image/png)', async () => {
+    filesService.download.mockResolvedValue({
+      buffer: Buffer.from([1, 2, 3]),
+      contentType: 'image/png" onerror="alert(1)',
+    });
+    const html = await interpolatePdfTemplate({
+      template: '<div>${firma}</div>',
+      data: { wsig: 'gridfs:abc123' },
+      widgets,
+      filesService,
+    });
+    expect(html).not.toContain('onerror');
+    expect(html).toContain('<img src="data:image/png;base64,AQID"');
+  });
 });

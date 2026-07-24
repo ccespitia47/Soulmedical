@@ -12,6 +12,13 @@ type Input = {
 const GRIDFS_PREFIX = 'gridfs:';
 const IMG_STYLE =
   'max-height:80px;max-width:100%;object-fit:contain;display:block;';
+// Data-URL de imagen bien formada: mime image/* + base64. Cualquier cosa fuera
+// de este shape se rechaza para prevenir attribute-injection en el HTML que
+// se le pasa a Puppeteer.
+const DATA_URL_IMG_RE = /^data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+$/i;
+const IMG_MIME_RE = /^image\/[a-z0-9.+-]+$/i;
+const PLACEHOLDER_IMG_UNAVAILABLE =
+  '<span style="color:#999">[imagen no disponible]</span>';
 
 function escapeHtml(v: string): string {
   return v
@@ -68,6 +75,9 @@ async function resolveValue(
   const str = typeof value === 'string' ? value : JSON.stringify(value);
 
   if (str.startsWith('data:image/')) {
+    // Solo aceptamos data-URLs que cumplen exactamente el shape esperado.
+    // Cualquier char fuera (comilla, tag, etc.) escaparía del atributo src.
+    if (!DATA_URL_IMG_RE.test(str)) return PLACEHOLDER_IMG_UNAVAILABLE;
     return `<img src="${str}" style="${IMG_STYLE}">`;
   }
 
@@ -75,10 +85,13 @@ async function resolveValue(
     const fileId = str.slice(GRIDFS_PREFIX.length);
     try {
       const { buffer, contentType } = await filesService.download(fileId);
+      // Sanitizar el contentType: solo mime image/* bien formado. Si el
+      // metadato guardado en GridFS trae basura, fallback a image/png.
+      const safeMime = IMG_MIME_RE.test(contentType) ? contentType : 'image/png';
       const b64 = buffer.toString('base64');
-      return `<img src="data:${contentType};base64,${b64}" style="${IMG_STYLE}">`;
+      return `<img src="data:${safeMime};base64,${b64}" style="${IMG_STYLE}">`;
     } catch {
-      return '<span style="color:#999">[imagen no disponible]</span>';
+      return PLACEHOLDER_IMG_UNAVAILABLE;
     }
   }
 
