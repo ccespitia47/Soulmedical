@@ -1,6 +1,6 @@
 import { Injectable, ConflictException, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User, UserRole } from './user.entity';
 import { EmailService } from '../email/email.service';
@@ -21,6 +21,14 @@ export class UsersService {
 
   async findById(id: number): Promise<User | null> {
     return this.usersRepository.findOne({ where: { id } });
+  }
+
+  async findByIds(ids: number[]): Promise<Record<number, { name: string; email: string }>> {
+    if (!ids.length) return {};
+    const users = await this.usersRepository.find({ where: { id: In(ids) }, select: ['id', 'name', 'email'] });
+    const out: Record<number, { name: string; email: string }> = {};
+    for (const u of users) out[u.id] = { name: u.name, email: u.email };
+    return out;
   }
 
   async create(
