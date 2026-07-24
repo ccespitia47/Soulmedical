@@ -67,6 +67,10 @@ export type SendReportLinkPayload = {
   formName: string;
   url: string;
   expiresInMinutes: number;
+  /** Tipo de descarga enlazada. Default 'excel' para retrocompatibilidad. */
+  kind?: 'excel' | 'bulk-pdf';
+  /** Cantidad de PDFs generados. Solo aplica cuando kind === 'bulk-pdf'. */
+  count?: number;
 };
 
 export type SendEmailResult = {

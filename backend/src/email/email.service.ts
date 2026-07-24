@@ -210,15 +210,23 @@ export class EmailService {
     if (!payload.to?.trim() || !EMAIL_REGEX.test(payload.to.trim())) {
       throw new BadRequestException('El destinatario no es un email válido');
     }
+    const kind = payload.kind ?? 'excel';
     const html = this.buildReportLinkHtml(
       payload.userName,
       payload.formName,
       payload.url,
       payload.expiresInMinutes,
+      kind,
+      payload.count,
     );
 
+    const subject =
+      kind === 'bulk-pdf'
+        ? `${payload.count ?? '?'} PDF(s) de "${payload.formName}" listos para descargar`
+        : `Descarga de reporte: ${payload.formName}`;
+
     await this.sendViaGraph({
-      subject: `Descarga de reporte: ${payload.formName}`,
+      subject,
       htmlBody: html,
       toList: [{ emailAddress: { address: payload.to.trim().toLowerCase() } }],
       ccList: [],
@@ -227,7 +235,7 @@ export class EmailService {
     });
 
     this.logger.log(
-      `Link de reporte enviado a ${payload.to} formulario="${payload.formName}"`,
+      `Link de reporte (${kind}) enviado a ${payload.to} formulario="${payload.formName}"`,
     );
     return { success: true, message: 'Link de reporte enviado', recipients: 1 };
   }
@@ -474,30 +482,39 @@ export class EmailService {
     formName: string,
     url: string,
     expiresInMinutes: number,
+    kind: 'excel' | 'bulk-pdf' = 'excel',
+    count?: number,
   ): string {
     const safeUser = this.escapeHtml((userName ?? '').trim() || 'usuario');
     const safeFormName = this.escapeHtml(formName);
+    const isBulkPdf = kind === 'bulk-pdf';
+    const heading = isBulkPdf ? '📦 Tus PDFs están listos' : '📊 Tu reporte está listo';
+    const intro = isBulkPdf
+      ? `Ya están disponibles <strong>${count ?? 0} PDF(s)</strong> del formulario <strong>${safeFormName}</strong>. Para descargarlos (en un .zip) haz click en el botón:`
+      : `Ya está disponible tu reporte del formulario <strong>${safeFormName}</strong>. Para descargarlo haz click en el botón:`;
+    const buttonLabel = isBulkPdf ? 'Descargar PDFs' : 'Descargar reporte';
+    const fileType = isBulkPdf ? 'ZIP con los PDFs' : 'archivo Excel';
     return `<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"></head>
 <body style="font-family: Arial, sans-serif; background:#f0f4f8; padding:20px;">
   <div style="max-width:560px; margin:0 auto; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 4px 16px rgba(0,0,0,0.08);">
     <div style="background:linear-gradient(135deg,#00c2a8,#0891b2); padding:22px; text-align:center; color:#fff;">
-      <h1 style="margin:0; font-size:20px;">📊 Tu reporte está listo</h1>
+      <h1 style="margin:0; font-size:20px;">${heading}</h1>
     </div>
     <div style="padding:28px; color:#374151; line-height:1.6; font-size:14px;">
       <p>Hola ${safeUser},</p>
-      <p>Ya está disponible tu reporte del formulario <strong>${safeFormName}</strong>. Para descargarlo haz click en el botón:</p>
+      <p>${intro}</p>
       <p style="text-align:center; margin:24px 0;">
-        <a href="${url}" style="display:inline-block; padding:14px 32px; background:#00c2a8; color:#fff; text-decoration:none; border-radius:10px; font-weight:700; font-size:15px;">Descargar reporte</a>
+        <a href="${url}" style="display:inline-block; padding:14px 32px; background:#00c2a8; color:#fff; text-decoration:none; border-radius:10px; font-weight:700; font-size:15px;">${buttonLabel}</a>
       </p>
       <div style="background:#fef3c7; border-left:4px solid #f59e0b; padding:12px 14px; margin:18px 0; border-radius:0 6px 6px 0;">
         <strong>⏱ Tienes ${expiresInMinutes} minuto${expiresInMinutes === 1 ? '' : 's'}</strong><br>
-        El link expira automáticamente y solo funciona una vez. Si el tiempo pasa, solicita el reporte de nuevo desde la app.
+        El link expira automáticamente y solo funciona una vez. Si el tiempo pasa, solicita la descarga de nuevo desde la app.
       </div>
       <div style="background:#eff6ff; border-left:4px solid #0891b2; padding:12px 14px; margin:18px 0; border-radius:0 6px 6px 0;">
         <strong>🔐 Verificación al descargar</strong><br>
-        Al clic en el link, la app te pedirá el código de 6 dígitos de tu app authenticator (2FA). Luego se descargará un archivo Excel cifrado. Para abrirlo, Excel te pedirá tu <strong>número de documento</strong> como contraseña.
+        Al clic en el link, la app te pedirá el código de 6 dígitos de tu app authenticator (2FA). Luego se descargará un ${fileType} cifrado. Para abrirlo, se te pedirá tu <strong>número de documento</strong> como contraseña.
       </div>
       <p style="font-size:12px; color:#9ca3af; margin-top:24px;">Este es un envío automático. No respondas a este correo.</p>
     </div>

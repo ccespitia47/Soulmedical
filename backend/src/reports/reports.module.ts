@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ReportsService } from './reports.service';
 import { ReportsController } from './reports.controller';
@@ -20,7 +20,10 @@ import { PermissionsGuard } from '../auth/permissions.guard';
     ]),
     UsersModule,
     FormsModule,
-    SubmissionsModule,
+    // SubmissionsModule importa ReportsModule (para SecureDownloadsService,
+    // usado por BulkPdfService) -> dependencia circular resuelta con
+    // forwardRef() en ambos lados.
+    forwardRef(() => SubmissionsModule),
     EmailModule,
     AdminAuditModule,
     AuthModule, // para TotpService y JwtAuthGuard
