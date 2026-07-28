@@ -123,10 +123,14 @@ export class RecordsController {
       metadata: { formId: sub.formId, ip: req.ip ?? null },
     });
 
+    // RFC 5987 filename*=UTF-8''<pct-encoded> protege contra CRLF injection
+    // aunque el DTO ya valide pdfFilename con regex estricta — defensa en
+    // profundidad para envios historicos con nombres viejos sin validar.
+    const encoded = encodeURIComponent(filename);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="${filename.replace(/"/g, '')}"`,
+      `attachment; filename="${encoded}"; filename*=UTF-8''${encoded}`,
     );
     res.send(buffer);
   }
