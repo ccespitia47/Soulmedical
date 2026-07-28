@@ -368,17 +368,69 @@ export class EmailService {
     }
 
     const graphUrl = `https://graph.microsoft.com/v1.0/users/${senderEmail}/sendMail`;
-    const res = await fetch(graphUrl, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, saveToSentItems: true }),
-    });
+    const body = JSON.stringify({ message, saveToSentItems: true });
+    await this.postToGraphWithRetry(graphUrl, token, body);
+  }
 
-    if (res.status !== 202) {
+  /**
+   * POST a Graph con retry ante 429 (ApplicationThrottled) y 503 (transient).
+   * Respeta el header Retry-After cuando Graph lo provee (segundos o HTTP-date);
+   * si no, aplica backoff exponencial 2s → 4s → 8s. Máximo 3 intentos.
+   *
+   * Otros errores (401 token expirado, 400 body inválido, 4xx del cliente)
+   * NO reintentan — son fallos permanentes que otro intento no arregla.
+   */
+  private async postToGraphWithRetry(
+    url: string,
+    token: string,
+    body: string,
+  ): Promise<void> {
+    const MAX_ATTEMPTS = 3;
+    const BACKOFF_MS = [2_000, 4_000, 8_000];
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body,
+      });
+
+      if (res.status === 202) {
+        if (attempt > 1) {
+          this.logger.log(
+            `[graph] recuperado tras ${attempt} intento${attempt === 1 ? '' : 's'}`,
+          );
+        }
+        return;
+      }
+
+      const isTransient = res.status === 429 || res.status === 503;
       const errBody = await res.text();
-      this.logger.error(`[graph] ${res.status}: ${errBody}`);
-      throw new InternalServerErrorException(`Error al enviar email: ${res.status}`);
+
+      if (!isTransient || attempt === MAX_ATTEMPTS) {
+        this.logger.error(
+          `[graph] ${res.status}${attempt > 1 ? ` (intento ${attempt}/${MAX_ATTEMPTS})` : ''}: ${errBody}`,
+        );
+        throw new InternalServerErrorException(`Error al enviar email: ${res.status}`);
+      }
+
+      // Retry-After puede venir como segundos o HTTP-date; parseamos ambos.
+      const retryAfterHeader = res.headers.get('Retry-After');
+      const waitMs = this.parseRetryAfter(retryAfterHeader) ?? BACKOFF_MS[attempt - 1];
+      this.logger.warn(
+        `[graph] ${res.status} intento ${attempt}/${MAX_ATTEMPTS}, reintentando en ${Math.round(waitMs / 1000)}s`,
+      );
+      await new Promise((r) => setTimeout(r, waitMs));
     }
+  }
+
+  private parseRetryAfter(header: string | null): number | null {
+    if (!header) return null;
+    const asSeconds = Number(header);
+    if (Number.isFinite(asSeconds) && asSeconds >= 0) return asSeconds * 1000;
+    const asDate = Date.parse(header);
+    if (Number.isFinite(asDate)) return Math.max(0, asDate - Date.now());
+    return null;
   }
 
   private buildPublicFormOtpHtml(
