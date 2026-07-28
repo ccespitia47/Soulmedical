@@ -114,9 +114,13 @@ export class RecordsController {
       sub.pdfFilename ??
       `registro_${sub.formId}_${sub.submittedAt.toISOString().slice(0, 10)}.pdf`;
 
+    // El endpoint sirve tanto el preview (modal) como el "descargar" real —
+    // el server no sabe distinguirlos, y el modal PDF ya cuenta como "ver".
+    // Emitimos SUBMISSION_PDF_VIEWED (honesto), y el frontend usa el mismo
+    // buffer del preview para el download sin pegar de nuevo al backend.
     await this.auditService.log({
       actor: actorFrom(req),
-      action: AdminActionType.SUBMISSION_PDF_DOWNLOADED,
+      action: AdminActionType.SUBMISSION_PDF_VIEWED,
       targetType: AdminActionTargetType.SUBMISSION,
       targetId: id,
       targetName: form.name,

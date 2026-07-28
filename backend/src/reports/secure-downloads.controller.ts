@@ -58,6 +58,15 @@ export class SecureDownloadsController {
     const userId = Number(req.user.id);
     const user = await this.usersService.findById(userId);
 
+    // Meta 1er para saber el kind del token (excel vs bulk-pdf); si el
+    // token es basura o de otro user, getMeta lanza 404 y ni siquiera
+    // entramos al flujo de audit.
+    const meta = await this.downloads
+      .getMeta(token, userId)
+      .catch(() => null);
+    const kind = meta?.kind ?? 'excel';
+    const isBulkPdf = kind === 'bulk-pdf';
+
     const failLog = (reason: string) =>
       this.auditService.log({
         actor: {
@@ -65,11 +74,13 @@ export class SecureDownloadsController {
           name: user?.email ?? `user#${userId}`,
           role: user?.role ?? 'user',
         },
-        action: AdminActionType.REPORT_DOWNLOAD_FAILED,
+        action: isBulkPdf
+          ? AdminActionType.SUBMISSIONS_BULK_PDF_FAILED
+          : AdminActionType.REPORT_DOWNLOAD_FAILED,
         targetType: AdminActionTargetType.FORM,
         targetId: token,
         targetName: null,
-        metadata: { reason },
+        metadata: { reason, kind },
       });
 
     if (!user || !user.totpEnabled || !user.totpSecret) {
@@ -108,7 +119,10 @@ export class SecureDownloadsController {
 
     await this.auditService.log({
       actor: { id: userId, name: user.email, role: user.role },
-      action: AdminActionType.REPORT_DOWNLOADED,
+      action:
+        out.kind === 'bulk-pdf'
+          ? AdminActionType.SUBMISSIONS_BULK_PDF_DOWNLOADED
+          : AdminActionType.REPORT_DOWNLOADED,
       targetType: AdminActionTargetType.FORM,
       targetId: token,
       targetName: out.filename,
