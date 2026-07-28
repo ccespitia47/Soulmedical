@@ -513,6 +513,7 @@ export async function requestReportByEmailApi(formId: string, fieldIds: string[]
 export type ReportDownloadMeta = {
   formName: string;
   expiresAt: string; // ISO date
+  kind?: 'excel' | 'bulk-pdf';
 };
 
 export async function getReportDownloadMetaApi(token: string) {

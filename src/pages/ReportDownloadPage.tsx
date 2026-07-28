@@ -20,17 +20,21 @@ const ACCENT_GRADIENT = "linear-gradient(135deg,#00c2a8,#0891b2)";
 const ACCENT = "#00c2a8";
 const SHADOW = "rgba(0,194,168,0.35)";
 
+type DownloadKind = "excel" | "bulk-pdf";
+
 export default function ReportDownloadPage() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.currentUser);
 
   const [state, setState] = useState<State>({ kind: "loading" });
+  const [downloadKind, setDownloadKind] = useState<DownloadKind>("excel");
   const [code, setCode] = useState("");
   const [codeError, setCodeError] = useState("");
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
   const codeInputRef = useRef<HTMLInputElement | null>(null);
+  const isBulkPdf = downloadKind === "bulk-pdf";
 
   // Timer visible: se actualiza cada segundo. Al llegar a 0, la UI cambia a expired.
   useEffect(() => {
@@ -53,6 +57,7 @@ export default function ReportDownloadPage() {
         setState({ kind: "expired" });
         return;
       }
+      setDownloadKind(res.data.kind ?? "excel");
       setState({
         kind: "ready",
         formName: res.data.formName,
@@ -127,9 +132,11 @@ export default function ReportDownloadPage() {
             className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl text-[26px] text-white"
             style={{ background: ACCENT_GRADIENT, boxShadow: `0 4px 14px ${SHADOW}` }}
           >
-            📊
+            {isBulkPdf ? "🗂️" : "📊"}
           </div>
-          <h1 className="m-0 text-lg font-bold text-slate-900">Descarga de reporte</h1>
+          <h1 className="m-0 text-lg font-bold text-slate-900">
+            {isBulkPdf ? "Descarga masiva de PDFs" : "Descarga de reporte"}
+          </h1>
         </div>
 
         {state.kind === "loading" && (
@@ -164,8 +171,19 @@ export default function ReportDownloadPage() {
             </div>
             <p className="mb-5 text-center text-[12px] leading-relaxed text-slate-500">
               Al confirmar, se te pedirá el código de tu app authenticator.
-              Luego recibirás un archivo Excel cifrado. Para abrirlo, Excel
-              te pedirá tu <strong>número de documento</strong> como contraseña.
+              {isBulkPdf ? (
+                <>
+                  {" "}Luego se descargará un <strong>ZIP cifrado</strong> con
+                  los PDF(s) del formulario. Para abrirlo, te pedirá tu{" "}
+                  <strong>número de documento</strong> como contraseña.
+                </>
+              ) : (
+                <>
+                  {" "}Luego recibirás un archivo Excel cifrado. Para abrirlo,
+                  Excel te pedirá tu <strong>número de documento</strong> como
+                  contraseña.
+                </>
+              )}
             </p>
             <button
               onClick={handleGoToVerify}
@@ -218,21 +236,26 @@ export default function ReportDownloadPage() {
                 boxShadow: busy ? "none" : `0 4px 16px ${SHADOW}`,
               }}
             >
-              {busy ? "Descargando…" : "Descargar reporte →"}
+              {busy
+                ? "Descargando…"
+                : isBulkPdf
+                ? "Descargar ZIP →"
+                : "Descargar reporte →"}
             </button>
           </>
         )}
 
         {state.kind === "downloading" && (
           <p className="text-center text-[13px] text-slate-500">
-            Descargando reporte de <strong>{state.formName}</strong>…
+            {isBulkPdf ? "Descargando ZIP de" : "Descargando reporte de"}{" "}
+            <strong>{state.formName}</strong>…
           </p>
         )}
 
         {state.kind === "done" && (
           <>
             <p className="mb-2 text-center text-base font-semibold text-emerald-700">
-              ✅ Reporte descargado
+              {isBulkPdf ? "✅ ZIP descargado" : "✅ Reporte descargado"}
             </p>
             <p className="mb-4 text-center text-[12.5px] text-slate-600">
               Revisa tu carpeta de descargas: <br />
@@ -241,7 +264,17 @@ export default function ReportDownloadPage() {
               </code>
             </p>
             <p className="mb-5 text-center text-[12px] text-slate-500">
-              Para abrirlo en Excel, la contraseña es tu <strong>número de documento</strong>.
+              {isBulkPdf ? (
+                <>
+                  Para abrir el ZIP, la contraseña es tu{" "}
+                  <strong>número de documento</strong>.
+                </>
+              ) : (
+                <>
+                  Para abrirlo en Excel, la contraseña es tu{" "}
+                  <strong>número de documento</strong>.
+                </>
+              )}
             </p>
             <button
               onClick={() => navigate("/")}
