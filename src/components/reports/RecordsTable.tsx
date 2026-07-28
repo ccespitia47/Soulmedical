@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useFormRecords } from '../../hooks/useFormRecords';
 import { usePdfPreview } from '../../hooks/usePdfPreview';
+import { requestBulkPdfApi } from '../../services/api';
 import PdfPreviewModal from './PdfPreviewModal';
 
 type Props = {
@@ -22,6 +23,9 @@ export default function RecordsTable({ formId, formName }: Props) {
 
   const [openId, setOpenId] = useState<string | null>(null);
   const openRow = data.find((r) => r.id === openId) ?? null;
+
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkFeedback, setBulkFeedback] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null);
 
   const summaryCols = useMemo(() => {
     const cols = new Set<string>();
@@ -45,6 +49,23 @@ export default function RecordsTable({ formId, formName }: Props) {
     document.body.appendChild(a);
     a.click();
     a.remove();
+  };
+
+  const handleBulk = async () => {
+    if (!confirm(`Se enviará un correo con el link de descarga de todos los PDFs de "${formName}". ¿Continuar?`)) return;
+    setBulkBusy(true);
+    setBulkFeedback(null);
+    const res = await requestBulkPdfApi(formId, { from, to, q });
+    setBulkBusy(false);
+    if (res.error || !res.data) {
+      setBulkFeedback({ kind: 'err', msg: res.error ?? 'No se pudo iniciar la descarga masiva.' });
+      return;
+    }
+    if (!res.data.ok) {
+      setBulkFeedback({ kind: 'err', msg: res.data.message });
+      return;
+    }
+    setBulkFeedback({ kind: 'ok', msg: res.data.message });
   };
 
   return (
@@ -72,6 +93,14 @@ export default function RecordsTable({ formId, formName }: Props) {
           placeholder="🔍 Buscar por texto"
           className="ml-2 flex-1 rounded border border-slate-300 px-2.5 py-1 text-[12px]"
         />
+        <button
+          type="button"
+          onClick={handleBulk}
+          disabled={bulkBusy || total === 0}
+          className="ml-auto cursor-pointer rounded-md border-none bg-[#00c2a8] px-3.5 py-1.5 text-[12.5px] font-semibold text-white hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {bulkBusy ? 'Enviando…' : `📦 Enviar todos por correo (${total})`}
+        </button>
       </div>
 
       {/* Tabla */}
@@ -186,6 +215,12 @@ export default function RecordsTable({ formId, formName }: Props) {
           </div>
         </div>
       </div>
+
+      {bulkFeedback && (
+        <div className={`mt-3 rounded-md border px-3 py-2 text-[12px] ${bulkFeedback.kind === 'ok' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-800'}`}>
+          {bulkFeedback.kind === 'ok' ? '✓ ' : '⚠️ '}{bulkFeedback.msg}
+        </div>
+      )}
 
       <PdfPreviewModal
         open={openId !== null}

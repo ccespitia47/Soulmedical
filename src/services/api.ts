@@ -714,3 +714,13 @@ export async function getSubmissionPdfBlobApi(
     return { blob: null, filename: '', error: 'No se pudo conectar con el servidor' };
   }
 }
+
+export function requestBulkPdfApi(
+  formId: string,
+  filters: { from?: string; to?: string; q?: string },
+): Promise<ApiResponse<{ ok: boolean; count: number; message: string }>> {
+  return request<{ ok: boolean; count: number; message: string }>(
+    `/forms/${formId}/records/bulk-pdf`,
+    { method: 'POST', body: JSON.stringify(filters) },
+  );
+}
