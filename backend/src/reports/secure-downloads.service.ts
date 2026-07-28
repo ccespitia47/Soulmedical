@@ -2,10 +2,12 @@ import {
   ForbiddenException,
   GoneException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { FilesService } from '../files/files.service';
 import {
   SecureDownload,
   SecureDownloadDocument,
@@ -25,8 +27,15 @@ export type CreateSecureDownloadInput = {
 
 export const MAX_TOTP_ATTEMPTS = 3;
 
+const CONTENT_TYPE_BY_KIND: Record<SecureDownloadKind, string> = {
+  excel: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'bulk-pdf': 'application/zip',
+};
+
 @Injectable()
 export class SecureDownloadsService {
+  private readonly logger = new Logger(SecureDownloadsService.name);
+
   // Cast to `any` to avoid Mongoose's strict `string & ObjectId` generic
   // conflicts when querying by a plain string _id (UUID).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -35,6 +44,7 @@ export class SecureDownloadsService {
   constructor(
     @InjectModel(SecureDownload.name)
     model: Model<SecureDownloadDocument>,
+    private readonly filesService: FilesService,
   ) {
     this.db = model;
   }
@@ -42,20 +52,41 @@ export class SecureDownloadsService {
   async create(
     input: CreateSecureDownloadInput,
   ): Promise<{ token: string; expiresAt: Date }> {
+    // El buffer se guarda en GridFS (no inline en el doc Mongo) para
+    // aguantar ZIPs de 50 MB — el doc BSON tiene tope duro de 16 MB.
+    const contentType = CONTENT_TYPE_BY_KIND[input.kind];
+    const encryptedFileId = await this.filesService.uploadBuffer(
+      input.encryptedBuffer,
+      input.filename,
+      contentType,
+      {
+        secureDownload: true,
+        kind: input.kind,
+        userId: input.userId,
+        formId: input.formId,
+      },
+    );
+
     const expiresAt = new Date(Date.now() + input.ttlMinutes * 60_000);
-    const doc: SecureDownloadDocument = await this.db.create({
-      userId: input.userId,
-      kind: input.kind,
-      formId: input.formId,
-      formName: input.formName,
-      encryptedBuffer: input.encryptedBuffer,
-      filename: input.filename,
-      expiresAt,
-      consumed: false,
-      totpAttempts: 0,
-      createdIp: input.createdIp ?? null,
-    });
-    return { token: doc._id as string, expiresAt };
+    try {
+      const doc: SecureDownloadDocument = await this.db.create({
+        userId: input.userId,
+        kind: input.kind,
+        formId: input.formId,
+        formName: input.formName,
+        encryptedFileId,
+        filename: input.filename,
+        expiresAt,
+        consumed: false,
+        totpAttempts: 0,
+        createdIp: input.createdIp ?? null,
+      });
+      return { token: doc._id as string, expiresAt };
+    } catch (err) {
+      // Si el doc no se pudo insertar, no dejar el blob huérfano en GridFS.
+      await this.filesService.delete(encryptedFileId).catch(() => undefined);
+      throw err;
+    }
   }
 
   /**
@@ -92,11 +123,14 @@ export class SecureDownloadsService {
    * la carrera si llegan dos simultáneamente. Si otro usuario intenta
    * consumir el token de alguien más → 403 (revela que existe, pero requerir
    * autenticación previa lo mitiga; el `consumed` NO se toca por eso).
+   *
+   * Post-consume borra el blob de GridFS best-effort para no acumular
+   * archivos huérfanos entre expiraciones y limpieza manual.
    */
   async consume(
     token: string,
     userId: number,
-  ): Promise<{ buffer: Buffer; filename: string }> {
+  ): Promise<{ buffer: Buffer; filename: string; kind: SecureDownloadKind }> {
     // Verifica ownership primero para dar 403 explícito.
     const preview: SecureDownloadDocument | null = await this.db.findOne({ _id: token });
     if (preview && preview.userId !== userId) {
@@ -112,7 +146,17 @@ export class SecureDownloadsService {
       { $set: { consumed: true, consumedAt: new Date() } },
     );
     if (!doc) throw new GoneException('Enlace expirado o ya usado');
-    return { buffer: doc.encryptedBuffer, filename: doc.filename };
+
+    const { buffer } = await this.filesService.download(doc.encryptedFileId);
+    // Blob ya entregado en RAM → borramos GridFS de inmediato.
+    this.filesService
+      .delete(doc.encryptedFileId)
+      .catch((err) =>
+        this.logger.warn(
+          `[secure-downloads] fallo al borrar GridFS ${doc.encryptedFileId}: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+    return { buffer, filename: doc.filename, kind: doc.kind };
   }
 
   /**
@@ -141,5 +185,23 @@ export class SecureDownloadsService {
       );
     }
     return attempts;
+  }
+
+  /**
+   * Limpia GridFS de blobs cuyos documentos SecureDownload ya no existen
+   * (típicamente porque el TTL de Mongo los borró antes de que el usuario
+   * consumiera el link). Se puede llamar desde un cron o manualmente.
+   * Retorna el número de blobs borrados.
+   */
+  async cleanupExpired(): Promise<number> {
+    // Se leen los fileIds vigentes y se comparan contra GridFS. Como no
+    // hay listado directo del bucket aquí, este método es un stub honesto:
+    // los blobs quedan en el bucket hasta que un job externo los limpie.
+    // El caso feliz (usuario consume) ya limpia inline; sólo expiraciones
+    // sin consumo dejan huérfanos.
+    this.logger.warn(
+      '[secure-downloads] cleanupExpired() no implementado — los blobs GridFS de tokens expirados sin consumo requieren limpieza manual',
+    );
+    return 0;
   }
 }

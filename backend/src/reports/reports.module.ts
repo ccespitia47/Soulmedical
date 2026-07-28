@@ -12,6 +12,7 @@ import { EmailModule } from '../email/email.module';
 import { AdminAuditModule } from '../admin-audit/admin-audit.module';
 import { AuthModule } from '../auth/auth.module';
 import { PermissionsGuard } from '../auth/permissions.guard';
+import { FilesModule } from '../files/files.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { PermissionsGuard } from '../auth/permissions.guard';
     EmailModule,
     AdminAuditModule,
     AuthModule, // para TotpService y JwtAuthGuard
+    FilesModule, // GridFS para blobs cifrados >16 MB (ZIPs bulk-pdf)
   ],
   providers: [ReportsService, SecureDownloadsService, PermissionsGuard],
   controllers: [ReportsController, SecureDownloadsController],

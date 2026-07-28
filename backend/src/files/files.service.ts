@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection, mongo, Types } from 'mongoose';
-import type { Readable } from 'stream';
+import { Readable } from 'stream';
 
 export interface FileMeta {
   kind: 'signature' | 'photo';
@@ -56,6 +56,27 @@ export class FilesService {
       uploadStream.on('error', reject);
       uploadStream.on('finish', () => resolve(String(uploadStream.id)));
       uploadStream.end(buffer);
+    });
+  }
+
+  /**
+   * Sube un Buffer arbitrario a GridFS y devuelve el fileId como string.
+   * Usado por servicios que necesitan persistir blobs grandes (>16 MB) fuera
+   * del documento Mongo — ejemplo: ZIPs cifrados de descarga masiva de PDFs.
+   */
+  async uploadBuffer(
+    buffer: Buffer,
+    filename: string,
+    contentType: string,
+    meta?: Record<string, unknown>,
+  ): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+      const uploadStream = this.bucket.openUploadStream(filename, {
+        metadata: { ...(meta ?? {}), contentType },
+      });
+      uploadStream.on('error', reject);
+      uploadStream.on('finish', () => resolve(String(uploadStream.id)));
+      Readable.from(buffer).pipe(uploadStream);
     });
   }
 
