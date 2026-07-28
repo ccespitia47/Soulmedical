@@ -112,18 +112,22 @@ export class SecureDownloadsController {
       targetType: AdminActionTargetType.FORM,
       targetId: token,
       targetName: out.filename,
-      metadata: { bytesServed: out.buffer.length },
+      metadata: { bytesServed: out.buffer.length, kind: out.kind },
     });
 
+    const contentType =
+      out.kind === 'bulk-pdf'
+        ? 'application/zip'
+        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+    // RFC 5987 filename*=UTF-8''<pct-encoded> por si el nombre trae acentos.
+    const encoded = encodeURIComponent(out.filename);
     res
       .status(200)
-      .setHeader(
-        'Content-Type',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      )
+      .setHeader('Content-Type', contentType)
       .setHeader(
         'Content-Disposition',
-        `attachment; filename="${encodeURIComponent(out.filename)}"`,
+        `attachment; filename="${encoded}"; filename*=UTF-8''${encoded}`,
       )
       .setHeader('Content-Length', out.buffer.length.toString())
       .end(out.buffer);
