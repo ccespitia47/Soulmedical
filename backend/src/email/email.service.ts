@@ -65,8 +65,20 @@ export class EmailService {
     // html2canvas + jsPDF). El backend solo reenvía.
     const attachments: EmailAttachment[] = payload.attachments ?? [];
 
+    // Peso total en KB: contentBytes viene en base64 (4/3 del tamaño real).
+    const totalBytes = attachments.reduce(
+      (sum, a) => sum + Math.ceil(((a.contentBytes?.length ?? 0) * 3) / 4),
+      0,
+    );
+    const totalKb = Math.round(totalBytes / 1024);
+    const attachmentSummary = attachments
+      .map((a) => `${a.name}(${Math.round(Math.ceil((a.contentBytes.length * 3) / 4) / 1024)}KB)`)
+      .join(', ');
+
     this.logger.log(
-      `[sendEmail] to=${toList.length} cc=${ccList.length} bcc=${bccList.length} attachments=${attachments.length}`,
+      `[sendEmail] to=${toList.length} cc=${ccList.length} bcc=${bccList.length} ` +
+        `attachments=${attachments.length} totalKB=${totalKb}` +
+        (attachmentSummary ? ` [${attachmentSummary}]` : ''),
     );
 
     await this.sendViaGraph({
