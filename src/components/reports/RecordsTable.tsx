@@ -55,17 +55,20 @@ export default function RecordsTable({ formId, formName }: Props) {
     if (!confirm(`Se enviará un correo con el link de descarga de todos los PDFs de "${formName}". ¿Continuar?`)) return;
     setBulkBusy(true);
     setBulkFeedback(null);
+    // Endpoint responde 202 Accepted: la generación corre en background y el
+    // usuario recibe el link por correo. Aquí solo confirmamos que arrancó.
     const res = await requestBulkPdfApi(formId, { from, to, q });
     setBulkBusy(false);
     if (res.error || !res.data) {
       setBulkFeedback({ kind: 'err', msg: res.error ?? 'No se pudo iniciar la descarga masiva.' });
       return;
     }
-    if (!res.data.ok) {
-      setBulkFeedback({ kind: 'err', msg: res.data.message });
-      return;
-    }
-    setBulkFeedback({ kind: 'ok', msg: res.data.message });
+    setBulkFeedback({
+      kind: 'ok',
+      msg:
+        res.data.message ??
+        'Estamos generando y enviándote los PDFs por correo. Esto puede tomar unos minutos.',
+    });
   };
 
   return (

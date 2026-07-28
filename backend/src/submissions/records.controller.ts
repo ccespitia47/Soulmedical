@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  HttpCode,
   Param,
   Query,
   Request,
@@ -9,8 +10,7 @@ import {
   NotFoundException,
   Post,
   Body,
-  HttpException,
-  InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
@@ -50,6 +50,8 @@ function actorFrom(req: AuthRequest): { id: number; name: string; role: string }
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller()
 export class RecordsController {
+  private readonly logger = new Logger(RecordsController.name);
+
   constructor(
     @InjectModel(FormSubmission.name)
     private readonly submissionModel: Model<FormSubmissionDocument>,
@@ -132,23 +134,47 @@ export class RecordsController {
   @Post('forms/:formId/records/bulk-pdf')
   @RequirePermission(Permission.REPORTS_VIEW)
   @Throttle({ default: { limit: 1, ttl: 60_000 } })
+  @HttpCode(202)
   async requestBulk(
     @Param('formId') formId: string,
     @Body() body: { from?: string; to?: string; q?: string },
     @Request() req: AuthRequest,
-  ) {
-    try {
-      return await this.bulkPdf.request(
-        formId,
-        req.user.id,
-        body ?? {},
-        req.ip ?? null,
-        { name: req.user.email ?? `user${req.user.id}`, role: req.user.role },
-      );
-    } catch (err) {
-      if (err instanceof HttpException) throw err;
-      const message = err instanceof Error ? err.message : String(err);
-      throw new InternalServerErrorException(`Error generando PDFs masivos: ${message}`);
-    }
+  ): Promise<{ ok: true; message: string }> {
+    // Fire-and-forget: renderizar cientos de PDFs con Puppeteer puede tomar
+    // minutos y revienta cualquier proxy con timeout HTTP default. Devolvemos
+    // 202 Accepted de inmediato; el usuario recibe el resultado por correo.
+    const filters = body ?? {};
+    const ip = req.ip ?? null;
+    const actor = {
+      name: req.user.email ?? `user${req.user.id}`,
+      role: req.user.role,
+    };
+    const userId = req.user.id;
+
+    void this.bulkPdf
+      .request(formId, userId, filters, ip, actor)
+      .then((result) => {
+        if (result.ok) {
+          this.logger.log(
+            `[bulk-pdf] user=${userId} form=${formId} ok count=${result.count}`,
+          );
+        } else {
+          this.logger.warn(
+            `[bulk-pdf] user=${userId} form=${formId} sin_resultado: ${result.message}`,
+          );
+        }
+      })
+      .catch((err) => {
+        this.logger.error(
+          `[bulk-pdf] user=${userId} form=${formId} ERROR: ${err instanceof Error ? err.message : String(err)}`,
+          err instanceof Error ? err.stack : undefined,
+        );
+      });
+
+    return {
+      ok: true,
+      message:
+        'Estamos generando y enviándote los PDFs por correo. Esto puede tomar unos minutos; revisa tu bandeja cuando termine.',
+    };
   }
 }

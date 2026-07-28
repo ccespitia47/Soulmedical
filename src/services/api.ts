@@ -719,8 +719,10 @@ export async function getSubmissionPdfBlobApi(
 export function requestBulkPdfApi(
   formId: string,
   filters: { from?: string; to?: string; q?: string },
-): Promise<ApiResponse<{ ok: boolean; count: number; message: string }>> {
-  return request<{ ok: boolean; count: number; message: string }>(
+): Promise<ApiResponse<{ ok: boolean; message: string }>> {
+  // Backend responde 202 Accepted inmediatamente y procesa en background;
+  // el resultado llega por correo, no en esta respuesta.
+  return request<{ ok: boolean; message: string }>(
     `/forms/${formId}/records/bulk-pdf`,
     { method: 'POST', body: JSON.stringify(filters) },
   );
