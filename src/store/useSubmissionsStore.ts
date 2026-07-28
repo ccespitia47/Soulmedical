@@ -17,7 +17,6 @@ interface SubmissionsState {
 
   addSubmission: (
     submission: Omit<FormSubmission, "id" | "submittedAt">,
-    templateSnapshot?: string,
     pdfFilename?: string,
   ) => Promise<void>;
   getSubmissions: (formId: string) => FormSubmission[];
@@ -39,13 +38,12 @@ export const useSubmissionsStore = create<SubmissionsState>()((set, get) => ({
   submissions: [],
   submitting: false,
 
-  addSubmission: async (submission, templateSnapshot, pdfFilename) => {
+  addSubmission: async (submission, pdfFilename) => {
     set({ submitting: true });
     const { data, error } = await submitFormApi(
       submission.formId,
       submission.data as Record<string, unknown>,
       undefined,
-      templateSnapshot,
       pdfFilename,
     );
 

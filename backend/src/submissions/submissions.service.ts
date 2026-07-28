@@ -47,13 +47,25 @@ export class SubmissionsService {
     const form = await this.formsService.findOne(formId);
     const data = await this.offloadBinaries(form, dto.data, userId ?? null);
 
+    // templateSnapshot se DERIVA del form (fuente de verdad) — nunca del
+    // cliente. Aceptarlo del body permitía inyectar HTML/JS arbitrario que
+    // después corría en Puppeteer (--no-sandbox) al generar el PDF: SSRF,
+    // exfiltración, RCE potencial. Ver DTO para justificación completa.
+    const emailTemplate = form.emailTemplate as
+      | { attachPDF?: boolean; pdfTemplate?: string }
+      | null;
+    const templateSnapshot =
+      emailTemplate?.attachPDF && emailTemplate?.pdfTemplate?.trim()
+        ? emailTemplate.pdfTemplate
+        : null;
+
     const submission = new this.submissionModel({
       formId,
       formVersion: form.version,
       data,
       metadata: dto.metadata ?? null,
       submittedById: userId ?? null,
-      templateSnapshot: dto.templateSnapshot ?? null,
+      templateSnapshot,
       pdfFilename: dto.pdfFilename ?? null,
     });
     return submission.save();

@@ -647,11 +647,12 @@ export async function submitFormApi(
   formId: string,
   data: Record<string, unknown>,
   apiKey?: string,
-  templateSnapshot?: string,
   pdfFilename?: string,
 ): Promise<ApiResponse<SubmissionData>> {
+  // NOTA: templateSnapshot ya no se envía desde el cliente. El backend lo
+  // deriva de form.emailTemplate.pdfTemplate (server-side) para prevenir
+  // inyección HTML/JS que después se renderizaba en Puppeteer.
   const body: Record<string, unknown> = { data };
-  if (templateSnapshot) body.templateSnapshot = templateSnapshot;
   if (pdfFilename) body.pdfFilename = pdfFilename;
   return request<SubmissionData>(`/forms/${formId}/submit`, {
     method: "POST",

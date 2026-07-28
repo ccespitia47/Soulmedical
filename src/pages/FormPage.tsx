@@ -127,32 +127,28 @@ export default function FormPage({
       data[widget.id] = str;
     });
 
-    // ── Capturar HTML snapshot para historial de PDFs ───────────────────────
-    // Se hace ANTES de addSubmission para que quede persistido junto al envío.
-    // Si no hay template HTML configurado, templateSnapshot queda undefined.
+    // ── Capturar nombre sugerido del PDF ────────────────────────────────────
+    // El HTML snapshot ya NO se envía desde el cliente — el backend lo deriva
+    // de form.emailTemplate.pdfTemplate para prevenir inyección HTML/JS que
+    // después se rendería en Puppeteer. Sólo el nombre de archivo cruza el
+    // borde de red (validado por regex estricta en el DTO).
     const folder = folders.find((f) => f.id === folderId);
     const formConfig = folder?.forms.find((fm) => fm.id === formId);
     const template = formConfig?.emailTemplate;
 
-    let templateSnapshot: string | undefined;
     let pdfFilename: string | undefined;
 
     if (template?.attachPDF && template?.pdfTemplate?.trim()) {
       try {
-        // Se guarda el TEMPLATE sin interpolar; la interpolación se hace en el
-        // backend al momento de generar el PDF, combinando template + data +
-        // resolución de imágenes desde GridFS.
-        templateSnapshot = template.pdfTemplate;
         const labeledDataForSnapshot = expandFormData(widgets, data, hiddenWidgetIds);
         pdfFilename = renderFilename(template.pdfFilename, labeledDataForSnapshot);
       } catch (e) {
-        console.warn("No se pudo capturar el snapshot del PDF:", e);
+        console.warn("No se pudo derivar el nombre sugerido del PDF:", e);
       }
     }
 
     addSubmission(
       { formId, folderId, data: data as Record<string, string> },
-      templateSnapshot,
       pdfFilename,
     );
 
