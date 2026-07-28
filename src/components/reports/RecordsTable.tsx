@@ -3,6 +3,7 @@ import { useFormRecords } from '../../hooks/useFormRecords';
 import { usePdfPreview } from '../../hooks/usePdfPreview';
 import { requestBulkPdfApi } from '../../services/api';
 import PdfPreviewModal from './PdfPreviewModal';
+import ConfirmModal from '../common/ConfirmModal';
 
 type Props = {
   formId: string;
@@ -26,6 +27,7 @@ export default function RecordsTable({ formId, formName }: Props) {
 
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkFeedback, setBulkFeedback] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null);
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
 
   const summaryCols = useMemo(() => {
     const cols = new Set<string>();
@@ -51,8 +53,10 @@ export default function RecordsTable({ formId, formName }: Props) {
     a.remove();
   };
 
-  const handleBulk = async () => {
-    if (!confirm(`Se enviará un correo con el link de descarga de todos los PDFs de "${formName}". ¿Continuar?`)) return;
+  const handleBulk = () => setBulkConfirmOpen(true);
+
+  const handleBulkConfirmed = async () => {
+    setBulkConfirmOpen(false);
     setBulkBusy(true);
     setBulkFeedback(null);
     // Endpoint responde 202 Accepted: la generación corre en background y el
@@ -243,6 +247,17 @@ export default function RecordsTable({ formId, formName }: Props) {
         }}
         onDownload={handleDownload}
       />
+
+      {bulkConfirmOpen && (
+        <ConfirmModal
+          title="Enviar todos los PDFs por correo"
+          message={`Se enviará un correo a tu buzón con un enlace único de descarga (válido 2 minutos) que contiene <strong>${total}</strong> PDF(s) del formulario <strong>${formName}</strong>. Al abrirlo se pedirá tu código 2FA y el ZIP quedará cifrado con tu número de documento.`}
+          confirmLabel="Enviar por correo"
+          confirmColor="#00c2a8"
+          onCancel={() => setBulkConfirmOpen(false)}
+          onConfirm={handleBulkConfirmed}
+        />
+      )}
     </div>
   );
 }
