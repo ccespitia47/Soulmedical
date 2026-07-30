@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import type { WidgetRenderProps } from "../../../types/widget.types";
 import type { SearchWidgetConfig } from "./search.types";
 import { searchFormSubmissions } from "./sources/formSubmissions";
@@ -42,6 +43,10 @@ export default function SearchRender({ widget, onValue }: WidgetRenderProps) {
   const [selectedDisplay, setSelectedDisplay] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  // Coordenadas del dropdown en viewport para portalizar a document.body y
+  // evitar recortes por contenedores padre con overflow:hidden/auto.
+  const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
 
   const minChars = config.minChars ?? 2;
   const columns = config.displayColumns ?? [];
@@ -66,6 +71,26 @@ export default function SearchRender({ widget, onValue }: WidgetRenderProps) {
     debounceRef.current = setTimeout(() => doSearch(query), 350);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [query, doSearch]);
+
+  // Recalcula la posición del dropdown cuando abre o cuando cambia el layout
+  // (scroll, resize). Portalizar a document.body evita clipping por overflow
+  // de contenedores padre, pero requiere reposicionar manualmente.
+  useLayoutEffect(() => {
+    if (!showDropdown) { setDropdownRect(null); return; }
+    const update = () => {
+      const el = inputRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setDropdownRect({ top: r.bottom + 4, left: r.left, width: r.width });
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [showDropdown]);
 
   const handleSelect = (row: Row) => {
     const display = getDisplayValue(row, config);
@@ -96,7 +121,7 @@ export default function SearchRender({ widget, onValue }: WidgetRenderProps) {
   };
 
   return (
-    <div className="relative">
+    <div ref={wrapperRef} className="relative">
       <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
         {widget.label}
         {widget.required && <span style={{ color: "#ef4444", marginLeft: 3 }}>*</span>}
@@ -143,13 +168,23 @@ export default function SearchRender({ widget, onValue }: WidgetRenderProps) {
         </div>
       )}
 
-      {/* Dropdown de sugerencias */}
-      {showDropdown && results.length > 0 && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-[220px] overflow-y-auto rounded-[10px] border border-slate-200 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+      {/* Dropdown de sugerencias — portalizado a document.body para que ningún
+          contenedor padre con overflow:hidden/auto lo recorte. */}
+      {showDropdown && results.length > 0 && dropdownRect && createPortal(
+        <div
+          style={{
+            position: "fixed",
+            top: dropdownRect.top,
+            left: dropdownRect.left,
+            width: dropdownRect.width,
+            zIndex: 9999,
+          }}
+          className="max-h-[260px] overflow-y-auto rounded-[10px] border-2 border-[#00c2a8] bg-white shadow-[0_12px_32px_rgba(0,0,0,0.18)]"
+        >
           {results.slice(0, 8).map((row, i) => (
             <div key={i}
               onMouseDown={() => handleSelect(row)}
-              className="cursor-pointer px-4 py-2.5 text-[13px] hover:bg-emerald-50"
+              className="cursor-pointer border-b border-slate-100 px-4 py-3 text-[13px] last:border-b-0 hover:bg-emerald-50"
             >
               <span className="font-semibold text-gray-900">{getDisplayValue(row, config)}</span>
               {columns.length > 1 && (
@@ -167,7 +202,8 @@ export default function SearchRender({ widget, onValue }: WidgetRenderProps) {
               </button>
             </div>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
 
       {/* Modal de resultados */}
