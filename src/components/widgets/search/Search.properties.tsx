@@ -75,6 +75,23 @@ export default function SearchProperties({ widget, updateWidget, allWidgets }: W
   // Widgets del formulario actual (para mappings destino)
   const currentWidgets = allWidgets ?? [];
 
+  // Opciones conocidas de "campos fuente" según el tipo de source:
+  //   - form_submissions + sourceFormId → widgets del form fuente
+  //   - group → name/email (fijos)
+  //   - google_sheets/excel_web/sql → desconocidos hasta el fetch → null (usa input libre)
+  type FieldOpt = { value: string; label: string };
+  let sourceFieldOptions: FieldOpt[] | null = null;
+  if (config.sourceType === "form_submissions" && sourceWidgets.length > 0) {
+    sourceFieldOptions = sourceWidgets.map((w) => ({ value: w.id, label: w.label }));
+  } else if (config.sourceType === "group") {
+    sourceFieldOptions = [
+      { value: "name", label: "Nombre" },
+      { value: "email", label: "Email" },
+    ];
+  }
+  const findFieldLabel = (key: string): string =>
+    sourceFieldOptions?.find((o) => o.value === key)?.label ?? key;
+
   return (
     <div className="flex flex-col gap-3">
       {/* Etiqueta */}
@@ -235,15 +252,34 @@ export default function SearchProperties({ widget, updateWidget, allWidgets }: W
         {(config.displayColumns ?? []).map((col, i) => (
           <div key={i} className="mb-1.5 flex items-center gap-2">
             <span className="flex-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[12px]">
-              <strong>{col.key}</strong> → {col.label}
+              <strong>{findFieldLabel(col.key)}</strong> → {col.label}
             </span>
             <button onClick={() => removeDisplayColumn(i)}
               className="cursor-pointer rounded border-none bg-red-50 px-2 py-1 text-xs text-red-500">✕</button>
           </div>
         ))}
         <div className="flex gap-2 mt-2">
-          <input className={`${INPUT} flex-1`} placeholder="Key (campo)" value={newColKey}
-            onChange={(e) => setNewColKey(e.target.value)} />
+          {sourceFieldOptions ? (
+            <select
+              className={`${INPUT} flex-1`}
+              value={newColKey}
+              onChange={(e) => {
+                setNewColKey(e.target.value);
+                // Sugerir etiqueta con el label del campo elegido si aún no la tocaron
+                if (!newColLabel.trim()) setNewColLabel(findFieldLabel(e.target.value));
+              }}
+            >
+              <option value="">-- Selecciona un campo --</option>
+              {sourceFieldOptions
+                .filter((o) => !(config.displayColumns ?? []).some((c) => c.key === o.value))
+                .map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+            </select>
+          ) : (
+            <input className={`${INPUT} flex-1`} placeholder="Key (campo)" value={newColKey}
+              onChange={(e) => setNewColKey(e.target.value)} />
+          )}
           <input className={`${INPUT} flex-1`} placeholder="Etiqueta" value={newColLabel}
             onChange={(e) => setNewColLabel(e.target.value)} />
           <button onClick={addDisplayColumn}
@@ -265,9 +301,22 @@ export default function SearchProperties({ widget, updateWidget, allWidgets }: W
         )}
         {(config.fieldMappings ?? []).map((m, i) => (
           <div key={i} className="mb-2 flex items-center gap-2">
-            <input className={`${INPUT} flex-1`} placeholder="Campo fuente (key)"
-              value={m.sourceField}
-              onChange={(e) => updateMapping(i, { sourceField: e.target.value })} />
+            {sourceFieldOptions ? (
+              <select
+                className={`${INPUT} flex-1`}
+                value={m.sourceField}
+                onChange={(e) => updateMapping(i, { sourceField: e.target.value })}
+              >
+                <option value="">Campo fuente</option>
+                {sourceFieldOptions.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            ) : (
+              <input className={`${INPUT} flex-1`} placeholder="Campo fuente (key)"
+                value={m.sourceField}
+                onChange={(e) => updateMapping(i, { sourceField: e.target.value })} />
+            )}
             <span className="text-gray-400">→</span>
             <select className={`${INPUT} flex-1`} value={m.targetWidgetId}
               onChange={(e) => updateMapping(i, { targetWidgetId: e.target.value })}>
