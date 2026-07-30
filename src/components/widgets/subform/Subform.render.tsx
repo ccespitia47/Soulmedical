@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { WidgetRenderProps } from "../../../types/widget.types";
 import type { SubformEntry, SubformField, SubformRule } from "./subform.types";
 import EntriesList from "./runtime/EntriesList";
@@ -32,6 +32,30 @@ export default function SubformRender({ widget }: WidgetRenderProps) {
 
   const removeEntry = (idx: number) =>
     setEntries((prev) => prev.filter((_, i) => i !== idx));
+
+  // Escucha el evento 'subform:fill' que dispara FormPage cuando el widget
+  // search selecciona un resultado con mappings a sub-campos de este subform.
+  // Agrega una nueva entry con los valores rellenados (solo los sub-campos
+  // configurados en el mapping quedan poblados; el resto se puede editar).
+  useEffect(() => {
+    const handler = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ subformId: string; values: Record<string, string> }>).detail;
+      if (!detail || detail.subformId !== widget.id) return;
+      const knownFieldIds = new Set(fields.map((f) => f.id));
+      const entry: SubformEntry = {};
+      for (const [fid, val] of Object.entries(detail.values)) {
+        if (knownFieldIds.has(fid)) entry[fid] = val;
+      }
+      if (Object.keys(entry).length === 0) return;
+      // Respeta el maxEntries: no agrega si ya está al tope.
+      setEntries((prev) => {
+        if (maxEntries > 0 && prev.length >= maxEntries) return prev;
+        return [...prev, entry];
+      });
+    };
+    window.addEventListener("subform:fill", handler);
+    return () => window.removeEventListener("subform:fill", handler);
+  }, [widget.id, fields, maxEntries]);
 
   const canAdd = maxEntries === 0 || entries.length < maxEntries;
   const serialized = JSON.stringify(entries);

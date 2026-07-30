@@ -115,7 +115,21 @@ export default function FormPage({
       "value",
     )?.set;
 
+    // Agrupa los valores dirigidos a sub-campos de un mismo subform para
+    // agregarlos como UNA entry (no una por campo).
+    const subformFills = new Map<string, Record<string, string>>();
+
     for (const [name, value] of Object.entries(values)) {
+      // Formato "subformId:fieldId" → destino dentro de un subform.
+      if (name.includes(":")) {
+        const [subformId, fieldId] = name.split(":", 2);
+        if (!subformId || !fieldId) continue;
+        const bag = subformFills.get(subformId) ?? {};
+        bag[fieldId] = value;
+        subformFills.set(subformId, bag);
+        continue;
+      }
+      // Widget top-level: setear el input nativo dentro del form.
       const el = form.elements.namedItem(name) as HTMLElement | RadioNodeList | null;
       if (!el || el instanceof RadioNodeList) continue;
       if (el instanceof HTMLInputElement && nativeInputSetter) {
@@ -129,6 +143,15 @@ export default function FormPage({
       }
       el.dispatchEvent(new Event("input", { bubbles: true }));
     }
+
+    // Notifica a cada subform destino con todos los sub-valores agrupados.
+    // Subform.render escucha el evento y agrega una entry con los datos.
+    for (const [subformId, fill] of subformFills) {
+      window.dispatchEvent(
+        new CustomEvent("subform:fill", { detail: { subformId, values: fill } }),
+      );
+    }
+
     handleFormChange();
   };
 

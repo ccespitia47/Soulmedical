@@ -72,8 +72,26 @@ export default function SearchProperties({ widget, updateWidget, allWidgets }: W
   const removeMapping = (i: number) =>
     setConfig({ fieldMappings: (config.fieldMappings ?? []).filter((_, idx) => idx !== i) });
 
-  // Widgets del formulario actual (para mappings destino)
+  // Widgets del formulario actual (para mappings destino).
+  // Expande los subforms: por cada subform aparece un item por campo interno
+  // con value "subformId:fieldId" y label "Subform › Field".
+  type TargetOpt = { value: string; label: string };
   const currentWidgets = allWidgets ?? [];
+  const targetWidgetOptions: TargetOpt[] = [];
+  for (const w of currentWidgets) {
+    if (w.id === widget.id) continue;
+    if (w.type === "subform") {
+      const fields = (w.config?.fields as { id: string; label: string }[] | undefined) ?? [];
+      for (const f of fields) {
+        targetWidgetOptions.push({
+          value: `${w.id}:${f.id}`,
+          label: `${w.label} › ${f.label}`,
+        });
+      }
+    } else {
+      targetWidgetOptions.push({ value: w.id, label: w.label });
+    }
+  }
 
   // Opciones conocidas de "campos fuente" según el tipo de source:
   //   - form_submissions + sourceFormId → widgets del form fuente
@@ -321,8 +339,8 @@ export default function SearchProperties({ widget, updateWidget, allWidgets }: W
             <select className={`${INPUT} flex-1`} value={m.targetWidgetId}
               onChange={(e) => updateMapping(i, { targetWidgetId: e.target.value })}>
               <option value="">Campo destino</option>
-              {currentWidgets.filter((w) => w.id !== widget.id).map((w) => (
-                <option key={w.id} value={w.id}>{w.label}</option>
+              {targetWidgetOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
             <button onClick={() => removeMapping(i)}
