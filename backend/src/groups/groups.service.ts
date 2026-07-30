@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import { Group, GroupDocument } from './group.schema';
 import { UserGroupMembership, UserGroupMembershipDocument } from './user-group-membership.schema';
 import { UserFormAssignment, UserFormAssignmentDocument } from '../forms/user-form-assignment.schema';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class GroupsService {
@@ -11,6 +12,7 @@ export class GroupsService {
     @InjectModel(Group.name) private readonly groupModel: Model<GroupDocument>,
     @InjectModel(UserGroupMembership.name) private readonly membershipModel: Model<UserGroupMembershipDocument>,
     @InjectModel(UserFormAssignment.name) private readonly assignmentModel: Model<UserFormAssignmentDocument>,
+    private readonly usersService: UsersService,
   ) {}
 
   async findAll(): Promise<GroupDocument[]> {
@@ -64,6 +66,39 @@ export class GroupsService {
 
   async removeMember(groupId: string, userId: number): Promise<void> {
     await this.membershipModel.deleteOne({ groupId, userId });
+  }
+
+  /**
+   * Busca miembros del grupo por nombre o email (case-insensitive). Usado por
+   * el widget "search" (fuente "group") para autocompletar. Reutiliza
+   * getMembers() + UsersService.findByIds() en vez de duplicar la consulta.
+   */
+  async searchMembers(
+    groupId: string,
+    q: string,
+  ): Promise<Array<{ id: number; name: string; email: string }>> {
+    const query = q.trim().toLowerCase();
+    if (!query) return [];
+
+    const memberships = await this.getMembers(groupId);
+    if (memberships.length === 0) return [];
+
+    const userIds = memberships.map((m) => m.userId);
+    const usersById = await this.usersService.findByIds(userIds);
+
+    const results: Array<{ id: number; name: string; email: string }> = [];
+    for (const userId of userIds) {
+      const user = usersById[userId];
+      if (!user) continue;
+      if (
+        user.name.toLowerCase().includes(query) ||
+        user.email.toLowerCase().includes(query)
+      ) {
+        results.push({ id: userId, name: user.name, email: user.email });
+        if (results.length >= 50) break;
+      }
+    }
+    return results;
   }
 
   async getGroupsOfUser(userId: number): Promise<string[]> {

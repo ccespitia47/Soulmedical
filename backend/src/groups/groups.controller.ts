@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GroupsService } from './groups.service';
 
@@ -28,6 +29,16 @@ export class GroupsController {
 
   @Get(':id/members')
   getMembers(@Param('id') id: string) { return this.groupsService.getMembers(id); }
+
+  // Usado por el widget "search" (fuente "group") para autocompletar
+  // miembros del grupo por nombre/email. Solo requiere sesión válida
+  // (los grupos son datos generales, no sensibles) pero se limita el
+  // rate para evitar scraping masivo del listado de usuarios.
+  @Get(':id/members/search')
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  searchMembers(@Param('id') id: string, @Query('q') q = '') {
+    return this.groupsService.searchMembers(id, q);
+  }
 
   @Post(':id/members')
   addMember(@Param('id') id: string, @Body() body: { userId: number }) {

@@ -284,4 +284,69 @@ export class SubmissionsService {
 
     return { data, total, page, limit };
   }
+  /**
+   * Búsqueda de submissions por formulario para el widget "search" (autocomplete
+   * de un formulario en otro). Escapa el input del usuario antes de usarlo como
+   * regex (regex injection), limita el resultado a 50 filas máx, y devuelve
+   * SOLO los objetos `data` — nunca metadata interna (_id, submittedById, etc.)
+   * que no debería viajar a un widget de otro formulario.
+   */
+  async searchSubmissions(
+    formId: string,
+    q: string,
+    fieldIds: string[],
+    limit = 20,
+  ): Promise<{ results: Record<string, unknown>[] }> {
+    const query = q.trim();
+    if (!query) return { results: [] };
+
+    const cappedLimit = Math.min(50, Math.max(1, limit || 20));
+    // Escapa caracteres especiales de regex para que el input del usuario se
+    // trate como texto literal, no como patrón (regex injection / ReDoS).
+    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    if (fieldIds.length > 0) {
+      // Filtro a nivel Mongo: $or sobre cada campo buscable declarado en la
+      // config del widget (data.<widgetId> regex, case-insensitive).
+      const mongoQuery = {
+        formId,
+        $or: fieldIds.map((wid) => ({
+          [`data.${wid}`]: { $regex: escapedQuery, $options: 'i' },
+        })),
+      };
+      const submissions = await this.submissionModel
+        .find(mongoQuery)
+        .sort({ submittedAt: -1 })
+        .limit(cappedLimit)
+        .select('-templateSnapshot');
+
+      return {
+        results: submissions.map((sub) => ({ ...(sub.data ?? {}) })),
+      };
+    }
+
+    // Sin campos declarados: el schema no tiene índice de texto ($text), así
+    // que hacemos un filtro simple en memoria sobre la representación en
+    // string de `data`, acotado a un máximo de documentos candidatos para no
+    // escanear toda la colección del formulario.
+    const regex = new RegExp(escapedQuery, 'i');
+    const candidates = await this.submissionModel
+      .find({ formId })
+      .sort({ submittedAt: -1 })
+      .limit(200)
+      .select('-templateSnapshot');
+
+    const results: Record<string, unknown>[] = [];
+    for (const sub of candidates) {
+      const data = (sub.data ?? {}) as Record<string, unknown>;
+      const asString = Object.values(data)
+        .map((v) => String(v ?? ''))
+        .join(' ␟ ');
+      if (regex.test(asString)) {
+        results.push({ ...data });
+        if (results.length >= cappedLimit) break;
+      }
+    }
+    return { results };
+  }
 }

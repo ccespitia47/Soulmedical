@@ -9,9 +9,13 @@ import {
   Request,
   UnauthorizedException,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
 import { ApiKeyGuard } from '../auth/api-key.guard';
+import { PermissionsGuard } from '../auth/permissions.guard';
+import { RequirePermission } from '../auth/permissions.decorator';
+import { Permission } from '../auth/permissions';
 import { SubmissionsService } from './submissions.service';
 import { CreateSubmissionDto } from './dto/create-submission.dto';
 
@@ -90,5 +94,22 @@ export class SubmissionsController {
     @Query('limit') limit = '50',
   ) {
     return this.submissionsService.findAll(parseInt(page), parseInt(limit));
+  }
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission(Permission.REPORTS_VIEW)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Get('forms/:formId/submissions/search')
+  async searchSubmissions(
+    @Param('formId') formId: string,
+    @Query('q') q: string,
+    @Query('fields') fields: string,
+    @Query('limit') limit = '20',
+  ) {
+    return this.submissionsService.searchSubmissions(
+      formId,
+      q ?? '',
+      fields ? fields.split(',') : [],
+      parseInt(limit) || 20,
+    );
   }
 }
