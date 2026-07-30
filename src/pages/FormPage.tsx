@@ -93,6 +93,45 @@ export default function FormPage({
     }
   };
 
+  // Un widget (ej. search) puede pedir rellenar valores en otros widgets del
+  // form. Actualizamos el DOM de los inputs por su `name` y disparamos un
+  // evento input para que cualquier subscriber (React onChange interno de
+  // algún widget, y nuestro handleFormChange) se entere.
+  const handleWidgetValues = (values: Record<string, string>) => {
+    const form = formRef.current;
+    if (!form) return;
+    // Setter nativo de HTMLInputElement.value que respeta React (importante
+    // para inputs controlados con React 19: evita que React ignore el cambio).
+    const nativeInputSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    const nativeTextareaSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLTextAreaElement.prototype,
+      "value",
+    )?.set;
+    const nativeSelectSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLSelectElement.prototype,
+      "value",
+    )?.set;
+
+    for (const [name, value] of Object.entries(values)) {
+      const el = form.elements.namedItem(name) as HTMLElement | RadioNodeList | null;
+      if (!el || el instanceof RadioNodeList) continue;
+      if (el instanceof HTMLInputElement && nativeInputSetter) {
+        nativeInputSetter.call(el, value);
+      } else if (el instanceof HTMLTextAreaElement && nativeTextareaSetter) {
+        nativeTextareaSetter.call(el, value);
+      } else if (el instanceof HTMLSelectElement && nativeSelectSetter) {
+        nativeSelectSetter.call(el, value);
+      } else {
+        continue;
+      }
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    handleFormChange();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting) return;
@@ -245,6 +284,7 @@ export default function FormPage({
         submitting={submitting}
         onSubmit={handleSubmit}
         onChange={handleFormChange}
+        onWidgetValues={handleWidgetValues}
         onCancel={onClose}
       />
       {missingFields.length > 0 && (

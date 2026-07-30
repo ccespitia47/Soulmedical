@@ -10,10 +10,13 @@ type FormBodyProps = {
   onSubmit: (e: React.FormEvent) => void;
   onChange: () => void;
   onCancel?: () => void;
+  // Callback que algunos widgets (ej. search) invocan para rellenar
+  // otros campos del formulario tras una selección del usuario.
+  onWidgetValues?: (values: Record<string, string>) => void;
 };
 
 const FormBody = forwardRef<HTMLFormElement, FormBodyProps>(function FormBody(
-  { formName, widgets, hiddenWidgetIds, submitting, onSubmit, onChange, onCancel },
+  { formName, widgets, hiddenWidgetIds, submitting, onSubmit, onChange, onCancel, onWidgetValues },
   ref
 ) {
   return (
@@ -55,7 +58,7 @@ const FormBody = forwardRef<HTMLFormElement, FormBodyProps>(function FormBody(
                         pointerEvents: isHidden ? "none" : "auto",
                       }}
                     >
-                      <RenderComponent widget={widget} />
+                      <RenderComponent widget={widget} onValue={onWidgetValues} />
                     </div>
                   );
                 })}
