@@ -14,6 +14,7 @@ import { HeaderWidget } from "./header/HeaderWidget.ts";
 import { HtmlBlockWidget } from "./htmlblock/HtmlBlockWidget.ts";
 import { SubformWidget } from "./subform/SubformWidget";
 import type { WidgetDefinition } from "../../types/widget.types";
+import { SearchWidget } from "./search/SearchWidget";
 
 export const widgetRegistry: Record<string, WidgetDefinition> = {
   // Básicos
@@ -32,6 +33,7 @@ export const widgetRegistry: Record<string, WidgetDefinition> = {
   signature: SignatureWidget,
   photo: PhotoWidget,
   subform: SubformWidget,
+  search: SearchWidget, 
   // Diseño
   header: HeaderWidget,
   html_block: HtmlBlockWidget,

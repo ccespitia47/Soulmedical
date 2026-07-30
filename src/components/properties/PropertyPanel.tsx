@@ -43,7 +43,7 @@ export default function PropertyPanel({ onClose }: { onClose?: () => void }) {
           {(() => {
             const PropertiesComp = widgetRegistry[widget.type]?.properties;
             return PropertiesComp ? (
-              <PropertiesComp widget={widget} updateWidget={updateWidget} />
+              <PropertiesComp widget={widget} updateWidget={updateWidget} allWidgets={widgets} />
             ) : (
               <p style={{ color: "#9ca3af", fontSize: 13 }}>Sin propiedades configurables</p>
             );

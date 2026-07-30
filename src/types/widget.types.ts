@@ -42,6 +42,9 @@ export type WidgetPreviewProps = {
 export type WidgetPropertiesProps = {
   widget: WidgetInstance;
   updateWidget: (id: string, changes: Partial<WidgetInstance>) => void;
+  /** Otros widgets del mismo formulario — contexto para propiedades que
+   * necesitan referenciar campos hermanos (p.ej. mappings del widget search). */
+  allWidgets?: WidgetInstance[];
 };
 
 export type WidgetRenderProps = {
