@@ -29,8 +29,10 @@ export type SearchWidgetConfig = {
 
   // Para google_sheets
   sheetsUrl?: string;
-  sheetsRange?: string; // Ej: "Hoja1!A:D"
-  sheetsSearchCol?: string; // Columna donde buscar
+  sheetsRange?: string; // Legacy: "Hoja1!A:D". Se preserva por retrocompat pero
+                        // los widgets nuevos identifican la hoja por gid.
+  sheetsGid?: string;   // gid de la hoja específica (extraído de la URL).
+  sheetsSearchCol?: string; // Header de la columna donde buscar
 
   // Para excel_web
   excelUrl?: string;

@@ -28,14 +28,44 @@ export function parseCsv(text: string): string[][] {
   return rows;
 }
 
+/** Extrae el ID del spreadsheet y el gid de la hoja específica desde una
+ *  URL pública de Google Sheets. Devuelve null si la URL no es válida. */
+export function parseSheetsUrl(url: string): { id: string; gid: string | null } | null {
+  const idMatch = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (!idMatch) return null;
+  const gidMatch = url.match(/[?#&]gid=(\d+)/);
+  return { id: idMatch[1], gid: gidMatch?.[1] ?? null };
+}
+
+/** Construye la URL de exportación CSV para una hoja específica. Si no hay
+ *  gid, exporta la hoja default del spreadsheet. */
+function buildCsvUrl(id: string, gid: string | null, range?: string): string {
+  const params = new URLSearchParams({ tqx: "out:csv" });
+  if (gid) params.set("gid", gid);
+  if (range) params.set("range", range);
+  return `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?${params.toString()}`;
+}
+
+/** Descarga la primera fila (headers) de la hoja indicada. Útil para poblar
+ *  dropdowns en el panel de configuración. */
+export async function fetchSheetsHeaders(url: string): Promise<string[]> {
+  const parsed = parseSheetsUrl(url);
+  if (!parsed) return [];
+  const csvUrl = buildCsvUrl(parsed.id, parsed.gid, "A1:Z1");
+  const res = await fetch(csvUrl);
+  if (!res.ok) return [];
+  const text = await res.text();
+  const rows = parseCsv(text);
+  return (rows[0] ?? []).map((c) => c.trim()).filter(Boolean);
+}
+
 export async function searchGoogleSheets(config: SearchWidgetConfig, q: string): Promise<Row[]> {
   if (!config.sheetsUrl || !q.trim()) return [];
-  // Convierte URL de Google Sheets a URL de exportación CSV
-  const match = config.sheetsUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-  if (!match) return [];
-  const sheetId = match[1];
-  const range = config.sheetsRange || "A:Z";
-  const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&range=${encodeURIComponent(range)}`;
+  const parsed = parseSheetsUrl(config.sheetsUrl);
+  if (!parsed) return [];
+  // Prioridad: gid explícito de la config (nuevo), gid en la URL, o hoja default.
+  const gid = config.sheetsGid ?? parsed.gid;
+  const csvUrl = buildCsvUrl(parsed.id, gid, config.sheetsRange || undefined);
   const res = await fetch(csvUrl);
   if (!res.ok) return [];
   const text = await res.text();

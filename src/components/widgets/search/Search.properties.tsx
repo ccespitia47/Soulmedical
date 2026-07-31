@@ -3,6 +3,7 @@ import type { WidgetPropertiesProps } from "../../../types/widget.types";
 import type { SearchWidgetConfig, SearchSourceType, FieldMapping } from "./search.types";
 import { useFolderStore } from "../../../store/useFolderStore";
 import { useProjectStore } from "../../../store/useProjectStore";
+import { fetchSheetsHeaders, parseSheetsUrl } from "./sources/googleSheets";
 
 
 const INPUT = "box-border w-full rounded-lg border-[1.5px] border-slate-200 bg-neutral-50 px-3 py-2 font-sans text-[13px] text-gray-900 outline-none focus:border-[#00c2a8]";
@@ -33,9 +34,46 @@ export default function SearchProperties({ widget, updateWidget, allWidgets }: W
   }, []);
   const [newColKey, setNewColKey] = useState("");
   const [newColLabel, setNewColLabel] = useState("");
+  // Headers auto-detectados del Google Sheet cuando el user pega la URL.
+  const [sheetsHeaders, setSheetsHeaders] = useState<string[]>([]);
+  const [sheetsDetecting, setSheetsDetecting] = useState(false);
+  const [sheetsError, setSheetsError] = useState<string | null>(null);
 
   const setConfig = (changes: Partial<SearchWidgetConfig>) =>
     updateWidget(widget.id, { config: { ...config, ...changes } });
+
+  // Auto-detección de headers al pegar URL de Google Sheets. Debounce 600ms.
+  useEffect(() => {
+    if (config.sourceType !== "google_sheets") return;
+    const url = config.sheetsUrl?.trim() ?? "";
+    if (!url) { setSheetsHeaders([]); setSheetsError(null); return; }
+    const parsed = parseSheetsUrl(url);
+    if (!parsed) { setSheetsHeaders([]); setSheetsError("URL no reconocida"); return; }
+    setSheetsDetecting(true);
+    setSheetsError(null);
+    const t = setTimeout(async () => {
+      try {
+        const headers = await fetchSheetsHeaders(url);
+        if (headers.length === 0) {
+          setSheetsError("No se pudieron leer las columnas. Verifica que el Sheet sea público ('Cualquiera con el enlace').");
+          setSheetsHeaders([]);
+        } else {
+          setSheetsHeaders(headers);
+          // Guardar el gid detectado en la config para el fetch real
+          if (parsed.gid && parsed.gid !== config.sheetsGid) {
+            setConfig({ sheetsGid: parsed.gid });
+          }
+        }
+      } catch {
+        setSheetsError("Error al conectar con Google Sheets");
+        setSheetsHeaders([]);
+      } finally {
+        setSheetsDetecting(false);
+      }
+    }, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.sheetsUrl, config.sourceType]);
 
   // Formularios del mismo proyecto
   const projectFolders = folders.filter((f) => f.projectId === selectedProjectId);
@@ -106,6 +144,8 @@ export default function SearchProperties({ widget, updateWidget, allWidgets }: W
       { value: "name", label: "Nombre" },
       { value: "email", label: "Email" },
     ];
+  } else if (config.sourceType === "google_sheets" && sheetsHeaders.length > 0) {
+    sourceFieldOptions = sheetsHeaders.map((h) => ({ value: h, label: h }));
   }
   const findFieldLabel = (key: string): string =>
     sourceFieldOptions?.find((o) => o.value === key)?.label ?? key;
@@ -226,14 +266,38 @@ export default function SearchProperties({ widget, updateWidget, allWidgets }: W
           <input className={INPUT} value={config.sheetsUrl ?? ""}
             placeholder="https://docs.google.com/spreadsheets/d/..."
             onChange={(e) => setConfig({ sheetsUrl: e.target.value })} />
-          <label className={`${LABEL} mt-3`}>Rango (opcional)</label>
-          <input className={INPUT} value={config.sheetsRange ?? ""}
-            placeholder="Hoja1!A:D"
-            onChange={(e) => setConfig({ sheetsRange: e.target.value })} />
-          <label className={`${LABEL} mt-3`}>Columna donde buscar</label>
-          <input className={INPUT} value={config.sheetsSearchCol ?? ""}
-            placeholder="Ej: A o nombre"
-            onChange={(e) => setConfig({ sheetsSearchCol: e.target.value })} />
+          <p className="mt-1 text-[11px] text-gray-400">
+            Pega la URL — se detectarán las columnas automáticamente. La hoja debe
+            ser pública ("Cualquiera con el enlace"). Si compartes el link con
+            <code className="mx-1">#gid=…</code> se usa esa hoja específica.
+          </p>
+
+          {sheetsDetecting && (
+            <div className="mt-2 rounded-md bg-blue-50 px-2.5 py-1.5 text-[11.5px] text-blue-700">
+              ⏳ Detectando columnas…
+            </div>
+          )}
+          {sheetsError && (
+            <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11.5px] text-amber-800">
+              ⚠️ {sheetsError}
+            </div>
+          )}
+
+          {sheetsHeaders.length > 0 && (
+            <>
+              <div className="mt-3 rounded-md bg-emerald-50 px-2.5 py-1.5 text-[11.5px] text-emerald-700">
+                ✓ {sheetsHeaders.length} columna(s) detectada(s)
+              </div>
+              <label className={`${LABEL} mt-3`}>Columna donde buscar</label>
+              <select className={INPUT} value={config.sheetsSearchCol ?? ""}
+                onChange={(e) => setConfig({ sheetsSearchCol: e.target.value })}>
+                <option value="">-- Selecciona una columna --</option>
+                {sheetsHeaders.map((h) => (
+                  <option key={h} value={h}>{h}</option>
+                ))}
+              </select>
+            </>
+          )}
         </div>
       )}
 
