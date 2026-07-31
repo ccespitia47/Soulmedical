@@ -58,22 +58,40 @@ export default function ResultsModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // Fallback: si no hay columns configuradas, usar el fallbackKey (típicamente
-  // el `displayField` del widget) o buscar la primera key con valor no vacío
-  // en cualquiera de los resultados. Evita mostrar filas vacías por caer en
-  // un widget sin valor (headers, html blocks, campos opcionales).
-  const firstNonEmptyKey = (): string => {
+  // Fallback: si no hay columns configuradas, mostrar hasta 5 columnas con
+  // las keys que tengan valor no vacío en al menos un row. El fallbackKey
+  // (típicamente el displayField del widget) va primero si existe y tiene
+  // datos. Evita filas vacías por caer en un solo campo sin valor.
+  const nonEmptyKeys = (): string[] => {
+    const seen = new Set<string>();
+    const order: string[] = [];
     for (const row of results) {
       for (const [k, v] of Object.entries(row)) {
-        if (v != null && String(v).trim() !== "") return k;
+        if (seen.has(k)) continue;
+        if (v != null && String(v).trim() !== "") {
+          seen.add(k);
+          order.push(k);
+        }
       }
     }
-    return "value";
+    return order;
   };
+  const buildFallbackCols = () => {
+    const keys = nonEmptyKeys();
+    if (fallbackKey && keys.includes(fallbackKey)) {
+      // Poner el displayField primero, luego el resto
+      const rest = keys.filter((k) => k !== fallbackKey);
+      return [fallbackKey, ...rest].slice(0, 5).map((k) => ({ key: k, label: k }));
+    }
+    return keys.slice(0, 5).map((k) => ({ key: k, label: k }));
+  };
+  const fallbackCols = buildFallbackCols();
   const displayCols =
     columns.length > 0
       ? columns
-      : [{ key: fallbackKey ?? firstNonEmptyKey(), label: "Resultado" }];
+      : fallbackCols.length > 0
+      ? fallbackCols
+      : [{ key: "value", label: "Resultado" }];
 
   return (
     <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
