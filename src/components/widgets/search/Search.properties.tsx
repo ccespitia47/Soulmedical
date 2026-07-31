@@ -267,24 +267,30 @@ export default function SearchProperties({ widget, updateWidget, allWidgets }: W
       {/* Columnas a mostrar en el modal */}
       <div className={SECTION}>
         <div className="mb-2 text-xs font-bold uppercase text-gray-500">Columnas a mostrar en resultados</div>
-        {(config.displayColumns ?? []).map((col, i) => (
-          <div key={i} className="mb-1.5 flex items-center gap-2">
-            <span className="flex-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[12px]">
-              <strong>{findFieldLabel(col.key)}</strong> → {col.label}
-            </span>
-            <button onClick={() => removeDisplayColumn(i)}
-              className="cursor-pointer rounded border-none bg-red-50 px-2 py-1 text-xs text-red-500">✕</button>
-          </div>
-        ))}
+        {(config.displayColumns ?? []).map((col, i) => {
+          const resolvedKey = findFieldLabel(col.key);
+          const showBoth = resolvedKey !== col.label;
+          return (
+            <div key={i} className="mb-1.5 flex items-center gap-2">
+              <span className="flex-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[12px]">
+                <strong>{resolvedKey}</strong>
+                {showBoth && <span className="text-gray-400"> → {col.label}</span>}
+              </span>
+              <button onClick={() => removeDisplayColumn(i)}
+                className="cursor-pointer rounded border-none bg-red-50 px-2 py-1 text-xs text-red-500">✕</button>
+            </div>
+          );
+        })}
         <div className="flex gap-2 mt-2">
           {sourceFieldOptions ? (
+            // Dropdown: el label se toma automáticamente del campo elegido, no
+            // hace falta el input de etiqueta extra (se duplicaría).
             <select
               className={`${INPUT} flex-1`}
               value={newColKey}
               onChange={(e) => {
                 setNewColKey(e.target.value);
-                // Sugerir etiqueta con el label del campo elegido si aún no la tocaron
-                if (!newColLabel.trim()) setNewColLabel(findFieldLabel(e.target.value));
+                setNewColLabel(findFieldLabel(e.target.value));
               }}
             >
               <option value="">-- Selecciona un campo --</option>
@@ -295,11 +301,15 @@ export default function SearchProperties({ widget, updateWidget, allWidgets }: W
                 ))}
             </select>
           ) : (
-            <input className={`${INPUT} flex-1`} placeholder="Key (campo)" value={newColKey}
-              onChange={(e) => setNewColKey(e.target.value)} />
+            // Sin opciones conocidas (SQL/Excel/Google Sheets): el user
+            // escribe el key técnico y una etiqueta legible por separado.
+            <>
+              <input className={`${INPUT} flex-1`} placeholder="Key (campo)" value={newColKey}
+                onChange={(e) => setNewColKey(e.target.value)} />
+              <input className={`${INPUT} flex-1`} placeholder="Etiqueta" value={newColLabel}
+                onChange={(e) => setNewColLabel(e.target.value)} />
+            </>
           )}
-          <input className={`${INPUT} flex-1`} placeholder="Etiqueta" value={newColLabel}
-            onChange={(e) => setNewColLabel(e.target.value)} />
           <button onClick={addDisplayColumn}
             className="cursor-pointer rounded-lg border-none bg-[#00c2a8] px-3 py-1 text-xs font-bold text-white">+</button>
         </div>
