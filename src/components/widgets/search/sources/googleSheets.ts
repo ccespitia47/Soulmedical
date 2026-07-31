@@ -28,18 +28,50 @@ export function parseCsv(text: string): string[][] {
   return rows;
 }
 
-/** Extrae el ID del spreadsheet y el gid de la hoja específica desde una
- *  URL pública de Google Sheets. Devuelve null si la URL no es válida. */
-export function parseSheetsUrl(url: string): { id: string; gid: string | null } | null {
+/**
+ * Extrae el ID del spreadsheet y el gid de la hoja específica desde una URL
+ * pública de Google Sheets. Detecta dos formatos:
+ *
+ * - "Compartir con enlace"  → /spreadsheets/d/{ID}/edit
+ * - "Publicar en la Web"    → /spreadsheets/d/e/{PUBLISHED_ID}/pubhtml
+ *
+ * Devuelve null si la URL no coincide con ningún formato conocido.
+ */
+export function parseSheetsUrl(
+  url: string,
+): { id: string; gid: string | null; published: boolean } | null {
+  // Publicado tiene prioridad porque su regex es más específico.
+  const publishedMatch = url.match(/\/spreadsheets\/d\/e\/([a-zA-Z0-9-_]+)/);
+  if (publishedMatch) {
+    const gidMatch = url.match(/[?#&]gid=(\d+)/);
+    return { id: publishedMatch[1], gid: gidMatch?.[1] ?? null, published: true };
+  }
   const idMatch = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
   if (!idMatch) return null;
   const gidMatch = url.match(/[?#&]gid=(\d+)/);
-  return { id: idMatch[1], gid: gidMatch?.[1] ?? null };
+  return { id: idMatch[1], gid: gidMatch?.[1] ?? null, published: false };
 }
 
-/** Construye la URL de exportación CSV para una hoja específica. Si no hay
- *  gid, exporta la hoja default del spreadsheet. */
-function buildCsvUrl(id: string, gid: string | null, range?: string): string {
+/**
+ * Construye la URL de exportación CSV según el tipo de URL detectada.
+ *
+ * - Compartir con enlace: /spreadsheets/d/{ID}/gviz/tq?tqx=out:csv&gid=...
+ * - Publicar en la Web:   /spreadsheets/d/e/{ID}/pub?output=csv&gid=...
+ *
+ * Si no hay gid, exporta la hoja default del spreadsheet.
+ */
+function buildCsvUrl(
+  id: string,
+  gid: string | null,
+  published: boolean,
+  range?: string,
+): string {
+  if (published) {
+    const params = new URLSearchParams({ output: "csv" });
+    if (gid) params.set("gid", gid);
+    if (range) params.set("range", range);
+    return `https://docs.google.com/spreadsheets/d/e/${id}/pub?${params.toString()}`;
+  }
   const params = new URLSearchParams({ tqx: "out:csv" });
   if (gid) params.set("gid", gid);
   if (range) params.set("range", range);
@@ -51,7 +83,10 @@ function buildCsvUrl(id: string, gid: string | null, range?: string): string {
 export async function fetchSheetsHeaders(url: string): Promise<string[]> {
   const parsed = parseSheetsUrl(url);
   if (!parsed) return [];
-  const csvUrl = buildCsvUrl(parsed.id, parsed.gid, "A1:Z1");
+  // El endpoint /pub?output=csv devuelve el sheet completo (no acepta 'range'),
+  // así que descargamos y tomamos solo la primera fila. Para /gviz/tq sí
+  // podemos limitar con range para reducir bytes.
+  const csvUrl = buildCsvUrl(parsed.id, parsed.gid, parsed.published, parsed.published ? undefined : "A1:Z1");
   const res = await fetch(csvUrl);
   if (!res.ok) return [];
   const text = await res.text();
@@ -65,7 +100,10 @@ export async function searchGoogleSheets(config: SearchWidgetConfig, q: string):
   if (!parsed) return [];
   // Prioridad: gid explícito de la config (nuevo), gid en la URL, o hoja default.
   const gid = config.sheetsGid ?? parsed.gid;
-  const csvUrl = buildCsvUrl(parsed.id, gid, config.sheetsRange || undefined);
+  // El endpoint /pub?output=csv NO acepta el parámetro range — devuelve el
+  // sheet completo; filtramos en memoria abajo.
+  const range = parsed.published ? undefined : (config.sheetsRange || undefined);
+  const csvUrl = buildCsvUrl(parsed.id, gid, parsed.published, range);
   const res = await fetch(csvUrl);
   if (!res.ok) return [];
   const text = await res.text();
