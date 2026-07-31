@@ -114,6 +114,7 @@ export default function SearchRender({ widget, onValue }: WidgetRenderProps) {
       {showModal && (
         <ResultsModal
           columns={columns}
+          fallbackKey={config.displayField ?? undefined}
           initialQuery=""
           minChars={minChars}
           onSearch={runSearch}

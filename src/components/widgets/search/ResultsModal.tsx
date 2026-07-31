@@ -4,6 +4,9 @@ type Row = Record<string, unknown>;
 
 type Props = {
   columns: { key: string; label: string }[];
+  /** Cuando `columns` está vacío, usar este key como columna única.
+   *  Si no se provee, se toma la primera key con valor no vacío del row. */
+  fallbackKey?: string;
   initialQuery?: string;
   minChars: number;
   onSearch: (q: string) => Promise<Row[]>;
@@ -18,6 +21,7 @@ type Props = {
  */
 export default function ResultsModal({
   columns,
+  fallbackKey,
   initialQuery = "",
   minChars,
   onSearch,
@@ -54,10 +58,22 @@ export default function ResultsModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // Fallback: si no hay columns configuradas, usar el fallbackKey (típicamente
+  // el `displayField` del widget) o buscar la primera key con valor no vacío
+  // en cualquiera de los resultados. Evita mostrar filas vacías por caer en
+  // un widget sin valor (headers, html blocks, campos opcionales).
+  const firstNonEmptyKey = (): string => {
+    for (const row of results) {
+      for (const [k, v] of Object.entries(row)) {
+        if (v != null && String(v).trim() !== "") return k;
+      }
+    }
+    return "value";
+  };
   const displayCols =
     columns.length > 0
       ? columns
-      : [{ key: Object.keys(results[0] ?? {})[0] ?? "value", label: "Resultado" }];
+      : [{ key: fallbackKey ?? firstNonEmptyKey(), label: "Resultado" }];
 
   return (
     <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
