@@ -47,10 +47,14 @@ export default function SubformRender({ widget }: WidgetRenderProps) {
         if (knownFieldIds.has(fid)) entry[fid] = val;
       }
       if (Object.keys(entry).length === 0) return;
-      // Respeta el maxEntries: no agrega si ya está al tope.
+      // Comportamiento: reemplaza la última entry si ya existe alguna.
+      // Si el subform está vacío, agrega la primera (respetando maxEntries).
       setEntries((prev) => {
-        if (maxEntries > 0 && prev.length >= maxEntries) return prev;
-        return [...prev, entry];
+        if (prev.length === 0) {
+          if (maxEntries > 0 && 1 > maxEntries) return prev;
+          return [entry];
+        }
+        return prev.map((e, i) => (i === prev.length - 1 ? entry : e));
       });
     };
     window.addEventListener("subform:fill", handler);
