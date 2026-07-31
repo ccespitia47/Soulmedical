@@ -55,7 +55,9 @@ export default function SearchProperties({ widget, updateWidget, allWidgets }: W
       try {
         const headers = await fetchSheetsHeaders(url);
         if (headers.length === 0) {
-          setSheetsError("No se pudieron leer las columnas. Verifica que el Sheet sea público ('Cualquiera con el enlace').");
+          setSheetsError(
+            "No se pudieron leer las columnas. Comparte el Sheet como 'Cualquiera con el enlace' (Lector) o cambia el acceso general a público.",
+          );
           setSheetsHeaders([]);
         } else {
           setSheetsHeaders(headers);
@@ -64,8 +66,15 @@ export default function SearchProperties({ widget, updateWidget, allWidgets }: W
             setConfig({ sheetsGid: parsed.gid });
           }
         }
-      } catch {
-        setSheetsError("Error al conectar con Google Sheets");
+      } catch (err) {
+        // Los fetch al gviz/tq de un Sheet privado se convierten en redirect
+        // a accounts.google.com/ServiceLogin y el navegador lo bloquea por
+        // CORS. Es indistinguible de un error de red, pero es la causa
+        // muchísimo más común.
+        console.error("[SearchWidget] Error detectando Google Sheet:", err);
+        setSheetsError(
+          "No se pudo acceder al Sheet. Verifica que esté compartido como 'Cualquiera con el enlace' (Lector).",
+        );
         setSheetsHeaders([]);
       } finally {
         setSheetsDetecting(false);
