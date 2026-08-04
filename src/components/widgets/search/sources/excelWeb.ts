@@ -2,16 +2,47 @@ import type { SearchWidgetConfig } from "../search.types";
 
 type Row = Record<string, unknown>;
 
-export async function searchExcelWeb(config: SearchWidgetConfig, q: string): Promise<Row[]> {
-  if (!config.excelUrl || !q.trim()) return [];
-  const { read, utils } = await import("xlsx");
-  const res = await fetch(config.excelUrl);
-  const ab = await res.arrayBuffer();
-  const wb = read(ab, { type: "array" });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const rows: Row[] = utils.sheet_to_json(ws);
-  const col = config.excelSearchCol ?? "";
-  return rows
-    .filter((r) => String(r[col] ?? "").toLowerCase().includes(q.toLowerCase()))
-    .slice(0, 20);
+const API_URL = `${import.meta.env.VITE_API_URL ?? "http://localhost:3001"}/api`;
+
+function authHeaders(): Record<string, string> {
+  const token = localStorage.getItem("token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/**
+ * Devuelve los headers (primera fila) del Excel. Delegado al backend
+ * proxy — el navegador no puede leer OneDrive/SharePoint directo por CORS.
+ */
+export async function fetchExcelHeaders(url: string): Promise<string[]> {
+  const res = await fetch(`${API_URL}/excel/headers`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ url }),
+  });
+  if (!res.ok) return [];
+  const data = await res.json().catch(() => ({}));
+  return Array.isArray(data.headers) ? data.headers : [];
+}
+
+/**
+ * Busca en el Excel apuntado por config.excelUrl.
+ * Todo el trabajo (auth Graph, download, parse) se hace en el backend.
+ */
+export async function searchExcelWeb(
+  config: SearchWidgetConfig,
+  q: string,
+): Promise<Row[]> {
+  if (!config.excelUrl || !q.trim() || !config.excelSearchCol) return [];
+  const res = await fetch(`${API_URL}/excel/search`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({
+      url: config.excelUrl,
+      q,
+      searchCol: config.excelSearchCol,
+    }),
+  });
+  if (!res.ok) return [];
+  const data = await res.json().catch(() => ({}));
+  return Array.isArray(data.rows) ? data.rows : [];
 }
