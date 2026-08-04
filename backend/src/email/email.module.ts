@@ -6,6 +6,6 @@ import { GraphTokenService } from './graph-token.service';
 @Module({
   controllers: [EmailController],
   providers: [EmailService, GraphTokenService],
-  exports: [EmailService],
+  exports: [EmailService, GraphTokenService],
 })
 export class EmailModule {}

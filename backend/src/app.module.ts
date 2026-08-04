@@ -12,6 +12,7 @@ import { SubmissionsModule } from './submissions/submissions.module';
 import { ApiKeysModule } from './api-keys/api-keys.module';
 import { GroupsModule } from './groups/groups.module';
 import { EmailModule } from './email/email.module';
+import { ExcelModule } from './excel/excel.module';
 import { ConsentsModule } from './consents/consents.module';
 import { AdminAuditModule } from './admin-audit/admin-audit.module';
 import { ReportsModule } from './reports/reports.module';
@@ -45,6 +46,7 @@ import {TasksModule} from './tasks/tasks.module';
     AdminAuditModule,
     ReportsModule,
     TasksModule,
+    ExcelModule,
   ],
   providers: [
     {
