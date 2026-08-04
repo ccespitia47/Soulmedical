@@ -54,16 +54,28 @@ export class ExcelService {
     q: string,
     searchCol: string,
   ): Promise<Record<string, unknown>[]> {
+    if (!q.trim()) return [];
     const buffer = await this.fetchXlsx(url);
     const wb = read(buffer, { type: 'buffer' });
     const sheetName = wb.SheetNames[0];
     if (!sheetName) return [];
     const ws = wb.Sheets[sheetName];
     const rows = utils.sheet_to_json<Record<string, unknown>>(ws);
+    const target = searchCol.trim();
+
+    // Resolver el key real: sheet_to_json keya por header raw, pero
+    // getHeaders trimea. Match tolerante a whitespace en el header.
+    let resolvedKey = target;
+    if (rows.length > 0 && !(target in rows[0])) {
+      const actualKey = Object.keys(rows[0]).find((k) => k.trim() === target);
+      if (!actualKey) return [];
+      resolvedKey = actualKey;
+    }
+
     const needle = q.toLowerCase();
     return rows
       .filter((r) =>
-        String(r[searchCol] ?? '').toLowerCase().includes(needle),
+        String(r[resolvedKey] ?? '').toLowerCase().includes(needle),
       )
       .slice(0, 20);
   }

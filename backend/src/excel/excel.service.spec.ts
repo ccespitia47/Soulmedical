@@ -89,5 +89,26 @@ describe('ExcelService', () => {
       const out = await svc.searchRows('https://empresa.sharepoint.com/:x:/g/x', 'nombre', 'Nombre');
       expect(out).toHaveLength(20);
     });
+
+    it('matchea searchCol incluso si el header raw tiene whitespace (fix M2)', async () => {
+      const wb2 = utils.book_new();
+      const ws2 = utils.aoa_to_sheet([
+        ['Nombre ', 'Documento'], // trailing space intencional
+        ['Ana Torres', 'CC 111'],
+        ['Yeimer Alejandro', 'CC 222'],
+      ]);
+      utils.book_append_sheet(wb2, ws2, 'Sheet1');
+      const buffer2 = Buffer.from(write(wb2, { type: 'buffer', bookType: 'xlsx' }));
+      jest.spyOn(cache, 'getOrFetch').mockResolvedValue(buffer2);
+
+      const rows = await svc.searchRows('https://empresa.sharepoint.com/:x:/g/x', 'yei', 'Nombre');
+      expect(rows).toHaveLength(1);
+      expect(rows[0]['Nombre ']).toBe('Yeimer Alejandro');
+    });
+
+    it('devuelve [] si q está vacío (fix M3)', async () => {
+      const rows = await svc.searchRows('https://empresa.sharepoint.com/:x:/g/x', '', 'Nombre');
+      expect(rows).toEqual([]);
+    });
   });
 });
