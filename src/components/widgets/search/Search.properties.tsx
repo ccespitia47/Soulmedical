@@ -4,6 +4,7 @@ import type { SearchWidgetConfig, SearchSourceType, FieldMapping } from "./searc
 import { useFolderStore } from "../../../store/useFolderStore";
 import { useProjectStore } from "../../../store/useProjectStore";
 import { fetchSheetsHeaders, parseSheetsUrl } from "./sources/googleSheets";
+import { fetchExcelHeaders } from "./sources/excelWeb";
 
 
 const INPUT = "box-border w-full rounded-lg border-[1.5px] border-slate-200 bg-neutral-50 px-3 py-2 font-sans text-[13px] text-gray-900 outline-none focus:border-[#00c2a8]";
@@ -38,6 +39,10 @@ export default function SearchProperties({ widget, updateWidget, allWidgets }: W
   const [sheetsHeaders, setSheetsHeaders] = useState<string[]>([]);
   const [sheetsDetecting, setSheetsDetecting] = useState(false);
   const [sheetsError, setSheetsError] = useState<string | null>(null);
+  // Headers auto-detectados del Excel de SharePoint al pegar la URL.
+  const [excelHeaders, setExcelHeaders] = useState<string[]>([]);
+  const [excelDetecting, setExcelDetecting] = useState(false);
+  const [excelError, setExcelError] = useState<string | null>(null);
 
   const setConfig = (changes: Partial<SearchWidgetConfig>) =>
     updateWidget(widget.id, { config: { ...config, ...changes } });
@@ -83,6 +88,36 @@ export default function SearchProperties({ widget, updateWidget, allWidgets }: W
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.sheetsUrl, config.sourceType]);
+
+  // Auto-detección de headers al pegar URL de Excel/SharePoint. Debounce 600ms.
+  useEffect(() => {
+    if (config.sourceType !== "excel_web") return;
+    const url = config.excelUrl?.trim() ?? "";
+    if (!url) { setExcelHeaders([]); setExcelError(null); return; }
+    setExcelDetecting(true);
+    setExcelError(null);
+    const t = setTimeout(async () => {
+      try {
+        const headers = await fetchExcelHeaders(url);
+        if (headers.length === 0) {
+          setExcelError(
+            "No se pudieron leer las columnas. Verifica que la URL sea de SharePoint del tenant corporativo y que Files.Read.All esté aprobado en Azure.",
+          );
+          setExcelHeaders([]);
+        } else {
+          setExcelHeaders(headers);
+        }
+      } catch (err) {
+        console.error("[SearchWidget] Error detectando Excel:", err);
+        setExcelError("Error al conectar con el backend");
+        setExcelHeaders([]);
+      } finally {
+        setExcelDetecting(false);
+      }
+    }, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.excelUrl, config.sourceType]);
 
   // Formularios del mismo proyecto
   const projectFolders = folders.filter((f) => f.projectId === selectedProjectId);
@@ -155,6 +190,8 @@ export default function SearchProperties({ widget, updateWidget, allWidgets }: W
     ];
   } else if (config.sourceType === "google_sheets" && sheetsHeaders.length > 0) {
     sourceFieldOptions = sheetsHeaders.map((h) => ({ value: h, label: h }));
+  } else if (config.sourceType === "excel_web" && excelHeaders.length > 0) {
+    sourceFieldOptions = excelHeaders.map((h) => ({ value: h, label: h }));
   }
   const findFieldLabel = (key: string): string =>
     sourceFieldOptions?.find((o) => o.value === key)?.label ?? key;
@@ -312,15 +349,42 @@ export default function SearchProperties({ widget, updateWidget, allWidgets }: W
 
       {config.sourceType === "excel_web" && (
         <div className={SECTION}>
-          <div className="mb-2 text-xs font-bold uppercase text-gray-500">📗 Excel en web</div>
-          <label className={LABEL}>URL del archivo Excel publicado</label>
+          <div className="mb-2 text-xs font-bold uppercase text-gray-500">📗 Excel en OneDrive/SharePoint</div>
+          <label className={LABEL}>URL del Excel en SharePoint</label>
           <input className={INPUT} value={config.excelUrl ?? ""}
-            placeholder="https://example.com/archivo.xlsx"
+            placeholder="https://empresa.sharepoint.com/:x:/g/personal/..."
             onChange={(e) => setConfig({ excelUrl: e.target.value })} />
-          <label className={`${LABEL} mt-3`}>Columna donde buscar</label>
-          <input className={INPUT} value={config.excelSearchCol ?? ""}
-            placeholder="Ej: A o nombre"
-            onChange={(e) => setConfig({ excelSearchCol: e.target.value })} />
+          <p className="mt-1 text-[11px] text-gray-400">
+            Pega la URL — se detectarán las columnas automáticamente.
+            Debe estar en SharePoint del tenant corporativo (no OneDrive personal).
+          </p>
+
+          {excelDetecting && (
+            <div className="mt-2 rounded-md bg-blue-50 px-2.5 py-1.5 text-[11.5px] text-blue-700">
+              ⏳ Detectando columnas…
+            </div>
+          )}
+          {excelError && (
+            <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11.5px] text-amber-800">
+              ⚠️ {excelError}
+            </div>
+          )}
+
+          {excelHeaders.length > 0 && (
+            <>
+              <div className="mt-3 rounded-md bg-emerald-50 px-2.5 py-1.5 text-[11.5px] text-emerald-700">
+                ✓ {excelHeaders.length} columna(s) detectada(s)
+              </div>
+              <label className={`${LABEL} mt-3`}>Columna donde buscar</label>
+              <select className={INPUT} value={config.excelSearchCol ?? ""}
+                onChange={(e) => setConfig({ excelSearchCol: e.target.value })}>
+                <option value="">-- Selecciona una columna --</option>
+                {excelHeaders.map((h) => (
+                  <option key={h} value={h}>{h}</option>
+                ))}
+              </select>
+            </>
+          )}
         </div>
       )}
 
