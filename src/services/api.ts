@@ -290,9 +290,17 @@ export type AdminAuditAction =
   | 'SUBMISSION_PDF_DOWNLOADED'
   | 'SUBMISSIONS_BULK_PDF_REQUESTED'
   | 'SUBMISSIONS_BULK_PDF_DOWNLOADED'
-  | 'SUBMISSIONS_BULK_PDF_FAILED';
+  | 'SUBMISSIONS_BULK_PDF_FAILED'
+  | 'EXCEL_HEADERS_ACCESSED'
+  | 'EXCEL_SEARCH_PERFORMED';
 
-export type AdminAuditTargetType = 'USER' | 'FORM' | 'PROJECT' | 'FOLDER' | 'SUBMISSION';
+export type AdminAuditTargetType =
+  | 'USER'
+  | 'FORM'
+  | 'PROJECT'
+  | 'FOLDER'
+  | 'SUBMISSION'
+  | 'EXCEL_FILE';
 
 export type AdminAuditEntry = {
   id: number;

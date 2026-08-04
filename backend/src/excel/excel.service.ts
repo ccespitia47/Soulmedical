@@ -86,6 +86,17 @@ export class ExcelService {
       const token = await this.tokens.getAccessToken();
       const graphUrl = `https://graph.microsoft.com/v1.0/shares/${shareId}/driveItem/content`;
       const res = await this.getWithRetry(graphUrl, token);
+      // Pre-check via Content-Length para evitar OOM con archivos gigantes:
+      // rechazamos ANTES de bufferear todo el body. Si el header falta o
+      // miente (raro en Graph pero posible), el check post-download queda
+      // como fallback.
+      const contentLength = res.headers.get('content-length');
+      if (contentLength) {
+        const declared = parseInt(contentLength, 10);
+        if (Number.isFinite(declared) && declared > MAX_BYTES) {
+          throw new PayloadTooLargeException('El Excel excede el límite de 20 MB.');
+        }
+      }
       const ab = await res.arrayBuffer();
       if (ab.byteLength > MAX_BYTES) {
         throw new PayloadTooLargeException('El Excel excede el límite de 20 MB.');

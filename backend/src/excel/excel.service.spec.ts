@@ -111,4 +111,27 @@ describe('ExcelService', () => {
       expect(rows).toEqual([]);
     });
   });
+
+  describe('MAX_BYTES pre-check (fix I3)', () => {
+    it('rechaza sin bufferear cuando Content-Length excede 20 MB', async () => {
+      const bigBytes = 50 * 1024 * 1024; // 50 MB > MAX_BYTES (20 MB)
+      const arrayBufferSpy = jest.fn();
+      const fakeResponse = {
+        headers: {
+          get: (name: string) =>
+            name.toLowerCase() === 'content-length' ? String(bigBytes) : null,
+        },
+        arrayBuffer: arrayBufferSpy,
+      };
+      jest
+        .spyOn(svc as unknown as { getWithRetry: (u: string, t: string) => Promise<unknown> }, 'getWithRetry')
+        .mockResolvedValue(fakeResponse as unknown as Response);
+
+      await expect(
+        svc.getHeaders('https://empresa.sharepoint.com/:x:/g/xxxxxxxxxxxxxxxxxx'),
+      ).rejects.toThrow(PayloadTooLargeException);
+      // Verificacion clave: arrayBuffer NUNCA se llama, no leemos 50 MB en RAM.
+      expect(arrayBufferSpy).not.toHaveBeenCalled();
+    });
+  });
 });

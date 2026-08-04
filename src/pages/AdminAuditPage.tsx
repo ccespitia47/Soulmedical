@@ -23,6 +23,8 @@ const ACTION_LABELS: Record<AdminAuditAction, string> = {
   SUBMISSIONS_BULK_PDF_REQUESTED: "Solicitó descarga masiva de PDFs",
   SUBMISSIONS_BULK_PDF_DOWNLOADED: "Descargó ZIP masivo de PDFs",
   SUBMISSIONS_BULK_PDF_FAILED: "Falló descarga de PDFs (2FA o TTL)",
+  EXCEL_HEADERS_ACCESSED: "Leyó columnas de Excel (OneDrive)",
+  EXCEL_SEARCH_PERFORMED: "Buscó en Excel (OneDrive)",
 };
 
 const ACTION_COLORS: Record<AdminAuditAction, string> = {
@@ -42,6 +44,8 @@ const ACTION_COLORS: Record<AdminAuditAction, string> = {
   SUBMISSIONS_BULK_PDF_REQUESTED: "#7c3aed",
   SUBMISSIONS_BULK_PDF_DOWNLOADED: "#059669",
   SUBMISSIONS_BULK_PDF_FAILED: "#dc2626",
+  EXCEL_HEADERS_ACCESSED: "#0d9488",
+  EXCEL_SEARCH_PERFORMED: "#0891b2",
 };
 
 const TARGET_LABELS: Record<AdminAuditTargetType, string> = {
@@ -50,6 +54,7 @@ const TARGET_LABELS: Record<AdminAuditTargetType, string> = {
   PROJECT: "Proyecto",
   FOLDER: "Carpeta",
   SUBMISSION: "Registro",
+  EXCEL_FILE: "Excel (OneDrive)",
 };
 
 const PAGE_SIZE = 50;
