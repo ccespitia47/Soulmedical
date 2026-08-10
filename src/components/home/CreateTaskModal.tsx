@@ -175,12 +175,17 @@ export default function CreateTaskModal({
         throw new Error(err.message || "Error al crear la tarea");
       }
       const responseData = await res.json().catch(() => ({}));
-      onCreated();
       if (responseData?.shareLinkUrl) {
+        // Mostramos el modal secundario con el link. NO llamamos onCreated()
+        // aquí porque el parent desmonta este componente al recibirlo, lo que
+        // eliminaría el modal antes de que el admin pueda copiar el link.
+        // El refresh + cierre se dispara desde el botón "Cerrar" del modal.
         setShareLinkUrl(responseData.shareLinkUrl);
-      } else {
-        onClose();
+        setSaving(false);
+        return;
       }
+      onCreated();
+      onClose();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -360,6 +365,7 @@ export default function CreateTaskModal({
             <div className="flex justify-end">
               <button
                 onClick={() => {
+                  onCreated();
                   setShareLinkUrl(null);
                   onClose();
                 }}
