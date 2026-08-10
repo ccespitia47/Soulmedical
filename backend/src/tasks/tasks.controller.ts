@@ -95,6 +95,19 @@ export class TasksController {
     return this.tasksService.cancel(id);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/send')
+  async sendTask(
+    @Param('id') id: string,
+    @Body() body: { steps?: Array<{ recipientEmail: string; recipientName?: string }> },
+    @Req() req: AuthedRequest,
+  ): Promise<{ ok: true; sentCount: number }> {
+    const user = req.user;
+    if (!user) throw new UnauthorizedException('Usuario no autenticado');
+    const steps = Array.isArray(body?.steps) ? body.steps : [];
+    return this.tasksService.sendTask(id, steps, user.id);
+  }
+
   @Get('public/:token')
   async getByToken(@Param('token') token: string) {
     const { task, stepIndex } = await this.tasksService.getByToken(token);

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -59,11 +60,14 @@ export class TasksService {
     createdById: number,
     createdByName: string,
   ): Promise<Task> {
-    if (!dto.steps || dto.steps.length === 0) {
-      throw new BadRequestException('Debe haber al menos un destinatario');
-    }
+    const filteredSteps = (dto.steps ?? []).filter(
+      (s) => s.recipientEmail?.trim() && s.recipientEmail.includes('@'),
+    );
+    // NO throw si steps está vacío — el flujo nuevo permite crear la tarea
+    // primero (solo con shareLink) y agregar destinatarios después via
+    // POST /api/tasks/:id/send.
 
-    const steps: TaskStep[] = dto.steps.map((s, i) => ({
+    const steps: TaskStep[] = filteredSteps.map((s, i) => ({
       order: i + 1,
       recipientEmail: s.recipientEmail.trim().toLowerCase(),
       recipientName: s.recipientName?.trim() || s.recipientEmail,
@@ -95,10 +99,58 @@ export class TasksService {
 
     await task.save();
 
-    // Enviar email al primer destinatario
-    await this.sendStepEmail(task, 0);
+    // Enviar email al primer destinatario (si la tarea se creó con steps).
+    if (task.steps.length > 0) {
+      await this.sendStepEmail(task, 0);
+    }
 
     return task;
+  }
+
+  // ── Enviar tarea (agregar destinatarios y disparar el primer paso) ────────
+
+  async sendTask(
+    taskId: string,
+    steps: Array<{ recipientEmail: string; recipientName?: string }>,
+    userId: number,
+  ): Promise<{ ok: true; sentCount: number }> {
+    const task = await this.taskModel.findById(taskId);
+    if (!task) throw new NotFoundException('Tarea no encontrada');
+
+    // Ownership: solo el creador puede enviarla.
+    if (task.createdById !== userId) {
+      throw new ForbiddenException('No autorizado');
+    }
+
+    // Idempotencia: si ya tiene steps, la tarea ya fue enviada.
+    if (task.steps.length > 0) {
+      throw new ConflictException('La tarea ya fue enviada');
+    }
+
+    const validSteps = steps.filter(
+      (s) => s.recipientEmail?.trim() && s.recipientEmail.includes('@'),
+    );
+    if (validSteps.length === 0) {
+      throw new BadRequestException(
+        'Se requiere al menos un destinatario con email válido',
+      );
+    }
+
+    // Generar tokens únicos por step (mismo patrón que create).
+    const newSteps = validSteps.map((s, i) => ({
+      order: i,
+      recipientEmail: s.recipientEmail.trim(),
+      recipientName: s.recipientName?.trim() || s.recipientEmail.trim(),
+      token: crypto.randomUUID(),
+      status: 'pending' as const,
+      formData: {},
+    }));
+    task.steps = newSteps as any;
+    await task.save();
+
+    // Dispara correo al primer destinatario (mismo patrón que create actual).
+    await this.sendStepEmail(task, 0);
+    return { ok: true, sentCount: newSteps.length };
   }
 
   // ── Obtener tarea por token (público) ──────────────────────────────────────
