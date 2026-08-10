@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -13,6 +14,7 @@ import type {
   EmailRecipient,
 } from '../email/email.types';
 import { SubmissionsService } from '../submissions/submissions.service';
+import { FormsService } from '../forms/forms.service';
 
 export type TaskShareResponse = {
   formName: string;
@@ -27,7 +29,28 @@ export class TasksService {
     @InjectModel(Task.name) private taskModel: Model<TaskDocument>,
     private readonly emailService: EmailService,
     private readonly submissionsService: SubmissionsService,
+    private readonly formsService: FormsService,
   ) {}
+
+  // Un enlace compartible es un ingreso anonimo publico: para servir el form
+  // debe seguir activo, marcado como isPublic, y sin verificacion de email
+  // obligatoria. Si el admin cierra el form despues, el link deja de servir.
+  private async assertShareFormOpen(formId: string): Promise<void> {
+    let form: Awaited<ReturnType<FormsService['findOne']>> | null = null;
+    try {
+      form = await this.formsService.findOne(formId);
+    } catch {
+      throw new NotFoundException('El formulario no esta disponible');
+    }
+    if (!form || !form.isActive) {
+      throw new NotFoundException('El formulario no esta disponible');
+    }
+    if (form.isPublic === false || form.requiresEmailVerification === true) {
+      throw new ForbiddenException(
+        'Este formulario ya no acepta enlaces compartibles',
+      );
+    }
+  }
 
   // ── Crear tarea ────────────────────────────────────────────────────────────
 
@@ -308,6 +331,13 @@ export class TasksService {
       .findOne({ 'shareLink.token': token, 'shareLink.enabled': true })
       .lean();
     if (!task) throw new NotFoundException('Enlace no válido o desactivado');
+
+    // Si el admin cerro el form (isActive=false), lo despublico
+    // (isPublic=false), o le puso verificacion de email, el link deja de
+    // servir: 404 aqui para que la pagina publica muestre "enlace no valido"
+    // en vez de renderizar un form muerto.
+    await this.assertShareFormOpen(task.formId);
+
     return {
       formName: task.formName,
       widgets: task.widgets ?? [],
@@ -325,13 +355,32 @@ export class TasksService {
       .lean();
     if (!task) throw new NotFoundException('Enlace no válido o desactivado');
 
+    // SubmissionsService.submit() solo valida isActive del form, NO chequea
+    // isPublic ni requiresEmailVerification. Un attacker podria reusar un link
+    // viejo aunque el admin haya restringido el form: validamos aca antes de
+    // aceptar el submit anonimo.
+    await this.assertShareFormOpen(task.formId);
+
+    // Filtramos data a solo los widget ids del snapshot de la tarea. Sin este
+    // filtro un caller anonimo podria persistir keys arbitrarias en la
+    // submission (junk que no corresponde a ningun campo del form).
+    const validWidgetIds = new Set(
+      (task.widgets ?? [])
+        .map((w) => (w as { id?: unknown }).id)
+        .filter((id): id is string => typeof id === 'string'),
+    );
+    const filteredData: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(data)) {
+      if (validWidgetIds.has(key)) filteredData[key] = value;
+    }
+
     // Delega a SubmissionsService.submit(): hace offloadBinaries (firmas/fotos
     // a GridFS), valida el form y setea formVersion correcto. NO consume el
     // token: el link sigue funcionando para el próximo llenado.
     const submission = await this.submissionsService.submit(
       task.formId,
       {
-        data,
+        data: filteredData,
         metadata: { source: 'task-share', taskId: task._id, shareToken: token },
       },
       undefined, // userId — anónimo, no hay JWT
