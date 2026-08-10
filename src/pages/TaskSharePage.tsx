@@ -1,7 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { widgetRegistry } from "../components/widgets/registry";
+import { evaluateRules } from "../utils/formRules";
 import type { WidgetInstance, FormRule } from "../types/widget.types";
+
+// getAll cubre checkbox múltiples; para inputs únicos devuelve [valor].
+const collectFieldValue = (fd: FormData, name: string): string => {
+  const vals = fd.getAll(name);
+  if (vals.length === 0) return "";
+  return vals.map(String).filter((v) => v !== "").join(",");
+};
 
 const API_URL = `${import.meta.env.VITE_API_URL ?? "http://localhost:3001"}/api`;
 
@@ -22,6 +30,7 @@ type State =
 export default function TaskSharePage() {
   const { token } = useParams<{ token: string }>();
   const [state, setState] = useState<State>({ kind: "loading" });
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
@@ -38,9 +47,29 @@ export default function TaskSharePage() {
         }
         const data: ShareData = await r.json();
         setState({ kind: "ready", data });
+        setFieldValues(data.prefilledData ?? {});
       })
       .catch(() => setState({ kind: "error", message: "No se pudo conectar con el servidor." }));
   }, [token]);
+
+  const rules: FormRule[] =
+    state.kind === "ready" || state.kind === "submitting" || state.kind === "done"
+      ? state.data.rules
+      : [];
+  const hiddenIds = useMemo(
+    () => evaluateRules(rules, fieldValues),
+    [rules, fieldValues],
+  );
+
+  const handleFormChange = (e: React.FormEvent<HTMLFormElement>) => {
+    if (state.kind !== "ready") return;
+    const fd = new FormData(e.currentTarget);
+    const next: Record<string, string> = {};
+    state.data.widgets.forEach((w) => {
+      next[w.id] = collectFieldValue(fd, w.id);
+    });
+    setFieldValues(next);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,8 +77,8 @@ export default function TaskSharePage() {
     const fd = new FormData(formRef.current);
     const data: Record<string, string> = {};
     state.data.widgets.forEach((w) => {
-      const val = fd.get(w.id);
-      if (val != null) data[w.id] = String(val);
+      if (hiddenIds.has(w.id)) return;
+      data[w.id] = collectFieldValue(fd, w.id);
     });
     setState({ kind: "submitting", data: state.data });
     try {
@@ -110,9 +139,9 @@ export default function TaskSharePage() {
           <h1 className="mb-6 border-b-2 border-[#00c2a8] pb-[18px] text-[22px] font-bold text-gray-900">
             {data.formName}
           </h1>
-          <form ref={formRef} onSubmit={handleSubmit}>
+          <form ref={formRef} onSubmit={handleSubmit} onChange={handleFormChange}>
             <div className="flex flex-col gap-[18px]">
-              {data.widgets.map((widget) => {
+              {data.widgets.filter((w) => !hiddenIds.has(w.id)).map((widget) => {
                 const RenderComponent = widgetRegistry[widget.type]?.render;
                 if (!RenderComponent) return null;
                 // Aplicar prefilledData vía defaultValue del widget instance.
