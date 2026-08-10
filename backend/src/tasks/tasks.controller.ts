@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -10,6 +11,7 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TasksService } from './tasks.service';
@@ -42,13 +44,21 @@ export class TasksController {
       emailTemplate:
         (body.emailTemplate as Record<string, unknown> | null | undefined) ??
         null,
+      generateShareLink: body.generateShareLink === true,
     };
 
-    return this.tasksService.create(
+    const task = await this.tasksService.create(
       dto,
       Number(user.id),
       user.email || 'Admin',
     );
+
+    const baseUrl = process.env.PUBLIC_BASE_URL ?? '';
+    const shareLinkUrl = task.shareLink?.token
+      ? `${baseUrl}/tasks/share/${task.shareLink.token}`
+      : null;
+
+    return { ...task, shareLinkUrl };
   }
 
   @UseGuards(JwtAuthGuard)
@@ -125,5 +135,27 @@ export class TasksController {
     const forwarded = req.headers['x-forwarded-for'];
     const ip = req.ip ?? (Array.isArray(forwarded) ? forwarded[0] : forwarded);
     return this.tasksService.submitStep(token, dto, ip);
+  }
+
+  @Get('share/:token')
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  async getShareByToken(@Param('token') token: string) {
+    return this.tasksService.findByShareToken(token);
+  }
+
+  @Post('share/:token/submit')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  async submitShare(
+    @Param('token') token: string,
+    @Body() body: { data?: Record<string, unknown> },
+  ) {
+    if (!body?.data || typeof body.data !== 'object') {
+      throw new BadRequestException('Falta el campo data');
+    }
+    const { submissionId } = await this.tasksService.submitFromShare(
+      token,
+      body.data,
+    );
+    return { ok: true, submissionId };
   }
 }
