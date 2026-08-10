@@ -17,6 +17,7 @@ import FormRoute from "./routes/FormRoute";
 import ConsientifyRoute from "./routes/ConsientifyRoute";
 import ConsientifyLoginRoute from "./routes/ConsientifyLoginRoute";
 import TaskPage from "../pages/TaskPage";
+import TaskSharePage from "../pages/TaskSharePage";
 import PublicFormPage from "../pages/PublicFormPage";
 import ReportDownloadPage from "../pages/ReportDownloadPage";
 
@@ -44,6 +45,7 @@ export default function AppRouter() {
 
       {/* Rutas públicas — sin ProtectedRoute */}
       <Route path="/task/:token" element={<TaskPage />} />
+      <Route path="/tasks/share/:token" element={<TaskSharePage />} />
       <Route path="/f/:formId" element={<PublicFormPage />} />
       <Route path="/reports/download/:token" element={<ReportDownloadPage />} />
 
