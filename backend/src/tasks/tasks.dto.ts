@@ -1,3 +1,5 @@
+import { IsBoolean, IsOptional } from 'class-validator';
+
 export class CreateTaskStepDto {
   recipientEmail: string;
   recipientName?: string;
@@ -14,6 +16,10 @@ export class CreateTaskDto {
   widgets?: Record<string, unknown>[];
   rules?: Record<string, unknown>[];
   emailTemplate?: Record<string, unknown> | null;
+
+  @IsBoolean()
+  @IsOptional()
+  generateShareLink?: boolean;
 }
 
 export type SubmitAttachment = {

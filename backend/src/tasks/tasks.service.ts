@@ -12,11 +12,24 @@ import type {
   EmailAttachment,
   EmailRecipient,
 } from '../email/email.types';
+import {
+  FormSubmission,
+  FormSubmissionDocument,
+} from '../submissions/form-submission.schema';
+
+export type TaskShareResponse = {
+  formName: string;
+  widgets: Record<string, unknown>[];
+  rules: Record<string, unknown>[];
+  prefilledData: Record<string, string>;
+};
 
 @Injectable()
 export class TasksService {
   constructor(
     @InjectModel(Task.name) private taskModel: Model<TaskDocument>,
+    @InjectModel(FormSubmission.name)
+    private submissionModel: Model<FormSubmissionDocument>,
     private readonly emailService: EmailService,
   ) {}
 
@@ -56,6 +69,9 @@ export class TasksService {
       createdById,
       createdByName,
       finalData: null,
+      shareLink: dto.generateShareLink
+        ? { token: crypto.randomUUID(), enabled: true }
+        : null,
     });
 
     await task.save();
@@ -287,6 +303,45 @@ export class TasksService {
     task.status = 'cancelled';
     await task.save();
     return task;
+  }
+
+  // ── Enlace compartible reutilizable ────────────────────────────────────────
+
+  async findByShareToken(token: string): Promise<TaskShareResponse> {
+    const task = await this.taskModel
+      .findOne({ 'shareLink.token': token, 'shareLink.enabled': true })
+      .lean();
+    if (!task) throw new NotFoundException('Enlace no válido o desactivado');
+    return {
+      formName: task.formName,
+      widgets: task.widgets ?? [],
+      rules: task.rules ?? [],
+      prefilledData: task.prefilledData ?? {},
+    };
+  }
+
+  async submitFromShare(
+    token: string,
+    data: Record<string, unknown>,
+  ): Promise<{ submissionId: string }> {
+    const task = await this.taskModel
+      .findOne({ 'shareLink.token': token, 'shareLink.enabled': true })
+      .lean();
+    if (!task) throw new NotFoundException('Enlace no válido o desactivado');
+
+    // Crear FormSubmission normal en Mongo asociado al formId de la tarea.
+    // NO consume el token: el link sigue funcionando para el próximo llenado.
+    const submission = await this.submissionModel.create({
+      formId: task.formId,
+      formVersion: 1, // O tomar del task si existe; el schema tiene default
+      data,
+      metadata: { source: 'task-share', taskId: task._id, shareToken: token },
+      submittedById: null, // Anónimo — no hay JWT
+      templateSnapshot: null,
+      pdfFilename: null,
+    });
+
+    return { submissionId: String(submission._id) };
   }
 
   // ── Helpers privados ───────────────────────────────────────────────────────
