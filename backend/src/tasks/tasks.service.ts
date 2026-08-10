@@ -138,7 +138,7 @@ export class TasksService {
 
     // Generar tokens únicos por step (mismo patrón que create).
     const newSteps = validSteps.map((s, i) => ({
-      order: i,
+      order: i + 1,
       recipientEmail: s.recipientEmail.trim(),
       recipientName: s.recipientName?.trim() || s.recipientEmail.trim(),
       token: crypto.randomUUID(),
