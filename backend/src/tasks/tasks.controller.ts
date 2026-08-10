@@ -149,7 +149,10 @@ export class TasksController {
   }
 
   @Post('share/:token/submit')
-  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  // 10/min por IP: baja el techo de DoS de GridFS. Con body limit global
+  // (50MB) y firmas/photos grandes, 30/min = ~1.5GB/min por IP. 10 es
+  // suficiente para uso legitimo (WhatsApp -> llenar -> enviar).
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   async submitShare(
     @Param('token') token: string,
     @Body() body: { data?: Record<string, unknown> },
