@@ -53,7 +53,12 @@ export class TasksController {
       user.email || 'Admin',
     );
 
-    const baseUrl = process.env.PUBLIC_BASE_URL ?? '';
+    // Usamos APP_BASE_URL (la variable estandar del backend, ver
+    // auth.service, reports.service, bulk-pdf.service, tasks.service).
+    // PUBLIC_BASE_URL no existe en produccion: si quedaba, shareLinkUrl salia
+    // como "/tasks/share/<token>" (relativo) y al pegarlo en WhatsApp el link
+    // estaba roto.
+    const baseUrl = process.env.APP_BASE_URL ?? '';
     const shareLinkUrl = task.shareLink?.token
       ? `${baseUrl}/tasks/share/${task.shareLink.token}`
       : null;

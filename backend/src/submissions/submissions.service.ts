@@ -239,7 +239,10 @@ export class SubmissionsService {
         if (type === 'signature' || type === 'photo') {
           if (typeof value === 'string' && value.startsWith(GRIDFS_PREFIX)) {
             const fileId = value.slice(GRIDFS_PREFIX.length);
-            const base = process.env.PUBLIC_BASE_URL ?? '';
+            // Usamos APP_BASE_URL: PUBLIC_BASE_URL no esta definida en
+            // ningun deployment, por lo que las URLs de firmas/photos
+            // exportadas salian relativas y rotas en el CSV.
+            const base = process.env.APP_BASE_URL ?? '';
             row[label] = `${base}/api/submissions/files/${fileId}`;
           } else {
             row[label] = value;
