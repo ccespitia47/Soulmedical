@@ -12,10 +12,7 @@ import type {
   EmailAttachment,
   EmailRecipient,
 } from '../email/email.types';
-import {
-  FormSubmission,
-  FormSubmissionDocument,
-} from '../submissions/form-submission.schema';
+import { SubmissionsService } from '../submissions/submissions.service';
 
 export type TaskShareResponse = {
   formName: string;
@@ -28,9 +25,8 @@ export type TaskShareResponse = {
 export class TasksService {
   constructor(
     @InjectModel(Task.name) private taskModel: Model<TaskDocument>,
-    @InjectModel(FormSubmission.name)
-    private submissionModel: Model<FormSubmissionDocument>,
     private readonly emailService: EmailService,
+    private readonly submissionsService: SubmissionsService,
   ) {}
 
   // ── Crear tarea ────────────────────────────────────────────────────────────
@@ -329,17 +325,17 @@ export class TasksService {
       .lean();
     if (!task) throw new NotFoundException('Enlace no válido o desactivado');
 
-    // Crear FormSubmission normal en Mongo asociado al formId de la tarea.
-    // NO consume el token: el link sigue funcionando para el próximo llenado.
-    const submission = await this.submissionModel.create({
-      formId: task.formId,
-      formVersion: 1, // O tomar del task si existe; el schema tiene default
-      data,
-      metadata: { source: 'task-share', taskId: task._id, shareToken: token },
-      submittedById: null, // Anónimo — no hay JWT
-      templateSnapshot: null,
-      pdfFilename: null,
-    });
+    // Delega a SubmissionsService.submit(): hace offloadBinaries (firmas/fotos
+    // a GridFS), valida el form y setea formVersion correcto. NO consume el
+    // token: el link sigue funcionando para el próximo llenado.
+    const submission = await this.submissionsService.submit(
+      task.formId,
+      {
+        data,
+        metadata: { source: 'task-share', taskId: task._id, shareToken: token },
+      },
+      undefined, // userId — anónimo, no hay JWT
+    );
 
     return { submissionId: String(submission._id) };
   }
