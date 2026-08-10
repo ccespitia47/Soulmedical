@@ -35,6 +35,17 @@ export class TaskStep {
 
 export const TaskStepSchema = SchemaFactory.createForClass(TaskStep);
 
+@Schema({ _id: false })
+export class TaskShareLink {
+  @Prop({ required: true })
+  token: string;
+
+  @Prop({ default: true })
+  enabled: boolean;
+}
+
+export const TaskShareLinkSchema = SchemaFactory.createForClass(TaskShareLink);
+
 @Schema({ timestamps: true, collection: 'tasks' })
 export class Task {
   @Prop({ type: String, default: () => crypto.randomUUID() })
@@ -95,9 +106,21 @@ export class Task {
 
   @Prop()
   pdfUrl?: string;
+
+  @Prop({ type: TaskShareLinkSchema, default: null })
+  shareLink: TaskShareLink | null;
 }
 
 export const TaskSchema = SchemaFactory.createForClass(Task);
+
+// Índice único parcial: solo tareas con shareLink.token están indexadas.
+// Permite lookups rápidos por token y garantiza que no haya colisiones,
+// mientras que las tareas sin link (mayoría) no ocupan slots del índice.
+TaskSchema.index(
+  { 'shareLink.token': 1 },
+  { unique: true, partialFilterExpression: { 'shareLink.token': { $type: 'string' } } },
+);
+
 TaskSchema.set('toJSON', {
   virtuals: true,
   transform: (_doc: any, ret: any) => {
