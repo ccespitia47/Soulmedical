@@ -230,22 +230,22 @@ export default function CreateTaskModal({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
-          {tab === "info" && (
+          <div style={{ display: tab === "info" ? "block" : "none" }}>
             <InfoTab
               title={title}
               description={description}
               onChangeTitle={setTitle}
               onChangeDescription={setDescription}
             />
-          )}
-          {tab === "prefill" && (
+          </div>
+          <div style={{ display: tab === "prefill" ? "block" : "none" }}>
             <PrefillTab
               ref={prefillFormRef}
               widgets={widgets}
               onChange={handlePrefillChange}
             />
-          )}
-          {tab === "steps" && (
+          </div>
+          <div style={{ display: tab === "steps" ? "block" : "none" }}>
             <StepsTab
               steps={stepsCtl.steps}
               allUsers={allUsers}
@@ -260,7 +260,7 @@ export default function CreateTaskModal({
               onSelectStepUser={stepsCtl.setStepRecipient}
               onAddGroupMembers={stepsCtl.handleAddGroupMembers}
             />
-          )}
+          </div>
         </div>
 
         {error && (
