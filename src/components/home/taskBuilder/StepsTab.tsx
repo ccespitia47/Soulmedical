@@ -16,6 +16,8 @@ type StepsTabProps = {
   onSetShowDropdown: (id: string, show: boolean) => void;
   onSelectStepUser: (id: string, recipient: Recipient) => void;
   onAddGroupMembers: (id: string, group: GroupData) => void;
+  shareEnabled?: boolean;
+  onShareEnabledChange?: (v: boolean) => void;
 };
 
 export default function StepsTab({
@@ -31,6 +33,8 @@ export default function StepsTab({
   onSetShowDropdown,
   onSelectStepUser,
   onAddGroupMembers,
+  shareEnabled = false,
+  onShareEnabledChange,
 }: StepsTabProps) {
   const getFiltered = (stepId: string): SimpleUser[] => {
     const q = (steps.find((s) => s.id === stepId)?.inputEmail || "").toLowerCase();
@@ -46,6 +50,28 @@ export default function StepsTab({
 
   return (
     <>
+      <div className="mb-4 rounded-[10px] border-[1.5px] border-blue-200 bg-blue-50 p-3.5">
+        <label className="flex cursor-pointer items-start gap-2.5">
+          <input
+            type="checkbox"
+            checked={shareEnabled}
+            onChange={(e) => onShareEnabledChange?.(e.target.checked)}
+            className="mt-0.5 h-4 w-4 cursor-pointer accent-blue-600"
+          />
+          <div className="flex-1">
+            <div className="text-[13px] font-semibold text-blue-900">
+              🔗 Generar enlace compartible
+            </div>
+            <div className="mt-0.5 text-[11.5px] text-blue-700">
+              Además de los destinatarios por correo, genera un link único que
+              podrás copiar y pegar en WhatsApp, chat o donde quieras. Cada
+              llenado del link crea un registro nuevo. Útil para personas sin
+              correo electrónico.
+            </div>
+          </div>
+        </label>
+      </div>
+
       <p className="m-0 mb-3.5 text-[13px] text-gray-500">
         Define quién debe completar el formulario y en qué orden. Cada persona
         recibe el formulario cuando la anterior termina.

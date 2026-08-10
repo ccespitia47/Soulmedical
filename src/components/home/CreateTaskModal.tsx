@@ -48,6 +48,8 @@ export default function CreateTaskModal({
   const [prefilledData, setPrefilledData] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [shareEnabled, setShareEnabled] = useState(false);
+  const [shareLinkUrl, setShareLinkUrl] = useState<string | null>(null);
 
   const [allUsers, setAllUsers] = useState<SimpleUser[]>([]);
   const [groups, setGroups] = useState<GroupData[]>([]);
@@ -165,14 +167,20 @@ export default function CreateTaskModal({
             recipientEmail: s.inputEmail.trim(),
             recipientName: s.inputName.trim() || s.inputEmail,
           })),
+          generateShareLink: shareEnabled,
         }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.message || "Error al crear la tarea");
       }
+      const responseData = await res.json().catch(() => ({}));
       onCreated();
-      onClose();
+      if (responseData?.shareLinkUrl) {
+        setShareLinkUrl(responseData.shareLinkUrl);
+      } else {
+        onClose();
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -259,6 +267,8 @@ export default function CreateTaskModal({
               onSetShowDropdown={stepsCtl.setShowDropdownFor}
               onSelectStepUser={stepsCtl.setStepRecipient}
               onAddGroupMembers={stepsCtl.handleAddGroupMembers}
+              shareEnabled={shareEnabled}
+              onShareEnabledChange={setShareEnabled}
             />
           </div>
         </div>
@@ -313,6 +323,54 @@ export default function CreateTaskModal({
           </div>
         </div>
       </div>
+
+      {shareLinkUrl && (
+        <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/60 p-5">
+          <div className="w-full max-w-[520px] rounded-2xl bg-white p-6 shadow-[0_24px_60px_rgba(0,0,0,0.3)]">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-gradient-to-br from-emerald-500 to-teal-600 text-xl">
+                ✓
+              </div>
+              <div>
+                <div className="text-base font-extrabold text-gray-900">Tarea creada</div>
+                <div className="text-xs text-gray-500">Enlace compartible listo</div>
+              </div>
+            </div>
+            <p className="mb-2 text-[13px] text-gray-600">
+              Copia este enlace y compártelo por WhatsApp o donde quieras. Cada
+              llenado crea un registro nuevo.
+            </p>
+            <div className="mb-3 flex gap-2">
+              <input
+                type="text"
+                readOnly
+                value={shareLinkUrl}
+                onClick={(e) => (e.target as HTMLInputElement).select()}
+                className="flex-1 rounded-lg border-[1.5px] border-slate-200 bg-slate-50 px-3 py-2 font-mono text-[12px] text-gray-900"
+              />
+              <button
+                onClick={async () => {
+                  await navigator.clipboard.writeText(shareLinkUrl);
+                }}
+                className="cursor-pointer rounded-lg border-none bg-emerald-600 px-4 py-2 text-[13px] font-bold text-white"
+              >
+                📋 Copiar
+              </button>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={() => {
+                  setShareLinkUrl(null);
+                  onClose();
+                }}
+                className="cursor-pointer rounded-lg border-none bg-slate-800 px-5 py-2 text-[13px] font-bold text-white"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
