@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { randomBytes } from 'node:crypto';
 import { Task, TaskDocument, TaskStep } from './task.schema';
 import { CreateTaskDto, SubmitTaskStepDto } from './tasks.dto';
 import { EmailService } from '../email/email.service';
@@ -93,7 +94,10 @@ export class TasksService {
       createdByName,
       finalData: null,
       shareLink: dto.generateShareLink
-        ? { token: crypto.randomUUID(), enabled: true }
+        ? {
+            token: randomBytes(8).toString('base64url'),
+            enabled: true,
+          }
         : null,
     });
 

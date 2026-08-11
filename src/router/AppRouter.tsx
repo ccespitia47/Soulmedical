@@ -46,6 +46,7 @@ export default function AppRouter() {
       {/* Rutas públicas — sin ProtectedRoute */}
       <Route path="/task/:token" element={<TaskPage />} />
       <Route path="/tasks/share/:token" element={<TaskSharePage />} />
+      <Route path="/t/:token" element={<TaskSharePage />} />
       <Route path="/f/:formId" element={<PublicFormPage />} />
       <Route path="/reports/download/:token" element={<ReportDownloadPage />} />
 

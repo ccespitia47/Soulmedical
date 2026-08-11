@@ -61,7 +61,7 @@ export class TasksController {
     // estaba roto.
     const baseUrl = process.env.APP_BASE_URL ?? '';
     const shareLinkUrl = task.shareLink?.token
-      ? `${baseUrl}/tasks/share/${task.shareLink.token}`
+      ? `${baseUrl}/t/${task.shareLink.token}`
       : null;
 
     // toObject() para exponer las propiedades del schema. El spread sobre un
