@@ -60,14 +60,6 @@ export class TasksService {
     createdById: number,
     createdByName: string,
   ): Promise<Task> {
-    // Evita tareas huérfanas: sin destinatarios ni enlace compartible, la
-    // tarea nunca podría completarse ni ser encontrada por nadie.
-    if (!dto.generateShareLink && (!dto.steps || dto.steps.length === 0)) {
-      throw new BadRequestException(
-        'Debes incluir destinatarios o habilitar el enlace compartible',
-      );
-    }
-
     const filteredSteps = (dto.steps ?? []).filter(
       (s) => s.recipientEmail?.trim() && s.recipientEmail.includes('@'),
     );

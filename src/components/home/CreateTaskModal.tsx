@@ -80,6 +80,16 @@ export default function CreateTaskModal({
     return max;
   }, [signaturesByStep]);
 
+  // Guard de "tarea huérfana" del lado del cliente: sin enlace compartible
+  // y sin al menos un destinatario con email válido, la tarea no tendría
+  // forma de completarse. El backend acepta steps:[] en create() a propósito
+  // (el flujo 2-step lo requiere), así que la validación vive acá.
+  const hasValidRecipient = useMemo(
+    () => stepsCtl.steps.some((s) => s.inputEmail.trim().includes("@")),
+    [stepsCtl.steps],
+  );
+  const canCreate = shareEnabled || hasValidRecipient;
+
   // Si el formulario tiene firmas hasta el paso N, garantizamos que el
   // builder de tareas muestre N cajas de destinatarios.
   useEffect(() => {
@@ -352,12 +362,17 @@ export default function CreateTaskModal({
               <>
                 <button
                   onClick={handleCreate}
-                  disabled={saving || taskCreated}
-                  className="cursor-pointer rounded-lg border-none px-6 py-2 text-[13px] font-bold text-white disabled:cursor-not-allowed"
+                  disabled={saving || taskCreated || !canCreate}
+                  title={
+                    !canCreate
+                      ? "Activa el enlace compartible o agrega al menos un destinatario"
+                      : undefined
+                  }
+                  className="cursor-pointer rounded-lg border-none px-6 py-2 text-[13px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
                   style={{
                     background: taskCreated
                       ? "#10b981"
-                      : saving
+                      : saving || !canCreate
                       ? "#94a3b8"
                       : "linear-gradient(135deg,#00c2a8,#0891b2)",
                   }}
