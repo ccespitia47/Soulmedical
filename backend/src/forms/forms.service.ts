@@ -20,12 +20,15 @@ import {
   PublicFormOtp,
   PublicFormOtpDocument,
 } from './public-form-otp.schema';
+import { Folder, FolderDocument } from '../folders/folder.schema';
 import { CreateFormDto } from './dto/create-form.dto';
 import { UpdateFormDto } from './dto/update-form.dto';
 import { EmailService } from '../email/email.service';
 import { UsersService } from '../users/users.service';
 import type { EmailRecipient } from '../email/email.types';
 import { rebuildAssignmentIndexes } from './user-form-assignment-indexes';
+import { resolveAccessibleFormIds } from './assignment-resolver';
+import type { AssignmentRow } from './assignment-resolver';
 
 // Vida del OTP de acceso a formularios públicos (decisión del producto).
 const OTP_TTL_MINUTES = 2;
@@ -46,6 +49,8 @@ export class FormsService implements OnModuleInit {
     private readonly assignmentModel: Model<UserFormAssignmentDocument>,
     @InjectModel(PublicFormOtp.name)
     private readonly otpModel: Model<PublicFormOtpDocument>,
+    @InjectModel(Folder.name)
+    private readonly folderModel: Model<FolderDocument>,
     private readonly emailService: EmailService,
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
@@ -72,21 +77,59 @@ export class FormsService implements OnModuleInit {
     role?: string,
   ): Promise<FormDocument[]> {
     if (role === 'user' && userId) {
-      const assignments = await this.assignmentModel.find({ userId });
-      const assignedFormIds = assignments.map((a) => a.formId);
+      const accessibleFormIds = await this.getAccessibleFormIds(userId);
       return (this.formModel as any)
-        .find({ folderId, isActive: true, _id: { $in: assignedFormIds } })
+        .find({
+          folderId,
+          isActive: true,
+          _id: { $in: [...accessibleFormIds] },
+        })
         .sort({ createdAt: 1 });
     }
     return this.formModel.find({ folderId, isActive: true }).sort({ createdAt: 1 });
   }
 
   async findAssignedToUser(userId: number): Promise<FormDocument[]> {
-    const assignments = await this.assignmentModel.find({ userId });
-    const formIds = assignments.map((a) => a.formId);
+    const accessibleFormIds = await this.getAccessibleFormIds(userId);
     return (this.formModel as any)
-      .find({ _id: { $in: formIds }, isActive: true })
+      .find({ _id: { $in: [...accessibleFormIds] }, isActive: true })
       .sort({ createdAt: 1 });
+  }
+
+  /**
+   * Resuelve el set de formIds accesibles para un usuario considerando
+   * asignaciones directas, por carpeta y por proyecto, restando las
+   * exclusiones (ver `resolveAccessibleFormIds`).
+   *
+   * IMPORTANTE: traemos TODOS los assignments del user (positivos +
+   * exclusiones) — no filtramos `excluded: false` aquí porque las
+   * exclusiones son necesarias para restar acceso heredado.
+   */
+  private async getAccessibleFormIds(userId: number): Promise<Set<string>> {
+    const [assignments, forms, folders] = await Promise.all([
+      this.assignmentModel.find({ userId }),
+      this.formModel.find({}, { folderId: 1 }),
+      this.folderModel.find({}, { projectId: 1 }),
+    ]);
+
+    const projectByFolder = new Map<string, string>(
+      folders.map((f) => [f._id as string, f.projectId]),
+    );
+
+    const assignmentRows: AssignmentRow[] = assignments.map((a) => ({
+      formId: a.formId,
+      folderId: a.folderId,
+      projectId: a.projectId,
+      excluded: a.excluded,
+    }));
+
+    const allForms = forms.map((f) => ({
+      id: f._id as string,
+      folderId: f.folderId,
+      projectId: projectByFolder.get(f.folderId) ?? '',
+    }));
+
+    return resolveAccessibleFormIds(assignmentRows, allForms);
   }
 
   async findOne(id: string): Promise<FormDocument> {

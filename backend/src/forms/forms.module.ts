@@ -4,6 +4,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { Form, FormSchema } from './form.schema';
 import { UserFormAssignment, UserFormAssignmentSchema } from './user-form-assignment.schema';
 import { PublicFormOtp, PublicFormOtpSchema } from './public-form-otp.schema';
+import { Folder, FolderSchema } from '../folders/folder.schema';
 import { FormsService } from './forms.service';
 import { FormsController } from './forms.controller';
 import { EmailModule } from '../email/email.module';
@@ -18,6 +19,7 @@ import { AdminAuditModule } from '../admin-audit/admin-audit.module';
       { name: Form.name, schema: FormSchema },
       { name: UserFormAssignment.name, schema: UserFormAssignmentSchema },
       { name: PublicFormOtp.name, schema: PublicFormOtpSchema },
+      { name: Folder.name, schema: FolderSchema },
     ]),
     EmailModule,
     UsersModule,
