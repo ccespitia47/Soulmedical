@@ -50,6 +50,8 @@ export default function CreateTaskModal({
   const [error, setError] = useState("");
   const [shareEnabled, setShareEnabled] = useState(false);
   const [shareLinkUrl, setShareLinkUrl] = useState<string | null>(null);
+  const [taskCreated, setTaskCreated] = useState(false);
+  const [createdTaskId, setCreatedTaskId] = useState<string | null>(null);
 
   const [allUsers, setAllUsers] = useState<SimpleUser[]>([]);
   const [groups, setGroups] = useState<GroupData[]>([]);
@@ -115,20 +117,15 @@ export default function CreateTaskModal({
     setPrefilledData(values);
   };
 
-  const handleSubmit = async () => {
+  const handleCreate = async () => {
     if (!title.trim()) {
       setError("El título es obligatorio");
       return;
     }
-    const validSteps = stepsCtl.steps.filter((s) =>
-      s.inputEmail.trim().includes("@"),
-    );
-    if (validSteps.length === 0) {
-      setError("Agrega al menos un destinatario con email válido");
-      return;
-    }
+    setSaving(true);
+    setError("");
 
-    // Capturar datos del prefill form antes de enviar
+    // Capturar prefill actual (mismo patrón que antes)
     const finalPrefilled = { ...prefilledData };
     if (prefillFormRef.current) {
       const fd = new FormData(prefillFormRef.current);
@@ -138,8 +135,6 @@ export default function CreateTaskModal({
       });
     }
 
-    setSaving(true);
-    setError("");
     try {
       const res = await fetch(`${API_URL}/api/tasks`, {
         method: "POST",
@@ -153,9 +148,6 @@ export default function CreateTaskModal({
           formName,
           widgets,
           rules,
-          // Snapshot del emailTemplate al momento de crear la tarea, para
-          // que el backend pueda enviar el correo final con el formato del
-          // formulario sin tener que consultarlo después.
           emailTemplate:
             folders
               .find((f) => f.id === folderId)
@@ -163,10 +155,7 @@ export default function CreateTaskModal({
           title,
           description,
           prefilledData: finalPrefilled,
-          steps: validSteps.map((s) => ({
-            recipientEmail: s.inputEmail.trim(),
-            recipientName: s.inputName.trim() || s.inputEmail,
-          })),
+          steps: [], // <-- vacío: se agregan luego con /send
           generateShareLink: shareEnabled,
         }),
       });
@@ -174,15 +163,48 @@ export default function CreateTaskModal({
         const err = await res.json().catch(() => ({}));
         throw new Error(err.message || "Error al crear la tarea");
       }
-      const responseData = await res.json().catch(() => ({}));
-      if (responseData?.shareLinkUrl) {
-        // Mostramos el modal secundario con el link. NO llamamos onCreated()
-        // aquí porque el parent desmonta este componente al recibirlo, lo que
-        // eliminaría el modal antes de que el admin pueda copiar el link.
-        // El refresh + cierre se dispara desde el botón "Cerrar" del modal.
-        setShareLinkUrl(responseData.shareLinkUrl);
-        setSaving(false);
-        return;
+      const data = await res.json();
+      const taskId = data._id || data.id;
+      if (!taskId) throw new Error("Respuesta sin id de tarea");
+
+      setCreatedTaskId(taskId);
+      setTaskCreated(true);
+      if (data.shareLinkUrl) setShareLinkUrl(data.shareLinkUrl);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSend = async () => {
+    if (!createdTaskId) return;
+    const validSteps = stepsCtl.steps.filter((s) =>
+      s.inputEmail.trim().includes("@"),
+    );
+    if (validSteps.length === 0) {
+      setError("Agrega al menos un destinatario con email válido");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const res = await fetch(`${API_URL}/api/tasks/${createdTaskId}/send`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          steps: validSteps.map((s) => ({
+            recipientEmail: s.inputEmail.trim(),
+            recipientName: s.inputName.trim() || s.inputEmail,
+          })),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Error al enviar la tarea");
       }
       onCreated();
       onClose();
@@ -244,19 +266,23 @@ export default function CreateTaskModal({
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
           <div style={{ display: tab === "info" ? "block" : "none" }}>
-            <InfoTab
-              title={title}
-              description={description}
-              onChangeTitle={setTitle}
-              onChangeDescription={setDescription}
-            />
+            <fieldset disabled={taskCreated} className={taskCreated ? "opacity-70" : ""}>
+              <InfoTab
+                title={title}
+                description={description}
+                onChangeTitle={setTitle}
+                onChangeDescription={setDescription}
+              />
+            </fieldset>
           </div>
           <div style={{ display: tab === "prefill" ? "block" : "none" }}>
-            <PrefillTab
-              ref={prefillFormRef}
-              widgets={widgets}
-              onChange={handlePrefillChange}
-            />
+            <fieldset disabled={taskCreated} className={taskCreated ? "opacity-70" : ""}>
+              <PrefillTab
+                ref={prefillFormRef}
+                widgets={widgets}
+                onChange={handlePrefillChange}
+              />
+            </fieldset>
           </div>
           <div style={{ display: tab === "steps" ? "block" : "none" }}>
             <StepsTab
@@ -274,6 +300,8 @@ export default function CreateTaskModal({
               onAddGroupMembers={stepsCtl.handleAddGroupMembers}
               shareEnabled={shareEnabled}
               onShareEnabledChange={setShareEnabled}
+              disabled={!taskCreated}
+              shareLinkUrl={shareLinkUrl}
             />
           </div>
         </div>
@@ -312,71 +340,40 @@ export default function CreateTaskModal({
               Cancelar
             </button>
             {tab === "steps" && (
-              <button
-                onClick={handleSubmit}
-                disabled={saving}
-                className="cursor-pointer rounded-lg border-none px-6 py-2 text-[13px] font-bold text-white disabled:cursor-not-allowed"
-                style={{
-                  background: saving
-                    ? "#94a3b8"
-                    : "linear-gradient(135deg,#00c2a8,#0891b2)",
-                }}
-              >
-                {saving ? "Creando..." : "🚀 Crear y enviar tarea"}
-              </button>
+              <>
+                <button
+                  onClick={handleCreate}
+                  disabled={saving || taskCreated}
+                  className="cursor-pointer rounded-lg border-none px-6 py-2 text-[13px] font-bold text-white disabled:cursor-not-allowed"
+                  style={{
+                    background: taskCreated
+                      ? "#10b981"
+                      : saving
+                      ? "#94a3b8"
+                      : "linear-gradient(135deg,#00c2a8,#0891b2)",
+                  }}
+                >
+                  {taskCreated ? "✓ Tarea creada" : saving ? "Creando..." : "Crear tarea"}
+                </button>
+                <button
+                  onClick={handleSend}
+                  disabled={saving || !taskCreated}
+                  className="cursor-pointer rounded-lg border-none px-6 py-2 text-[13px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{
+                    background: !taskCreated
+                      ? "#94a3b8"
+                      : saving
+                      ? "#94a3b8"
+                      : "linear-gradient(135deg,#00c2a8,#0891b2)",
+                  }}
+                >
+                  {saving ? "Enviando..." : "🚀 Enviar tarea"}
+                </button>
+              </>
             )}
           </div>
         </div>
       </div>
-
-      {shareLinkUrl && (
-        <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/60 p-5">
-          <div className="w-full max-w-[520px] rounded-2xl bg-white p-6 shadow-[0_24px_60px_rgba(0,0,0,0.3)]">
-            <div className="mb-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-gradient-to-br from-emerald-500 to-teal-600 text-xl">
-                ✓
-              </div>
-              <div>
-                <div className="text-base font-extrabold text-gray-900">Tarea creada</div>
-                <div className="text-xs text-gray-500">Enlace compartible listo</div>
-              </div>
-            </div>
-            <p className="mb-2 text-[13px] text-gray-600">
-              Copia este enlace y compártelo por WhatsApp o donde quieras. Cada
-              llenado crea un registro nuevo.
-            </p>
-            <div className="mb-3 flex gap-2">
-              <input
-                type="text"
-                readOnly
-                value={shareLinkUrl}
-                onClick={(e) => (e.target as HTMLInputElement).select()}
-                className="flex-1 rounded-lg border-[1.5px] border-slate-200 bg-slate-50 px-3 py-2 font-mono text-[12px] text-gray-900"
-              />
-              <button
-                onClick={async () => {
-                  await navigator.clipboard.writeText(shareLinkUrl);
-                }}
-                className="cursor-pointer rounded-lg border-none bg-emerald-600 px-4 py-2 text-[13px] font-bold text-white"
-              >
-                📋 Copiar
-              </button>
-            </div>
-            <div className="flex justify-end">
-              <button
-                onClick={() => {
-                  onCreated();
-                  setShareLinkUrl(null);
-                  onClose();
-                }}
-                className="cursor-pointer rounded-lg border-none bg-slate-800 px-5 py-2 text-[13px] font-bold text-white"
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
