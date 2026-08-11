@@ -5,6 +5,7 @@ import {
   ConflictException,
   ForbiddenException,
   UnauthorizedException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
@@ -24,6 +25,7 @@ import { UpdateFormDto } from './dto/update-form.dto';
 import { EmailService } from '../email/email.service';
 import { UsersService } from '../users/users.service';
 import type { EmailRecipient } from '../email/email.types';
+import { rebuildAssignmentIndexes } from './user-form-assignment-indexes';
 
 // Vida del OTP de acceso a formularios públicos (decisión del producto).
 const OTP_TTL_MINUTES = 2;
@@ -35,7 +37,7 @@ const GENERIC_OTP_RESPONSE =
   'Si tu correo está autorizado, recibirás un código en breve.';
 
 @Injectable()
-export class FormsService {
+export class FormsService implements OnModuleInit {
   private readonly logger = new Logger(FormsService.name);
 
   constructor(
@@ -48,6 +50,10 @@ export class FormsService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    await rebuildAssignmentIndexes(this.assignmentModel);
+  }
 
   async create(dto: CreateFormDto, userId: number): Promise<FormDocument> {
     const form = new this.formModel({
