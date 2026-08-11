@@ -16,6 +16,7 @@ import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto, SubmitTaskStepDto } from './tasks.dto';
+import type { TaskDocument } from './task.schema';
 
 type AuthedRequest = Request & {
   user?: { id: number; email?: string; role?: string };
@@ -63,7 +64,11 @@ export class TasksController {
       ? `${baseUrl}/tasks/share/${task.shareLink.token}`
       : null;
 
-    return { ...task, shareLinkUrl };
+    // toObject() para exponer las propiedades del schema. El spread sobre un
+    // documento Mongoose crudo devuelve solo símbolos internos y el frontend
+    // no ve _id (rompe "Respuesta sin id de tarea" en CreateTaskModal).
+    const taskDoc = task as unknown as TaskDocument;
+    return { ...taskDoc.toObject(), shareLinkUrl };
   }
 
   @UseGuards(JwtAuthGuard)
