@@ -55,12 +55,19 @@ export default function StepsTab({
   return (
     <>
       <div className="mb-4 rounded-[10px] border-[1.5px] border-blue-200 bg-blue-50 p-3.5">
-        <label className="flex cursor-pointer items-start gap-2.5">
+        {/* La decisión del enlace compartible se fija en el POST /tasks
+            (create()) y no puede cambiar después: una vez creada la tarea
+            (taskCreated → prop `disabled` pasa a false), el checkbox queda
+            fijo en readonly para no sugerir que togglearlo hace algo. */}
+        <label
+          className={`flex items-start gap-2.5 ${!disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+        >
           <input
             type="checkbox"
             checked={shareEnabled}
+            disabled={!disabled}
             onChange={(e) => onShareEnabledChange?.(e.target.checked)}
-            className="mt-0.5 h-4 w-4 cursor-pointer accent-blue-600"
+            className="mt-0.5 h-4 w-4 cursor-pointer accent-blue-600 disabled:cursor-not-allowed"
           />
           <div className="flex-1">
             <div className="text-[13px] font-semibold text-blue-900">

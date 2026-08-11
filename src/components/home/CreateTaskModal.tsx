@@ -203,6 +203,15 @@ export default function CreateTaskModal({
         }),
       });
       if (!res.ok) {
+        // 409 = la tarea ya fue enviada (por ejemplo, doble click o un
+        // envío previo que sí llegó al backend pero cuya respuesta se
+        // perdió). No es un error accionable para el usuario: la tarea
+        // ya está en curso, así que simplemente cerramos y refrescamos.
+        if (res.status === 409) {
+          onCreated();
+          onClose();
+          return;
+        }
         const err = await res.json().catch(() => ({}));
         throw new Error(err.message || "Error al enviar la tarea");
       }

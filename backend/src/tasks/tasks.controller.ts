@@ -97,6 +97,7 @@ export class TasksController {
 
   @UseGuards(JwtAuthGuard)
   @Post(':id/send')
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   async sendTask(
     @Param('id') id: string,
     @Body() body: { steps?: Array<{ recipientEmail: string; recipientName?: string }> },
@@ -105,7 +106,7 @@ export class TasksController {
     const user = req.user;
     if (!user) throw new UnauthorizedException('Usuario no autenticado');
     const steps = Array.isArray(body?.steps) ? body.steps : [];
-    return this.tasksService.sendTask(id, steps, user.id);
+    return this.tasksService.sendTask(id, steps, Number(user.id));
   }
 
   @Get('public/:token')

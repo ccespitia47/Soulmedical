@@ -60,6 +60,14 @@ export class TasksService {
     createdById: number,
     createdByName: string,
   ): Promise<Task> {
+    // Evita tareas huérfanas: sin destinatarios ni enlace compartible, la
+    // tarea nunca podría completarse ni ser encontrada por nadie.
+    if (!dto.generateShareLink && (!dto.steps || dto.steps.length === 0)) {
+      throw new BadRequestException(
+        'Debes incluir destinatarios o habilitar el enlace compartible',
+      );
+    }
+
     const filteredSteps = (dto.steps ?? []).filter(
       (s) => s.recipientEmail?.trim() && s.recipientEmail.includes('@'),
     );
@@ -114,19 +122,6 @@ export class TasksService {
     steps: Array<{ recipientEmail: string; recipientName?: string }>,
     userId: number,
   ): Promise<{ ok: true; sentCount: number }> {
-    const task = await this.taskModel.findById(taskId);
-    if (!task) throw new NotFoundException('Tarea no encontrada');
-
-    // Ownership: solo el creador puede enviarla.
-    if (task.createdById !== userId) {
-      throw new ForbiddenException('No autorizado');
-    }
-
-    // Idempotencia: si ya tiene steps, la tarea ya fue enviada.
-    if (task.steps.length > 0) {
-      throw new ConflictException('La tarea ya fue enviada');
-    }
-
     const validSteps = steps.filter(
       (s) => s.recipientEmail?.trim() && s.recipientEmail.includes('@'),
     );
@@ -136,20 +131,50 @@ export class TasksService {
       );
     }
 
-    // Generar tokens únicos por step (mismo patrón que create).
-    const newSteps = validSteps.map((s, i) => ({
+    // Generar tokens únicos por step (mismo patrón que create). El primer
+    // paso arranca 'in_progress' (igual que create) para que quede claro
+    // de inmediato a quién le toca completar.
+    const newSteps: TaskStep[] = validSteps.map((s, i) => ({
       order: i + 1,
-      recipientEmail: s.recipientEmail.trim(),
+      recipientEmail: s.recipientEmail.trim().toLowerCase(),
       recipientName: s.recipientName?.trim() || s.recipientEmail.trim(),
       token: crypto.randomUUID(),
-      status: 'pending' as const,
+      status: i === 0 ? 'in_progress' : 'pending',
       formData: {},
     }));
-    task.steps = newSteps as any;
-    await task.save();
 
-    // Dispara correo al primer destinatario (mismo patrón que create actual).
-    await this.sendStepEmail(task, 0);
+    // Update atómico condicionado a que la tarea siga sin steps: evita que
+    // dos llamadas concurrentes a /send (doble click, retry de red) pisen
+    // el array de steps una encima de otra y disparen el email duplicado.
+    // Nota: _id de Task es un string UUID (ver task.schema.ts), no un
+    // ObjectId de Mongo, por eso se compara tal cual.
+    // Cast del filtro: el schema declara _id como string (UUID), pero el
+    // tipo Document base de mongoose lo infiere como ObjectId, lo que
+    // produce un choque de tipos imposible ("string & ObjectId"). Mismo
+    // patrón que consents.seeder.ts para el mismo problema.
+    const filter = {
+      _id: taskId,
+      createdById: userId,
+      'steps.0': { $exists: false },
+    } as Record<string, unknown>;
+    const updated = await this.taskModel.findOneAndUpdate(
+      filter,
+      { $set: { steps: newSteps, currentStepIndex: 0 } },
+      { new: true },
+    );
+
+    if (!updated) {
+      const existing = await this.taskModel.findById(taskId).lean();
+      if (!existing) throw new NotFoundException('Tarea no encontrada');
+      if (existing.createdById !== userId) {
+        throw new ForbiddenException('No autorizado');
+      }
+      throw new ConflictException('La tarea ya fue enviada');
+    }
+
+    // Dispara correo al primer destinatario (mismo patrón que create actual;
+    // sendStepEmail ya atrapa sus propios errores y no re-lanza).
+    await this.sendStepEmail(updated, 0);
     return { ok: true, sentCount: newSteps.length };
   }
 
