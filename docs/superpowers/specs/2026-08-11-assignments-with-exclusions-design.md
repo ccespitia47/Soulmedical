@@ -51,7 +51,7 @@ Permitir asignaciones jerárquicas con **exclusiones puntuales**:
 ```
 
 **Reglas de integridad**:
-- Un registro con `excluded=true` **debe** tener `formId` set (excluir siempre es a nivel form) y **debe** tener `userId` XOR `groupId`. `projectId`/`folderId` siempre null en exclusiones.
+- Un registro con `excluded=true` **debe** tener `formId` XOR `folderId` set (una exclusión es siempre a nivel form o folder — no se excluye un proyecto entero) y **debe** tener `userId` XOR `groupId`. Los otros campos de nivel siempre null en exclusiones.
 - Un registro positivo tiene exactamente uno de `{formId, folderId, projectId}` set (identifica el nivel) y exactamente uno de `{userId, groupId}` set (identifica el sujeto).
 
 ### Índices nuevos
@@ -63,9 +63,11 @@ Adicionales a los 4 existentes (form+user, project+user, form+group, project+gro
 { folderId, groupId, excluded } unique, partial: folderId string + groupId string + excluded=false
 { formId, userId, excluded }    unique, partial: formId string + userId number + excluded=true
 { formId, groupId, excluded }   unique, partial: formId string + groupId string + excluded=true
+{ folderId, userId, excluded }  unique, partial: folderId string + userId number + excluded=true
+{ folderId, groupId, excluded } unique, partial: folderId string + groupId string + excluded=true
 ```
 
-Los índices positivos existentes (formId+userId, formId+groupId) deben filtrar `excluded: false` en su `partialFilterExpression` para no chocar con las nuevas exclusiones sobre el mismo (formId, userId).
+Los índices positivos existentes (formId+userId, formId+groupId) deben filtrar `excluded: false` en su `partialFilterExpression` para no chocar con exclusiones sobre el mismo (formId, userId) o (folderId, userId).
 
 ## Lógica de resolución
 
@@ -77,10 +79,14 @@ positivo = existe assignment {excluded=false, userId=U} con:
              folderId  = F.folderId   OR
              formId    = F.id
 
-exclusion = existe assignment {excluded=true, userId=U, formId=F.id}
+exclusion = existe assignment {excluded=true, userId=U} con:
+             formId    = F.id         OR
+             folderId  = F.folderId
 
 acceso = positivo AND NOT exclusion
 ```
+
+Excluir la carpeta bloquea el acceso a todos sus forms; excluir un form solo bloquea ese form.
 
 Igual lógica sustituyendo U por G para grupos.
 
@@ -92,10 +98,22 @@ Para la app del usuario final (`GET /forms/my-forms`), la resolución agrupa for
 
 ```
 GET /users/:id/assignments/tree
-  → { projects: string[], folders: string[], forms: string[], excludedForms: string[] }
+  → {
+      projects: string[],
+      folders: string[],
+      forms: string[],
+      excludedFolders: string[],
+      excludedForms: string[]
+    }
 
 PUT /users/:id/assignments/tree
-  body: { projects: string[], folders: string[], forms: string[], excludedForms: string[] }
+  body: {
+    projects: string[],
+    folders: string[],
+    forms: string[],
+    excludedFolders: string[],
+    excludedForms: string[]
+  }
   → { ok: true }
 ```
 
@@ -115,8 +133,10 @@ Solo `AssignmentsTab.tsx` (users) y `GroupAssignmentsPanel.tsx` (groups) migran 
 
 ### Validaciones del bulk PUT
 
-- Rechazar (400) si algún `excludedForms[i]` no está cubierto por al menos un ancestro (projectId o folderId) también en el payload. Sin ancestro, la exclusión no tiene sentido y ensucia la DB.
+- Rechazar (400) si algún `excludedForms[i]` no está cubierto por al menos un ancestro (projectId o folderId) también en el payload. Sin ancestro, la exclusión no tiene sentido.
+- Rechazar (400) si algún `excludedFolders[i]` no tiene su projectId en el payload. Sin proyecto ancestro, la exclusión no tiene sentido.
 - Rechazar (400) si un mismo formId aparece a la vez en `forms` y `excludedForms`.
+- Rechazar (400) si un mismo folderId aparece a la vez en `folders` y `excludedFolders`.
 - Rechazar (400) si un projectId/folderId/formId no existe en la DB.
 
 ## Frontend
@@ -124,31 +144,47 @@ Solo `AssignmentsTab.tsx` (users) y `GroupAssignmentsPanel.tsx` (groups) migran 
 ### `useAssignmentState` — nuevos sets
 
 Agregar:
-- `excludedFolders: Set<string>` (reservado para consistencia; en la UI de este spec no se usa exclusión de carpeta, solo de form, pero el estado queda listo por si se pide luego).
-- `excludedForms: Set<string>`
+- `excludedFolders: Set<string>` (exclusión de carpeta cuando el proyecto está asignado).
+- `excludedForms: Set<string>` (exclusión de form cuando su proyecto o carpeta están asignados).
 
 Cambios de comportamiento:
-- `toggleFolder`: quitar el early return `if (assignedProjects.has(projectId)) return;`. Si el proyecto está asignado, marcar/desmarcar carpeta muta `excludedFolders`.
-- `toggleForm`: quitar el early return de proyecto/carpeta. Si el form está heredado por un ancestro asignado, mutar `excludedForms`. Si el form no tiene ancestro asignado, mutar `assignedForms` (comportamiento actual).
+- `toggleFolder`: quitar el early return `if (assignedProjects.has(projectId)) return;`.
+  - Si el proyecto está asignado → toggle en `excludedFolders`. Al excluir la carpeta, limpiar sus `excludedForms` (ya no tiene sentido excluir un form de una carpeta excluida).
+  - Si el proyecto NO está asignado → toggle en `assignedFolders` (comportamiento actual, mantiene el copy de forms).
+- `toggleForm`: quitar el early return de proyecto/carpeta.
+  - Si el form está heredado por un ancestro asignado (proyecto o carpeta) y el ancestro NO está excluido → toggle en `excludedForms`.
+  - Si el form no tiene ancestro asignado → toggle en `assignedForms`.
 
-Nueva función helper `isFormEffectivelyAssigned(formId, folderId, projectId)`:
+Nuevo helper `isFormEffectivelyAssigned(formId, folderId, projectId)`:
 ```ts
-const inheritsFromProject = assignedProjects.has(projectId);
+const inheritsFromProject = assignedProjects.has(projectId) && !excludedFolders.has(folderId);
 const inheritsFromFolder  = assignedFolders.has(folderId);
 const isExcluded          = excludedForms.has(formId);
 const isDirect            = assignedForms.has(formId);
 return (isDirect || inheritsFromProject || inheritsFromFolder) && !isExcluded;
 ```
 
+Nuevo helper `isFolderEffectivelyAssigned(folderId, projectId)`:
+```ts
+const inheritsFromProject = assignedProjects.has(projectId);
+const isExcluded          = excludedFolders.has(folderId);
+const isDirect            = assignedFolders.has(folderId);
+return (isDirect || inheritsFromProject) && !isExcluded;
+```
+
 ### `AssignmentTree.tsx` — cambios de UI
 
-- **`FolderRow`**: quitar `disabled` cuando proyecto asignado. Cambiar copy de *"incluida"* a *"hereda del proyecto"*.
-- **`FormRow`**: quitar `disabled`. Cambiar copy de *"incluido"* a *"hereda"*. Si está en `excludedForms`, mostrar checkbox desmarcado con un badge amber *"excluido"* y tachado en el nombre.
-- **Semántica visual del check en form**:
-  - Ancestro asignado + no excluido → check verde ✓ + tag "hereda".
-  - Ancestro asignado + excluido → check vacío + badge "excluido" + nombre tachado.
-  - Sin ancestro + directo → check verde ✓ (sin tag).
-  - Sin ancestro + no directo → check vacío.
+- **`FolderRow`**: quitar `disabled` cuando proyecto asignado. Copy y visual:
+  - Proyecto asignado + carpeta no excluida → check verde ✓ + tag *"hereda del proyecto"* (editable).
+  - Proyecto asignado + carpeta excluida → check vacío + badge amber *"excluida"* + nombre tachado.
+  - Sin proyecto asignado + carpeta directa → check verde ✓ + badge *"Carpeta completa"* (mantiene copy actual).
+  - Sin proyecto asignado + no directa → check vacío.
+- **`FormRow`**: quitar `disabled`. Copy y visual:
+  - Ancestro (proyecto o carpeta) asignado y no excluido → check verde ✓ + tag *"hereda"*.
+  - Ancestro asignado pero form excluido → check vacío + badge amber *"excluido"* + nombre tachado.
+  - Sin ancestro efectivo + directo → check verde ✓ (sin tag).
+  - Sin ancestro efectivo + no directo → check vacío.
+  - Si su folder está excluido → el form aparece con check vacío + tag gris *"carpeta excluida"* (no toggle-able hasta que se re-incluya la carpeta).
 
 ### `AssignmentsTab.tsx` (users) + `GroupAssignmentsPanel.tsx` — refactor de carga y guardado
 
@@ -167,7 +203,7 @@ return (isDirect || inheritsFromProject || inheritsFromFolder) && !isExcluded;
 
 | Caso | Comportamiento |
 |---|---|
-| Marcar proyecto y luego desmarcar carpeta entera | `excludedFolders` recibe la carpeta. Todos sus forms dejan de estar accesibles vía proyecto (a menos que estén en `excludedForms` — que se limpia porque ya no aplica). |
+| Marcar proyecto y luego desmarcar carpeta entera | `excludedFolders` recibe la carpeta. Todos sus forms dejan de estar accesibles vía proyecto. `excludedForms` de esa carpeta se limpian (redundantes). |
 | Marcar carpeta, desmarcar 2 forms, luego desmarcar carpeta | Se limpia `excludedForms` para forms de esa carpeta (los desmarcados dejan de tener sentido) y se saca la carpeta de `assignedFolders`. |
 | Marcar proyecto y form individual que ya heredaba | `assignedForms` ignora — no rompe nada. Al guardar, se persisten solo los positivos que aportan (proyecto). El `formId` directo queda como redundante en frontend pero backend lo tolera. |
 | Grupo asignado a proyecto + user miembro con exclusión personal | La exclusión personal gana. `positivo(grupo)` es true, `positivo(user)` es false, `exclusion(user, form)` es true → sin acceso. |
@@ -196,4 +232,4 @@ return (isDirect || inheritsFromProject || inheritsFromFolder) && !isExcluded;
 
 - Q: ¿Los forms nuevos en un proyecto/carpeta asignada se auto-incluyen? → **Sí** (elegido en brainstorming).
 - Q: ¿Agregar `folderId` al schema? → **Sí** (elegido en brainstorming).
-- Q: ¿Excluir carpeta entera hoy? → **Reservado** (estado presente, UI no lo expone en esta iteración).
+- Q: ¿Excluir carpeta entera hoy? → **Sí, expuesto en UI** (Sara confirmó: "que se pueda desde las asignaciones quitarle la asignación de una carpeta o de un formulario").
