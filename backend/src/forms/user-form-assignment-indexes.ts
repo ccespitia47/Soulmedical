@@ -14,15 +14,28 @@ const LEGACY_INDEX_NAMES = [
 export async function rebuildAssignmentIndexes(
   model: Model<UserFormAssignmentDocument>,
 ): Promise<void> {
+  // Backfill campo excluded en docs legacy — el partial-filter-expression
+  // {excluded: false} NO matchea field ausente en Mongo (a diferencia de null).
+  // Sin este backfill los índices unique-parcial rebuild-eados quedan sin cubrir
+  // los docs viejos y pierden la garantía de unicidad.
+  await model.updateMany(
+    { excluded: { $exists: false } },
+    { $set: { excluded: false } },
+  );
+
   const existing = await model.collection.indexes();
-  const names = new Set(existing.map((i) => i.name));
 
   for (const name of LEGACY_INDEX_NAMES) {
     const idx = existing.find((i) => i.name === name);
     if (idx && !('excluded' in (idx.partialFilterExpression ?? {}))) {
       // Índice legacy sin filtro excluded: se cae y Mongoose lo recrea con el
       // nuevo shape en el próximo syncIndexes().
-      await model.collection.dropIndex(name);
+      try {
+        await model.collection.dropIndex(name);
+      } catch (e: unknown) {
+        const err = e as { codeName?: string; code?: number };
+        if (err.codeName !== 'IndexNotFound' && err.code !== 27) throw e;
+      }
     }
   }
 
