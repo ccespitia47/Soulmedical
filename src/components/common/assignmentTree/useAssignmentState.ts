@@ -5,12 +5,19 @@ import type { FolderItem } from "../../../types/folder.types";
  * Estado y togglers compartidos por AssignmentsTab (users) y
  * GroupAssignmentsPanel (groups). La carga inicial y el guardado son
  * responsabilidad del wrapper porque cada uno usa endpoints distintos.
+ *
+ * Soporta jerarquía con exclusiones:
+ * - Proyecto → Carpeta → Formulario
+ * - Si proyecto asignado → carpeta hereda (excluir con excludedFolders)
+ * - Si carpeta excluida → forms heredan exclusión (excluir con excludedForms para override)
  */
 export function useAssignmentState() {
   const [assignedProjects, setAssignedProjects] = useState<Set<string>>(new Set());
   const [assignedFolders, setAssignedFolders] = useState<Set<string>>(new Set());
   const [assignedForms, setAssignedForms] = useState<Set<string>>(new Set());
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
+  const [excludedFolders, setExcludedFolders] = useState<Set<string>>(new Set());
+  const [excludedForms, setExcludedForms] = useState<Set<string>>(new Set());
 
   const toggleExpand = (id: string) =>
     setExpandedProjects((prev) => {
@@ -42,7 +49,33 @@ export function useAssignmentState() {
     projectId: string,
     folders: FolderItem[],
   ) => {
-    if (assignedProjects.has(projectId)) return;
+    const projectAssigned = assignedProjects.has(projectId);
+
+    if (projectAssigned) {
+      // El proyecto está asignado → toggle exclusión de carpeta.
+      setExcludedFolders((prev) => {
+        const next = new Set(prev);
+        if (next.has(folderId)) {
+          next.delete(folderId);
+        } else {
+          next.add(folderId);
+          // Al excluir la carpeta, limpiar excludedForms de sus forms
+          // (ya no aportan nada; la carpeta entera está excluida).
+          const folder = folders.find((f) => f.id === folderId);
+          if (folder) {
+            setExcludedForms((pf) => {
+              const nf = new Set(pf);
+              folder.forms.forEach((fm) => nf.delete(fm.id));
+              return nf;
+            });
+          }
+        }
+        return next;
+      });
+      return;
+    }
+
+    // Comportamiento actual: toggle en assignedFolders + arrastrar assignedForms.
     setAssignedFolders((prev) => {
       const next = new Set(prev);
       const folder = folders.find((f) => f.id === folderId);
@@ -68,7 +101,28 @@ export function useAssignmentState() {
   };
 
   const toggleForm = (formId: string, folderId: string, projectId: string) => {
-    if (assignedProjects.has(projectId) || assignedFolders.has(folderId)) return;
+    const projectAssigned = assignedProjects.has(projectId);
+    const folderExcluded = excludedFolders.has(folderId);
+    const folderAssigned = assignedFolders.has(folderId);
+    const inheritsFromAncestor =
+      (projectAssigned && !folderExcluded) || folderAssigned;
+
+    if (folderExcluded) {
+      // Carpeta excluida: no permitir togglear forms hasta que se re-incluya.
+      return;
+    }
+
+    if (inheritsFromAncestor) {
+      setExcludedForms((prev) => {
+        const next = new Set(prev);
+        if (next.has(formId)) next.delete(formId);
+        else next.add(formId);
+        return next;
+      });
+      return;
+    }
+
+    // Comportamiento actual: toggle directo en assignedForms.
     setAssignedForms((prev) => {
       const next = new Set(prev);
       if (next.has(formId)) next.delete(formId);
@@ -77,17 +131,43 @@ export function useAssignmentState() {
     });
   };
 
+  const isFolderEffectivelyAssigned = (folderId: string, projectId: string) => {
+    const isDirect = assignedFolders.has(folderId);
+    const inheritsFromProject = assignedProjects.has(projectId);
+    const isExcluded = excludedFolders.has(folderId);
+    return (isDirect || inheritsFromProject) && !isExcluded;
+  };
+
+  const isFormEffectivelyAssigned = (
+    formId: string,
+    folderId: string,
+    projectId: string,
+  ) => {
+    const isDirect = assignedForms.has(formId);
+    const inheritsFromProject =
+      assignedProjects.has(projectId) && !excludedFolders.has(folderId);
+    const inheritsFromFolder = assignedFolders.has(folderId);
+    const isExcluded = excludedForms.has(formId) || excludedFolders.has(folderId);
+    return (isDirect || inheritsFromProject || inheritsFromFolder) && !isExcluded;
+  };
+
   return {
     assignedProjects,
     assignedFolders,
     assignedForms,
+    excludedFolders,
+    excludedForms,
     expandedProjects,
     setAssignedProjects,
     setAssignedFolders,
     setAssignedForms,
+    setExcludedFolders,
+    setExcludedForms,
     toggleExpand,
     toggleProject,
     toggleFolder,
     toggleForm,
+    isFolderEffectivelyAssigned,
+    isFormEffectivelyAssigned,
   };
 }
