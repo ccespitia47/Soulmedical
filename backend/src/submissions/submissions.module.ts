@@ -43,6 +43,8 @@ import { ReportsModule } from '../reports/reports.module';
     ApiKeyGuard,
     PermissionsGuard,
   ],
-  exports: [SubmissionsService],
+  // BulkPdfService se exporta además de SubmissionsService: TasksController
+  // (módulo distinto) lo inyecta para el endpoint POST /tasks/:id/bulk-pdf.
+  exports: [SubmissionsService, BulkPdfService],
 })
 export class SubmissionsModule {}

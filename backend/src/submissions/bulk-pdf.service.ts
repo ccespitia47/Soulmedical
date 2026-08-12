@@ -63,7 +63,7 @@ export class BulkPdfService {
   async request(
     formId: string,
     userId: number,
-    filters: { from?: string; to?: string; q?: string },
+    filters: { from?: string; to?: string; q?: string; taskId?: string },
     ip: string | null,
     actor: { name: string; role: string },
   ): Promise<{ ok: boolean; count: number; message: string }> {
@@ -89,6 +89,7 @@ export class BulkPdfService {
       if (filters.to) range.$lte = new Date(filters.to + 'T23:59:59.999Z');
       query.submittedAt = range;
     }
+    if (filters.taskId) query.taskId = filters.taskId;
 
     let subs = (await this.submissionModel
       .find(query)

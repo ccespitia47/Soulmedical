@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -376,6 +377,46 @@ export class TasksService {
     };
   }
 
+  /** Reenvía manualmente el email de un paso pendiente (botón "Reenviar" en Reportes). */
+  async resendStep(
+    taskId: string,
+    stepIndex: number,
+    userId: number,
+  ): Promise<{ ok: true; sentAt: string }> {
+    const task = await this.taskModel.findById(taskId);
+    if (!task) throw new NotFoundException('Tarea no encontrada');
+    if (task.createdById !== userId) {
+      throw new ForbiddenException('No autorizado');
+    }
+
+    const step = task.steps[stepIndex];
+    if (!step) throw new BadRequestException('Step inexistente');
+    if (step.status === 'completed') {
+      throw new BadRequestException('Ese destinatario ya completó');
+    }
+
+    const now = new Date();
+    const TEN_MIN = 10 * 60 * 1000;
+    if (
+      step.lastReminderAt &&
+      now.getTime() - step.lastReminderAt.getTime() < TEN_MIN
+    ) {
+      const restante = Math.ceil(
+        (TEN_MIN - (now.getTime() - step.lastReminderAt.getTime())) / 60_000,
+      );
+      throw new HttpException(
+        `Espera ${restante} min para reenviar de nuevo`,
+        429,
+      );
+    }
+
+    await this.sendStepEmail(task, stepIndex);
+    step.lastReminderAt = now;
+    task.markModified('steps');
+    await task.save();
+    return { ok: true, sentAt: now.toISOString() };
+  }
+
   /**
    * Tareas activas en las que el usuario participa: ya sea porque le toca
    * ahora ('in_progress'), porque su paso está aún por llegar ('pending'),
@@ -606,7 +647,9 @@ export class TasksService {
     return `${base}/task/${token}`;
   }
 
-  private async sendStepEmail(task: TaskDocument, stepIndex: number): Promise<void> {
+  // Público: Task 4 (cron de recordatorios automáticos) y el endpoint de
+  // reenvío manual (resendStep) lo invocan desde fuera de esta clase.
+  async sendStepEmail(task: TaskDocument, stepIndex: number): Promise<void> {
     const step = task.steps[stepIndex];
     const isFirst = stepIndex === 0;
     const taskUrl = this.getTaskUrl(step.token);

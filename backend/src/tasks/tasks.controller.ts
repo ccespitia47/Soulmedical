@@ -3,7 +3,11 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  Logger,
+  NotFoundException,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
   Query,
@@ -20,6 +24,7 @@ import { Permission } from '../auth/permissions';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto, SubmitTaskStepDto } from './tasks.dto';
 import type { TaskDocument } from './task.schema';
+import { BulkPdfService } from '../submissions/bulk-pdf.service';
 
 type AuthedRequest = Request & {
   user?: { id: number; email?: string; role?: string };
@@ -27,7 +32,12 @@ type AuthedRequest = Request & {
 
 @Controller('tasks')
 export class TasksController {
-  constructor(private readonly tasksService: TasksService) {}
+  private readonly logger = new Logger(TasksController.name);
+
+  constructor(
+    private readonly tasksService: TasksService,
+    private readonly bulkPdf: BulkPdfService,
+  ) {}
 
   @UseGuards(JwtAuthGuard)
   @Post()
@@ -114,6 +124,62 @@ export class TasksController {
   @Get(':id/detail')
   async getDetail(@Param('id') id: string) {
     return this.tasksService.getDetail(id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/steps/:stepIndex/resend')
+  @Throttle({ default: { limit: 1, ttl: 600_000 } }) // 1 vez cada 10 min por IP
+  async resendStep(
+    @Param('id') id: string,
+    @Param('stepIndex', ParseIntPipe) stepIndex: number,
+    @Req() req: AuthedRequest,
+  ) {
+    const user = req.user;
+    if (!user) throw new UnauthorizedException('Usuario no autenticado');
+    return this.tasksService.resendStep(id, stepIndex, Number(user.id));
+  }
+
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission(Permission.REPORTS_VIEW)
+  @Post(':id/bulk-pdf')
+  @Throttle({ default: { limit: 1, ttl: 60_000 } })
+  @HttpCode(202)
+  async bulkPdfForTask(
+    @Param('id') id: string,
+    @Req() req: AuthedRequest,
+  ): Promise<{ ok: true; message: string }> {
+    const task = await this.tasksService.findOne(id);
+    if (!task) throw new NotFoundException('Tarea no encontrada');
+    const user = req.user;
+    if (!user) throw new UnauthorizedException('Usuario no autenticado');
+    const userId = Number(user.id);
+    const actor = { name: user.email ?? `user${user.id}`, role: user.role ?? '' };
+
+    // Fire-and-forget: renderizar PDFs con Puppeteer puede tomar minutos y
+    // revienta cualquier proxy con timeout HTTP default (mismo patrón que
+    // RecordsController.requestBulk). El usuario recibe el resultado por correo.
+    void this.bulkPdf
+      .request(task.formId, userId, { taskId: id }, req.ip ?? null, actor)
+      .then((result) => {
+        if (result.ok) {
+          this.logger.log(`[bulk-pdf] task=${id} user=${userId} ok count=${result.count}`);
+        } else {
+          this.logger.warn(
+            `[bulk-pdf] task=${id} user=${userId} sin_resultado: ${result.message}`,
+          );
+        }
+      })
+      .catch((err) => {
+        this.logger.error(
+          `[bulk-pdf] task=${id} user=${userId} ERROR: ${err instanceof Error ? err.message : String(err)}`,
+          err instanceof Error ? err.stack : undefined,
+        );
+      });
+
+    return {
+      ok: true,
+      message: 'Estamos generando y enviándote los PDFs por correo.',
+    };
   }
 
   @UseGuards(JwtAuthGuard)
