@@ -56,6 +56,11 @@ export default function CreateTaskModal({
   const [allUsers, setAllUsers] = useState<SimpleUser[]>([]);
   const [groups, setGroups] = useState<GroupData[]>([]);
   const [linkBusy, setLinkBusy] = useState(false);
+  // Bump para forzar remount del <input type="checkbox"> del link cuando
+  // necesitamos que el DOM revierta al valor real de shareEnabled (cancel
+  // del confirm, error del PATCH). Sin esto React 18 hace bail-out con
+  // Object.is y el DOM queda visualmente inconsistente con el estado.
+  const [shareCheckboxKey, setShareCheckboxKey] = useState(0);
 
   const stepsCtl = useTaskSteps(allUsers);
 
@@ -187,6 +192,7 @@ export default function CreateTaskModal({
     if (!nextEnabled && shareLinkUrl) {
       // Confirm inline antes de destildar (link viejo dejará de funcionar).
       if (!window.confirm('El enlace actual dejará de funcionar. ¿Continuar?')) {
+        setShareCheckboxKey((k) => k + 1);
         return;
       }
     }
@@ -195,6 +201,7 @@ export default function CreateTaskModal({
     setLinkBusy(false);
     if (res.error || !res.data) {
       setError(res.error ?? 'No se pudo actualizar el enlace');
+      setShareCheckboxKey((k) => k + 1);
       return;
     }
     setShareEnabled(nextEnabled);
@@ -335,6 +342,7 @@ export default function CreateTaskModal({
               onShareEnabledChange={handleToggleShareLink}
               disabled={!taskCreated}
               shareCheckboxDisabled={linkBusy}
+              shareCheckboxKey={shareCheckboxKey}
               shareLinkUrl={shareLinkUrl}
             />
           </div>

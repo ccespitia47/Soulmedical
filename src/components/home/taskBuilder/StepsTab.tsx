@@ -20,6 +20,7 @@ type StepsTabProps = {
   onShareEnabledChange?: (v: boolean) => void;
   disabled?: boolean;
   shareCheckboxDisabled?: boolean;
+  shareCheckboxKey?: number;
   shareLinkUrl?: string | null;
 };
 
@@ -40,6 +41,7 @@ export default function StepsTab({
   onShareEnabledChange,
   disabled = false,
   shareCheckboxDisabled = false,
+  shareCheckboxKey = 0,
   shareLinkUrl = null,
 }: StepsTabProps) {
   const getFiltered = (stepId: string): SimpleUser[] => {
@@ -65,6 +67,7 @@ export default function StepsTab({
           className={`flex items-start gap-2.5 ${shareCheckboxDisabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
         >
           <input
+            key={`share-cbx-${shareCheckboxKey}`}
             type="checkbox"
             checked={shareEnabled}
             disabled={shareCheckboxDisabled}
