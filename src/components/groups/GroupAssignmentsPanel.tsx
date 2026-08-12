@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
 import {
-  getGroupAssignmentsApi,
-  assignProjectToGroupApi,
-  unassignProjectFromGroupApi,
-  assignFormToGroupApi,
-  unassignFormFromGroupApi,
+  getGroupAssignmentsTreeApi,
+  putGroupAssignmentsTreeApi,
 } from "../../services/api";
 import { useProjectStore } from "../../store/useProjectStore";
 import { useFolderStore } from "../../store/useFolderStore";
@@ -35,65 +32,29 @@ export default function GroupAssignmentsPanel({ groupId }: GroupAssignmentsPanel
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const res = await getGroupAssignmentsApi(groupId);
-      const data = res.data ?? [];
-      const projIds = new Set(
-        data.filter((a) => a.projectId && !a.formId).map((a) => a.projectId!),
-      );
-      const formIds = new Set(data.filter((a) => a.formId).map((a) => a.formId!));
-      state.setAssignedProjects(projIds);
-      state.setAssignedForms(formIds);
-      const folderIds = new Set<string>();
-      folders.forEach((folder) => {
-        if (!projIds.has(folder.projectId)) {
-          if (folder.forms.some((fm) => formIds.has(fm.id)))
-            folderIds.add(folder.id);
-        }
-      });
-      state.setAssignedFolders(folderIds);
+      const res = await getGroupAssignmentsTreeApi(groupId);
+      const tree = res.data;
+      if (tree) {
+        state.setAssignedProjects(new Set(tree.projects));
+        state.setAssignedFolders(new Set(tree.folders));
+        state.setAssignedForms(new Set(tree.forms));
+        state.setExcludedFolders(new Set(tree.excludedFolders));
+        state.setExcludedForms(new Set(tree.excludedForms));
+      }
       setLoading(false);
     };
-    if (folders.length > 0) load();
-    else if (projects.length > 0 && folders.length === 0) setLoading(false);
-  }, [groupId, folders.length]);
+    if (groupId) load();
+  }, [groupId]);
 
   const handleSave = async () => {
     setSaving(true);
-    const res = await getGroupAssignmentsApi(groupId);
-    const current = res.data ?? [];
-    const currentProjects = new Set(
-      current.filter((a) => a.projectId && !a.formId).map((a) => a.projectId!),
-    );
-    const currentForms = new Set(
-      current.filter((a) => a.formId).map((a) => a.formId!),
-    );
-
-    for (const p of projects) {
-      if (state.assignedProjects.has(p.id) && !currentProjects.has(p.id))
-        await assignProjectToGroupApi(groupId, p.id);
-      if (!state.assignedProjects.has(p.id) && currentProjects.has(p.id))
-        await unassignProjectFromGroupApi(groupId, p.id);
-    }
-
-    const allForms = folders.flatMap((f) =>
-      f.forms.map((fm) => ({
-        formId: fm.id,
-        folderId: f.id,
-        projectId: f.projectId,
-      })),
-    );
-    for (const { formId, folderId, projectId } of allForms) {
-      const folder = folders.find((f) => f.id === folderId);
-      const should =
-        state.assignedProjects.has(projectId) ||
-        (folder ? state.assignedFolders.has(folder.id) : false) ||
-        state.assignedForms.has(formId);
-      if (should && !currentForms.has(formId))
-        await assignFormToGroupApi(groupId, formId);
-      if (!should && currentForms.has(formId))
-        await unassignFormFromGroupApi(groupId, formId);
-    }
-
+    await putGroupAssignmentsTreeApi(groupId, {
+      projects: [...state.assignedProjects],
+      folders: [...state.assignedFolders],
+      forms: [...state.assignedForms],
+      excludedFolders: [...state.excludedFolders],
+      excludedForms: [...state.excludedForms],
+    });
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -124,6 +85,8 @@ export default function GroupAssignmentsPanel({ groupId }: GroupAssignmentsPanel
           assignedProjects={state.assignedProjects}
           assignedFolders={state.assignedFolders}
           assignedForms={state.assignedForms}
+          excludedFolders={state.excludedFolders}
+          excludedForms={state.excludedForms}
           expandedProjects={state.expandedProjects}
           onToggleExpand={state.toggleExpand}
           onToggleProject={state.toggleProject}

@@ -585,6 +585,32 @@ export async function getSubmissionsApi(formId: string, page = 1, limit = 50) {
   return request<SubmissionsPage>(`/forms/${formId}/submissions?page=${page}&limit=${limit}`);
 }
 
+// --- Assignments (Tree endpoints) ---
+
+export type AssignmentsTreeDto = {
+  projects: string[];
+  folders: string[];
+  forms: string[];
+  excludedFolders: string[];
+  excludedForms: string[];
+};
+
+export const getUserAssignmentsTreeApi = (userId: number) =>
+  request<AssignmentsTreeDto>(`/users/${userId}/assignments/tree`);
+
+export const putUserAssignmentsTreeApi = (
+  userId: number,
+  body: AssignmentsTreeDto,
+) => request<{ ok: true }>(`/users/${userId}/assignments/tree`, { method: 'PUT', body: JSON.stringify(body) });
+
+export const getGroupAssignmentsTreeApi = (groupId: string) =>
+  request<AssignmentsTreeDto>(`/groups/${groupId}/assignments/tree`);
+
+export const putGroupAssignmentsTreeApi = (
+  groupId: string,
+  body: AssignmentsTreeDto,
+) => request<{ ok: true }>(`/groups/${groupId}/assignments/tree`, { method: 'PUT', body: JSON.stringify(body) });
+
 // --- Grupos ---
 
 export type GroupData = {
