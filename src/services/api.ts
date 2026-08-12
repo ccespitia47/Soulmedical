@@ -59,8 +59,12 @@ async function request<T>(
 
     const data = await response.json();
     return { data, error: null };
-  } catch {
-    return { data: null, error: 'No se pudo conectar con el servidor' };
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e);
+    return {
+      data: null,
+      error: `No se pudo conectar con el servidor: ${detail} (${endpoint})`,
+    };
   }
 }
 
