@@ -224,13 +224,15 @@ export class UsersController {
    * target-first de HomePage.tsx) — este endpoint no los reemplaza ni los
    * toca; es el shape nuevo que usará el picker jerárquico.
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.COORDINATOR)
   @Get(':id/assignments/tree')
   async getAssignmentsTree(@Param('id', ParseIntPipe) id: number) {
     return this.assignmentsTreeService.read({ userId: id });
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.COORDINATOR)
   @Put(':id/assignments/tree')
   async putAssignmentsTree(
     @Param('id', ParseIntPipe) id: number,

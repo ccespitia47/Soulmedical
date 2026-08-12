@@ -1,6 +1,9 @@
 import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { UserRole } from '../users/user.entity';
 import { GroupsService } from './groups.service';
 import { AssignmentsTreeService } from '../forms/assignments-tree.service';
 import { AssignmentsTreeDto } from '../forms/assignments-tree.dto';
@@ -82,13 +85,15 @@ export class GroupsController {
    * Análogo a `GET/PUT /users/:id/assignments/tree` pero para grupos.
    * Coexiste con `/assign/project` y `/assign/form` legacy — no los toca.
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.COORDINATOR)
   @Get(':id/assignments/tree')
   async getAssignmentsTree(@Param('id') id: string) {
     return this.assignmentsTreeService.read({ groupId: id });
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.COORDINATOR)
   @Put(':id/assignments/tree')
   async putAssignmentsTree(
     @Param('id') id: string,

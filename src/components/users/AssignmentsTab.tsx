@@ -98,7 +98,7 @@ export default function AssignmentsTab({ userId }: AssignmentsTabProps) {
         excludedForms={state.excludedForms}
         expandedProjects={state.expandedProjects}
         onToggleExpand={state.toggleExpand}
-        onToggleProject={state.toggleProject}
+        onToggleProject={(id) => state.toggleProject(id, folders)}
         onToggleFolder={(folderId, projectId) =>
           state.toggleFolder(folderId, projectId, folders)
         }

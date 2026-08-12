@@ -27,11 +27,28 @@ export function useAssignmentState() {
       return next;
     });
 
-  const toggleProject = (projectId: string) => {
+  const toggleProject = (projectId: string, folders: FolderItem[]) => {
     setAssignedProjects((prev) => {
       const next = new Set(prev);
       if (next.has(projectId)) {
         next.delete(projectId);
+        // Al des-asignar el proyecto, limpiar todas las exclusiones que colgaban
+        // de él (folder-excl + form-excl de forms cuyo folder está en el project).
+        const projectFolders = folders.filter((f) => f.projectId === projectId);
+        const folderIds = new Set(projectFolders.map((f) => f.id));
+        const formIds = new Set(
+          projectFolders.flatMap((f) => f.forms.map((fm) => fm.id)),
+        );
+        setExcludedFolders((pf) => {
+          const nf = new Set(pf);
+          folderIds.forEach((id) => nf.delete(id));
+          return nf;
+        });
+        setExcludedForms((pf) => {
+          const nf = new Set(pf);
+          formIds.forEach((id) => nf.delete(id));
+          return nf;
+        });
       } else {
         next.add(projectId);
         setExpandedProjects((e) => {
@@ -103,16 +120,15 @@ export function useAssignmentState() {
   const toggleForm = (formId: string, folderId: string, projectId: string) => {
     const projectAssigned = assignedProjects.has(projectId);
     const folderExcluded = excludedFolders.has(folderId);
-    const folderAssigned = assignedFolders.has(folderId);
-    const inheritsFromAncestor =
-      (projectAssigned && !folderExcluded) || folderAssigned;
+    const inheritsFromProject = projectAssigned && !folderExcluded;
 
     if (folderExcluded) {
       // Carpeta excluida: no permitir togglear forms hasta que se re-incluya.
       return;
     }
 
-    if (inheritsFromAncestor) {
+    // Herencia por PROYECTO: usar excludedForms (necesitamos marcar exclusión).
+    if (inheritsFromProject) {
       setExcludedForms((prev) => {
         const next = new Set(prev);
         if (next.has(formId)) next.delete(formId);
@@ -122,7 +138,9 @@ export function useAssignmentState() {
       return;
     }
 
-    // Comportamiento actual: toggle directo en assignedForms.
+    // Herencia por CARPETA directa: la carpeta pobló assignedForms, así que
+    // toggle in-place ahí (no usar excludedForms para evitar duplicados que
+    // fallan la validación backend "forms y excludedForms simultáneamente").
     setAssignedForms((prev) => {
       const next = new Set(prev);
       if (next.has(formId)) next.delete(formId);

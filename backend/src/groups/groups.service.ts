@@ -109,7 +109,7 @@ export class GroupsService {
   // ── Group assignments (projects + forms) ──────────────────────────────────
 
   async getGroupAssignments(groupId: string): Promise<UserFormAssignmentDocument[]> {
-    return this.assignmentModel.find({ groupId });
+    return this.assignmentModel.find({ groupId, excluded: false });
   }
 
   async assignProjectToGroup(groupId: string, projectId: string): Promise<UserFormAssignmentDocument> {
@@ -125,12 +125,14 @@ export class GroupsService {
 
   async assignFormToGroup(groupId: string, formId: string): Promise<UserFormAssignmentDocument> {
     await this.findOne(groupId);
-    const exists = await this.assignmentModel.findOne({ groupId, formId });
+    // excluded:false evita que una fila de exclusión (creada por el árbol de
+    // asignaciones) se lea como asignación positiva ya existente.
+    const exists = await this.assignmentModel.findOne({ groupId, formId, excluded: false });
     if (exists) throw new ConflictException('El formulario ya está asignado a este grupo');
     return this.assignmentModel.create({ groupId, formId, userId: null });
   }
 
   async unassignFormFromGroup(groupId: string, formId: string): Promise<void> {
-    await this.assignmentModel.deleteOne({ groupId, formId });
+    await this.assignmentModel.deleteOne({ groupId, formId, excluded: false });
   }
 }

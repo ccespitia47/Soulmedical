@@ -61,14 +61,15 @@ export class AssignmentsTreeService {
 
   /**
    * Reemplaza toda la config de assignments del subject de forma idempotente:
-   * dos llamadas iguales dejan el mismo estado en DB.
+   * dos llamadas iguales SECUENCIALES dejan el mismo estado en DB.
    *
-   * NO ATÓMICO ante concurrencia: si dos PUT distintos llegan al mismo subject
-   * simultáneamente (dos pestañas del mismo admin editando), el resultado puede
-   * ser la unión de ambos payloads en vez del último. Aceptable en el uso
-   * actual (admin edita en una sola tab, no hay editor multiusuario). Si el
-   * despliegue Mongo soporta transacciones, envolver deleteMany+insertMany en
-   * `session.withTransaction(...)` cierra la ventana.
+   * NO ATÓMICO ante concurrencia: si dos PUT llegan al mismo subject
+   * simultáneamente (doble-click, dos pestañas), el segundo puede fallar con
+   * MongoServerError E11000 (dup key) porque ambos hacen deleteMany paralelo
+   * y luego insertMany del mismo set. El frontend maneja el error mostrando
+   * el banner rojo. Real fix (si se vuelve problema): envolver deleteMany +
+   * insertMany en session.withTransaction() cuando el despliegue Mongo
+   * soporte transacciones (requiere replica set).
    */
   async write(subject: Subject, dto: AssignmentsTreeDto): Promise<{ ok: true }> {
     await this.validateSubjectExists(subject);

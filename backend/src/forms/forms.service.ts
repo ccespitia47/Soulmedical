@@ -433,7 +433,11 @@ export class FormsService implements OnModuleInit {
   }
 
   async assignUser(formId: string, userId: number): Promise<UserFormAssignmentDocument> {
-    const exists = await this.assignmentModel.findOne({ formId, userId });
+    // excluded:false filtra las filas de exclusión creadas por el árbol de
+    // asignaciones (PUT /assignments/tree) — sin este filtro, una fila
+    // {formId, userId, excluded:true} se ve como asignación positiva y
+    // dispara un ConflictException falso al intentar asignar de verdad.
+    const exists = await this.assignmentModel.findOne({ formId, userId, excluded: false });
     if (exists)
       throw new ConflictException('El usuario ya está asignado a este formulario');
     const assignment = new this.assignmentModel({ formId, userId });
@@ -441,10 +445,12 @@ export class FormsService implements OnModuleInit {
   }
 
   async unassignUser(formId: string, userId: number): Promise<void> {
-    await this.assignmentModel.deleteOne({ formId, userId });
+    // Igual que en assignUser: no borrar la fila de exclusión, solo la
+    // asignación positiva legacy.
+    await this.assignmentModel.deleteOne({ formId, userId, excluded: false });
   }
 
   async getAssignedUsers(formId: string): Promise<UserFormAssignmentDocument[]> {
-    return this.assignmentModel.find({ formId });
+    return this.assignmentModel.find({ formId, excluded: false });
   }
 }
