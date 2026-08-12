@@ -6,10 +6,13 @@ import { useAuthStore } from "../store/useAuthStore";
 import type { FormItem } from "../types/folder.types";
 import type { WidgetInstance } from "../types/widget.types";
 import RecordsTable from "../components/reports/RecordsTable";
+import TasksReportPanel from "../components/reports/TasksReportPanel";
+import Icon from "../components/common/Icon";
+import SelectMenu, { type SelectOption } from "../components/common/SelectMenu";
 
 type Field = { id: string; label: string; type: string };
 
-type Tab = "excel" | "records";
+type Tab = "excel" | "records" | "tasks";
 
 export default function ReportsPage() {
   const { projects, selectedProjectId, selectProject, loadProjects } =
@@ -53,91 +56,113 @@ export default function ReportsPage() {
     setSelectedFormId("");
   };
 
+  const projectOptions = useMemo<SelectOption[]>(
+    () => [
+      { value: "", label: "— Seleccionar proyecto —" },
+      ...projects.map((p) => ({ value: p.id, label: p.name })),
+    ],
+    [projects],
+  );
+  const folderOptions = useMemo<SelectOption[]>(
+    () => [
+      { value: "", label: "— Seleccionar carpeta —" },
+      ...projectFolders.map((f) => ({ value: f.id, label: f.name })),
+    ],
+    [projectFolders],
+  );
+  const formOptions = useMemo<SelectOption[]>(
+    () => [
+      { value: "", label: "— Seleccionar formulario —" },
+      ...(selectedFolder?.forms ?? []).map((f) => ({ value: f.id, label: f.name })),
+    ],
+    [selectedFolder],
+  );
+
+  const TABS = [
+    { id: "excel" as Tab, icon: "table", label: "Excel por correo" },
+    { id: "records" as Tab, icon: "fileText", label: "Registros y PDFs" },
+    { id: "tasks" as Tab, icon: "inbox", label: "Tareas" },
+  ];
+
   return (
     <div className="flex h-screen flex-col bg-[#f0f4f8]">
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[1100px] px-6 py-6">
-          <h1 className="m-0 text-[22px] font-bold text-gray-900">Reportes</h1>
+        <div className="mx-auto max-w-[1100px] px-4 py-6 sm:px-6 sm:py-8">
+          {/* Cabecera */}
+          <div className="animate-fade-up mb-5 flex items-center gap-3 sm:gap-3.5">
+            <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#00c2a8_0%,#0891b2_100%)] text-white shadow-[0_8px_20px_-6px_rgba(0,194,168,0.55)] sm:h-12 sm:w-12">
+              <Icon name="chart" size={24} />
+            </div>
+            <div className="min-w-0">
+              <h1 className="m-0 text-[20px] font-extrabold tracking-tight text-slate-900 sm:text-[24px]">
+                Reportes
+              </h1>
+              <p className="mt-0.5 text-[12.5px] text-gray-500 sm:text-[13px]">
+                Exporta registros a Excel y descarga los PDFs de tus formularios.
+              </p>
+            </div>
+          </div>
 
-          <div className="mt-3 flex border-b border-slate-200 bg-white">
-            <button
-              type="button"
-              onClick={() => setTab("excel")}
-              className={`cursor-pointer border-none bg-transparent px-5 py-3 text-[13px] font-semibold ${
-                tab === "excel"
-                  ? "border-b-[2.5px] border-[#00c2a8] text-[#0f766e]"
-                  : "text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              📊 Excel por correo
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab("records")}
-              className={`cursor-pointer border-none bg-transparent px-5 py-3 text-[13px] font-semibold ${
-                tab === "records"
-                  ? "border-b-[2.5px] border-[#00c2a8] text-[#0f766e]"
-                  : "text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              📄 Registros y PDFs
-            </button>
+          {/* Pestañas */}
+          <div className="animate-fade-up mb-4 flex gap-1 overflow-x-auto rounded-xl border border-slate-200/80 bg-white p-1 shadow-[0_6px_20px_-16px_rgba(15,40,80,0.3)] [animation-delay:60ms]">
+            {TABS.map((t) => {
+              const active = tab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTab(t.id)}
+                  className="flex flex-shrink-0 cursor-pointer items-center gap-2 rounded-lg border-none px-4 py-2.5 text-[13px] font-semibold transition-all"
+                  style={{
+                    background: active
+                      ? "linear-gradient(135deg, rgba(0,194,168,0.16) 0%, rgba(8,145,178,0.12) 100%)"
+                      : "transparent",
+                    color: active ? "#0891b2" : "#64748b",
+                    boxShadow: active ? "inset 0 0 0 1px rgba(0,194,168,0.22)" : "none",
+                  }}
+                >
+                  <Icon name={t.icon} size={16} /> {t.label}
+                </button>
+              );
+            })}
           </div>
 
           {/* Selectores comunes */}
-          <div className="my-4 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3">
+          <div className="animate-fade-up mb-4 grid gap-3 rounded-[20px] border border-slate-200/80 bg-white/80 p-4 shadow-[0_10px_30px_-18px_rgba(15,40,80,0.25)] backdrop-blur-sm sm:grid-cols-3 [animation-delay:120ms]">
             <div>
-              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                Proyecto
+              <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                <Icon name="building" size={12} className="text-[#00c2a8]" /> Proyecto
               </label>
-              <select
+              <SelectMenu
                 value={selectedProjectId ?? ""}
-                onChange={(e) => handleProjectChange(e.target.value)}
-                className="w-full cursor-pointer rounded-md border-[1.5px] border-slate-200 bg-white px-2.5 py-2 text-[13px]"
-              >
-                <option value="">— Seleccionar proyecto —</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.icon} {p.name}
-                  </option>
-                ))}
-              </select>
+                onChange={handleProjectChange}
+                options={projectOptions}
+                leftIcon="building"
+              />
             </div>
             <div>
-              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                Carpeta
+              <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                <Icon name="folder" size={12} className="text-[#00c2a8]" /> Carpeta
               </label>
-              <select
+              <SelectMenu
                 value={selectedFolderId}
-                onChange={(e) => handleFolderChange(e.target.value)}
+                onChange={handleFolderChange}
+                options={folderOptions}
+                leftIcon="folder"
                 disabled={!selectedProjectId}
-                className="w-full cursor-pointer rounded-md border-[1.5px] border-slate-200 bg-white px-2.5 py-2 text-[13px] disabled:cursor-not-allowed disabled:bg-slate-50"
-              >
-                <option value="">— Seleccionar carpeta —</option>
-                {projectFolders.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.icon} {f.name}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
             <div>
-              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                Formulario
+              <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                <Icon name="clipboard" size={12} className="text-[#00c2a8]" /> Formulario
               </label>
-              <select
+              <SelectMenu
                 value={selectedFormId}
-                onChange={(e) => setSelectedFormId(e.target.value)}
+                onChange={setSelectedFormId}
+                options={formOptions}
+                leftIcon="clipboard"
                 disabled={!selectedFolderId}
-                className="w-full cursor-pointer rounded-md border-[1.5px] border-slate-200 bg-white px-2.5 py-2 text-[13px] disabled:cursor-not-allowed disabled:bg-slate-50"
-              >
-                <option value="">— Seleccionar formulario —</option>
-                {(selectedFolder?.forms ?? []).map((form) => (
-                  <option key={form.id} value={form.id}>
-                    📋 {form.name}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
           </div>
 
@@ -148,13 +173,29 @@ export default function ReportsPage() {
           {tab === "records" && selectedForm && (
             <RecordsTable formId={selectedForm.id} formName={selectedForm.name} />
           )}
-          {tab === "records" && !selectedForm && (
-            <div className="rounded-xl border-2 border-dashed border-slate-200 px-6 py-14 text-center text-gray-400">
-              Selecciona proyecto, carpeta y formulario para ver sus registros.
-            </div>
+          {tab === "records" && !selectedForm && <SelectPrompt />}
+
+          {tab === "tasks" && selectedForm && (
+            <TasksReportPanel formId={selectedForm.id} formName={selectedForm.name} />
           )}
+          {tab === "tasks" && !selectedForm && <SelectPrompt />}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Estado vacío cuando aún no se ha elegido un formulario. */
+function SelectPrompt() {
+  return (
+    <div className="animate-fade-up rounded-[20px] border-2 border-dashed border-slate-200 bg-white/60 px-6 py-16 text-center">
+      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+        <Icon name="fileText" size={26} />
+      </div>
+      <p className="text-[15px] font-bold text-slate-700">Elige un formulario</p>
+      <p className="mt-1 text-[13px] text-gray-400">
+        Selecciona proyecto, carpeta y formulario para ver sus registros.
+      </p>
     </div>
   );
 }
@@ -221,82 +262,123 @@ function ExcelReportPanel({
 
   if (!selectedForm) {
     return (
-      <div className="rounded-xl border-2 border-dashed border-slate-200 px-6 py-14 text-center text-gray-400">
-        Selecciona un formulario para armar el reporte.
+      <div className="animate-fade-up rounded-[20px] border-2 border-dashed border-slate-200 bg-white/60 px-6 py-16 text-center">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+          <Icon name="table" size={26} />
+        </div>
+        <p className="text-[15px] font-bold text-slate-700">Elige un formulario</p>
+        <p className="mt-1 text-[13px] text-gray-400">
+          Selecciona un formulario para armar el reporte de Excel.
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <div className="mb-3 text-[12px] text-slate-600">
-        Te enviaremos un enlace de descarga a{" "}
-        <strong>{currentUser?.email ?? "tu correo"}</strong>. El enlace dura 2 min y requiere 2FA.
+    <div className="animate-fade-up rounded-[20px] border border-slate-200/80 bg-white p-5 shadow-[0_10px_30px_-18px_rgba(15,40,80,0.25)]">
+      {/* Aviso de envío */}
+      <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-cyan-100 bg-cyan-50/60 px-3.5 py-3 text-[12.5px] text-slate-700">
+        <Icon name="mail" size={16} className="mt-px flex-shrink-0 text-[#0891b2]" />
+        <span>
+          Te enviaremos un enlace de descarga a{" "}
+          <strong className="text-slate-800">{currentUser?.email ?? "tu correo"}</strong>. El
+          enlace dura 2 min y requiere 2FA.
+        </span>
       </div>
-      <div className="mb-3 flex items-center justify-between">
-        <div className="text-[12px] text-slate-500">
-          {selectedFieldIds.size} de {fields.length} campo(s) seleccionado(s)
+
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="text-[12px] font-medium text-slate-500">
+          <span className="font-bold text-[#0891b2]">{selectedFieldIds.size}</span> de{" "}
+          {fields.length} campo{fields.length !== 1 ? "s" : ""}
         </div>
         <div className="flex gap-1.5">
           <button
             type="button"
             onClick={() => setSelectedFieldIds(new Set(fields.map((f) => f.id)))}
-            className="cursor-pointer rounded-md border-[1.5px] border-slate-200 bg-white px-2.5 py-1 text-[11.5px] font-semibold text-gray-600"
+            className="cursor-pointer rounded-lg border-[1.5px] border-slate-200 bg-white px-2.5 py-1 text-[11.5px] font-semibold text-gray-600 transition hover:border-[#00c2a8]/40 hover:text-[#0891b2]"
           >
             Todos
           </button>
           <button
             type="button"
             onClick={() => setSelectedFieldIds(new Set())}
-            className="cursor-pointer rounded-md border-[1.5px] border-slate-200 bg-white px-2.5 py-1 text-[11.5px] font-semibold text-gray-600"
+            className="cursor-pointer rounded-lg border-[1.5px] border-slate-200 bg-white px-2.5 py-1 text-[11.5px] font-semibold text-gray-600 transition hover:border-slate-300 hover:text-gray-900"
           >
             Ninguno
           </button>
         </div>
       </div>
-      <div className="grid gap-1.5 sm:grid-cols-2">
-        {fields.map((f) => (
-          <label
-            key={f.id}
-            className="flex cursor-pointer items-center gap-2.5 rounded-md border border-slate-100 bg-slate-50 px-2.5 py-2 hover:bg-slate-100"
-          >
-            <input
-              type="checkbox"
-              checked={selectedFieldIds.has(f.id)}
-              onChange={() => toggleField(f.id)}
-              className="h-4 w-4 cursor-pointer accent-[#00c2a8]"
-            />
-            <div className="min-w-0 flex-1">
-              <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[12.5px] font-semibold text-gray-900">
-                {f.label}
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        {fields.map((f) => {
+          const checked = selectedFieldIds.has(f.id);
+          return (
+            <label
+              key={f.id}
+              className="flex cursor-pointer items-center gap-2.5 rounded-xl border-[1.5px] px-3 py-2.5 transition-all"
+              style={{
+                borderColor: checked ? "rgba(0,194,168,0.35)" : "#e2e8f0",
+                background: checked ? "rgba(0,194,168,0.06)" : "#fff",
+              }}
+            >
+              <span
+                className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-[6px] transition-colors"
+                style={{
+                  border: `2px solid ${checked ? "#00c2a8" : "#cbd5e1"}`,
+                  background: checked ? "#00c2a8" : "#fff",
+                }}
+              >
+                {checked && (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12l5 5L20 7" />
+                  </svg>
+                )}
+              </span>
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() => toggleField(f.id)}
+                className="sr-only"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[12.5px] font-semibold text-gray-900">
+                  {f.label}
+                </div>
+                <div className="text-[10px] uppercase tracking-wide text-gray-400">
+                  {f.type}
+                </div>
               </div>
-              <div className="text-[10px] uppercase tracking-wide text-gray-400">
-                {f.type}
-              </div>
-            </div>
-          </label>
-        ))}
+            </label>
+          );
+        })}
       </div>
+
       {feedback && (
         <div
-          className={`mt-3 rounded-md border px-3 py-2 text-[12px] ${
+          className={`mt-4 flex items-center gap-2 rounded-xl border px-3 py-2.5 text-[12.5px] ${
             feedback.kind === "ok"
               ? "border-emerald-200 bg-emerald-50 text-emerald-800"
               : "border-red-200 bg-red-50 text-red-800"
           }`}
         >
-          {feedback.kind === "ok" ? "✓ " : "⚠️ "}
-          {feedback.message}
+          <Icon
+            name={feedback.kind === "ok" ? "checkCircle" : "alert"}
+            size={15}
+            className="flex-shrink-0"
+          />
+          <span>{feedback.message}</span>
         </div>
       )}
-      <div className="mt-4 flex justify-end">
+
+      <div className="mt-5 flex justify-end">
         <button
           type="button"
           onClick={handleSendByEmail}
           disabled={busy || selectedFieldIds.size === 0}
-          className="cursor-pointer rounded-lg border-none bg-[#00c2a8] px-5 py-2.5 text-[13px] font-semibold text-white shadow-[0_4px_14px_rgba(0,194,168,0.35)] disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex cursor-pointer items-center gap-2 rounded-lg border-none bg-[linear-gradient(135deg,#00c2a8_0%,#0891b2_100%)] px-5 py-2.5 text-[13px] font-bold text-white shadow-[0_4px_14px_-4px_rgba(0,194,168,0.5)] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-6px_rgba(0,194,168,0.6)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none"
         >
-          {busy ? "Enviando…" : "Solicitar reporte →"}
+          <Icon name="send" size={15} />
+          {busy ? "Enviando…" : "Solicitar reporte"}
         </button>
       </div>
     </div>
