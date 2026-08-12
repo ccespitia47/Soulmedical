@@ -19,6 +19,7 @@ type StepsTabProps = {
   shareEnabled?: boolean;
   onShareEnabledChange?: (v: boolean) => void;
   disabled?: boolean;
+  shareCheckboxDisabled?: boolean;
   shareLinkUrl?: string | null;
 };
 
@@ -38,6 +39,7 @@ export default function StepsTab({
   shareEnabled = false,
   onShareEnabledChange,
   disabled = false,
+  shareCheckboxDisabled = false,
   shareLinkUrl = null,
 }: StepsTabProps) {
   const getFiltered = (stepId: string): SimpleUser[] => {
@@ -55,17 +57,17 @@ export default function StepsTab({
   return (
     <>
       <div className="mb-4 rounded-[10px] border-[1.5px] border-blue-200 bg-blue-50 p-3.5">
-        {/* La decisión del enlace compartible se fija en el POST /tasks
-            (create()) y no puede cambiar después: una vez creada la tarea
-            (taskCreated → prop `disabled` pasa a false), el checkbox queda
-            fijo en readonly para no sugerir que togglearlo hace algo. */}
+        {/* El checkbox del enlace compartible es editable incluso post-create.
+            Antes de crear: actualiza el estado local.
+            Después de crear: llama al API para toggle del link.
+            Se deshabilita solo durante la operación (linkBusy). */}
         <label
-          className={`flex items-start gap-2.5 ${!disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+          className={`flex items-start gap-2.5 ${shareCheckboxDisabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
         >
           <input
             type="checkbox"
             checked={shareEnabled}
-            disabled={!disabled}
+            disabled={shareCheckboxDisabled}
             onChange={(e) => onShareEnabledChange?.(e.target.checked)}
             className="mt-0.5 h-4 w-4 cursor-pointer accent-blue-600 disabled:cursor-not-allowed"
           />

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuthStore } from "../../store/useAuthStore";
 import { useFolderStore } from "../../store/useFolderStore";
-import { getGroupsApi, getUsersApi, type GroupData } from "../../services/api";
+import { getGroupsApi, getUsersApi, toggleTaskShareLinkApi, type GroupData } from "../../services/api";
 import type { FormRule, WidgetInstance } from "../../types/widget.types";
 import InfoTab from "./taskBuilder/InfoTab";
 import PrefillTab from "./taskBuilder/PrefillTab";
@@ -55,6 +55,7 @@ export default function CreateTaskModal({
 
   const [allUsers, setAllUsers] = useState<SimpleUser[]>([]);
   const [groups, setGroups] = useState<GroupData[]>([]);
+  const [linkBusy, setLinkBusy] = useState(false);
 
   const stepsCtl = useTaskSteps(allUsers);
 
@@ -79,16 +80,6 @@ export default function CreateTaskModal({
     for (const step of signaturesByStep.keys()) max = Math.max(max, step);
     return max;
   }, [signaturesByStep]);
-
-  // Guard de "tarea huérfana" del lado del cliente: sin enlace compartible
-  // y sin al menos un destinatario con email válido, la tarea no tendría
-  // forma de completarse. El backend acepta steps:[] en create() a propósito
-  // (el flujo 2-step lo requiere), así que la validación vive acá.
-  const hasValidRecipient = useMemo(
-    () => stepsCtl.steps.some((s) => s.inputEmail.trim().includes("@")),
-    [stepsCtl.steps],
-  );
-  const canCreate = shareEnabled || hasValidRecipient;
 
   // Si el formulario tiene firmas hasta el paso N, garantizamos que el
   // builder de tareas muestre N cajas de destinatarios.
@@ -185,6 +176,29 @@ export default function CreateTaskModal({
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleToggleShareLink = async (nextEnabled: boolean) => {
+    if (!createdTaskId) {
+      // Pre-create: solo update local del shareEnabled state.
+      setShareEnabled(nextEnabled);
+      return;
+    }
+    if (!nextEnabled && shareLinkUrl) {
+      // Confirm inline antes de destildar (link viejo dejará de funcionar).
+      if (!window.confirm('El enlace actual dejará de funcionar. ¿Continuar?')) {
+        return;
+      }
+    }
+    setLinkBusy(true);
+    const res = await toggleTaskShareLinkApi(createdTaskId, nextEnabled);
+    setLinkBusy(false);
+    if (res.error || !res.data) {
+      setError(res.error ?? 'No se pudo actualizar el enlace');
+      return;
+    }
+    setShareEnabled(nextEnabled);
+    setShareLinkUrl(res.data.shareLinkUrl);
   };
 
   const handleSend = async () => {
@@ -318,8 +332,9 @@ export default function CreateTaskModal({
               onSelectStepUser={stepsCtl.setStepRecipient}
               onAddGroupMembers={stepsCtl.handleAddGroupMembers}
               shareEnabled={shareEnabled}
-              onShareEnabledChange={setShareEnabled}
+              onShareEnabledChange={handleToggleShareLink}
               disabled={!taskCreated}
+              shareCheckboxDisabled={linkBusy}
               shareLinkUrl={shareLinkUrl}
             />
           </div>
@@ -362,17 +377,12 @@ export default function CreateTaskModal({
               <>
                 <button
                   onClick={handleCreate}
-                  disabled={saving || taskCreated || !canCreate}
-                  title={
-                    !canCreate
-                      ? "Activa el enlace compartible o agrega al menos un destinatario"
-                      : undefined
-                  }
+                  disabled={saving || taskCreated || !title.trim()}
                   className="cursor-pointer rounded-lg border-none px-6 py-2 text-[13px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
                   style={{
                     background: taskCreated
                       ? "#10b981"
-                      : saving || !canCreate
+                      : saving || !title.trim()
                       ? "#94a3b8"
                       : "linear-gradient(135deg,#00c2a8,#0891b2)",
                   }}

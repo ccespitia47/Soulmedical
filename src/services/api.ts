@@ -766,3 +766,12 @@ export function requestBulkPdfApi(
     { method: 'POST', body: JSON.stringify(filters) },
   );
 }
+
+// --- Tareas ---
+
+export function toggleTaskShareLinkApi(taskId: string, enabled: boolean) {
+  return request<{ shareLinkUrl: string | null }>(
+    `/tasks/${taskId}/share-link`,
+    { method: 'POST', body: JSON.stringify({ enabled }) },
+  );
+}
