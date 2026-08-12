@@ -1,12 +1,17 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GroupsService } from './groups.service';
+import { AssignmentsTreeService } from '../forms/assignments-tree.service';
+import { AssignmentsTreeDto } from '../forms/assignments-tree.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('groups')
 export class GroupsController {
-  constructor(private readonly groupsService: GroupsService) {}
+  constructor(
+    private readonly groupsService: GroupsService,
+    private readonly assignmentsTreeService: AssignmentsTreeService,
+  ) {}
 
   @Get()
   findAll() { return this.groupsService.findAll(); }
@@ -71,5 +76,24 @@ export class GroupsController {
   @Delete(':id/assign/form/:formId')
   unassignForm(@Param('id') id: string, @Param('formId') formId: string) {
     return this.groupsService.unassignFormFromGroup(id, formId);
+  }
+
+  /**
+   * Análogo a `GET/PUT /users/:id/assignments/tree` pero para grupos.
+   * Coexiste con `/assign/project` y `/assign/form` legacy — no los toca.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/assignments/tree')
+  async getAssignmentsTree(@Param('id') id: string) {
+    return this.assignmentsTreeService.read({ groupId: id });
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put(':id/assignments/tree')
+  async putAssignmentsTree(
+    @Param('id') id: string,
+    @Body() dto: AssignmentsTreeDto,
+  ) {
+    return this.assignmentsTreeService.write({ groupId: id }, dto);
   }
 }

@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Delete,
   Param,
@@ -21,6 +22,8 @@ import {
   AdminActionTargetType,
   AdminActionType,
 } from '../admin-audit/admin-action.entity';
+import { AssignmentsTreeService } from '../forms/assignments-tree.service';
+import { AssignmentsTreeDto } from '../forms/assignments-tree.dto';
 
 // El JWT lleva id/email/role. El `name` no viaja en el token; si el día de
 // mañana lo agregamos al payload, lo capturamos automáticamente acá.
@@ -32,6 +35,7 @@ export class UsersController {
   constructor(
     private usersService: UsersService,
     private auditService: AdminAuditService,
+    private assignmentsTreeService: AssignmentsTreeService,
   ) {}
 
   // Listar usuarios: solo admin y coordinator (los paneles de asignación
@@ -210,6 +214,28 @@ export class UsersController {
       metadata: { selfReset: +id === Number(req.user.id) },
     });
     return { success: true, message: 'Doble factor reiniciado para el usuario.' };
+  }
+
+  /**
+   * Lectura/escritura bulk del árbol de asignaciones (proyectos, carpetas,
+   * forms directos + exclusiones) de un usuario. Coexiste con los endpoints
+   * legacy `POST /projects/:id/assign` y `POST /forms/:id/assign` (flujo
+   * target-first de HomePage.tsx) — este endpoint no los reemplaza ni los
+   * toca; es el shape nuevo que usará el picker jerárquico.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/assignments/tree')
+  async getAssignmentsTree(@Param('id') id: string) {
+    return this.assignmentsTreeService.read({ userId: parseInt(id, 10) });
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put(':id/assignments/tree')
+  async putAssignmentsTree(
+    @Param('id') id: string,
+    @Body() dto: AssignmentsTreeDto,
+  ) {
+    return this.assignmentsTreeService.write({ userId: parseInt(id, 10) }, dto);
   }
 }
 
