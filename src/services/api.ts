@@ -775,3 +775,58 @@ export function toggleTaskShareLinkApi(taskId: string, enabled: boolean) {
     { method: 'POST', body: JSON.stringify({ enabled }) },
   );
 }
+
+export type TaskSummaryDto = {
+  id: string;
+  title: string;
+  status: string;
+  createdAt: string;
+  createdByName: string;
+  totalRecipients: number;
+  completedCount: number;
+  pendingCount: number;
+  hasShareLink: boolean;
+};
+
+export type TaskRecipientDto = {
+  stepIndex: number;
+  email: string;
+  name: string;
+  status: 'in_progress' | 'pending' | 'completed';
+  submittedAt: string | null;
+  canResend: boolean;
+  lastResendAt: string | null;
+};
+
+export type TaskDetailDto = {
+  id: string;
+  title: string;
+  status: string;
+  createdAt: string;
+  createdByName: string;
+  shareLinkUrl: string | null;
+  recipients: TaskRecipientDto[];
+  submissions: RecordRowDto[]; // reusa el tipo existente de records
+};
+
+export function getFormTasksApi(formId: string) {
+  return request<TaskSummaryDto[]>(`/tasks/by-form/${formId}`);
+}
+
+export function getTaskDetailApi(taskId: string) {
+  return request<TaskDetailDto>(`/tasks/${taskId}/detail`);
+}
+
+export function resendTaskStepApi(taskId: string, stepIndex: number) {
+  return request<{ ok: true; sentAt: string }>(
+    `/tasks/${taskId}/steps/${stepIndex}/resend`,
+    { method: 'POST', body: '{}' },
+  );
+}
+
+export function requestTaskBulkPdfApi(taskId: string) {
+  return request<{ ok: true; message: string }>(
+    `/tasks/${taskId}/bulk-pdf`,
+    { method: 'POST', body: '{}' },
+  );
+}
