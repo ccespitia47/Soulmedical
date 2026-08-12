@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { Task, TaskSchema } from './task.schema';
 import { TasksController } from './tasks.controller';
 import { TasksService } from './tasks.service';
+import { TasksRemindersService } from './tasks-reminders.service';
 import { EmailModule } from '../email/email.module';
 import { SubmissionsModule } from '../submissions/submissions.module';
 import { FormsModule } from '../forms/forms.module';
@@ -15,7 +16,7 @@ import { FormsModule } from '../forms/forms.module';
     FormsModule,
   ],
   controllers: [TasksController],
-  providers: [TasksService],
+  providers: [TasksService, TasksRemindersService],
   exports: [TasksService],
 })
 export class TasksModule {}
