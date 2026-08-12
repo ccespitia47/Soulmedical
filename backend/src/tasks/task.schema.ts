@@ -31,6 +31,9 @@ export class TaskStep {
 
   @Prop()
   ipAddress?: string;
+
+  @Prop({ type: Date, default: null })
+  lastReminderAt: Date | null;
 }
 
 export const TaskStepSchema = SchemaFactory.createForClass(TaskStep);

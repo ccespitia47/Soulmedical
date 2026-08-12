@@ -75,6 +75,7 @@ export class TasksService {
       token: crypto.randomUUID(),
       status: i === 0 ? 'in_progress' : 'pending',
       formData: {},
+      lastReminderAt: null,
     }));
 
     const task = new this.taskModel({
@@ -137,6 +138,7 @@ export class TasksService {
       token: crypto.randomUUID(),
       status: i === 0 ? 'in_progress' : 'pending',
       formData: {},
+      lastReminderAt: null,
     }));
 
     // Update atómico condicionado a que la tarea siga sin steps: evita que
@@ -384,6 +386,43 @@ export class TasksService {
     }
 
     return result;
+  }
+
+  // ── Toggle de enlace compartible (crear/desactivar) ────────────────────────
+
+  async toggleShareLink(
+    taskId: string,
+    enabled: boolean,
+    userId: number,
+  ): Promise<{ shareLinkUrl: string | null }> {
+    const task = await this.taskModel.findById(taskId);
+    if (!task) throw new NotFoundException('Tarea no encontrada');
+    if (task.createdById !== userId) {
+      throw new ForbiddenException('No autorizado');
+    }
+
+    if (enabled) {
+      // Idempotente: si ya hay link con enabled=true, no rotar el token.
+      if (task.shareLink?.enabled) {
+        // no-op, devolver el actual
+      } else {
+        task.shareLink = {
+          token: randomBytes(8).toString('base64url'),
+          enabled: true,
+        };
+        await task.save();
+      }
+    } else {
+      // Desactivar: link viejo deja de funcionar (getByShareToken filtra enabled:true).
+      task.shareLink = null;
+      await task.save();
+    }
+
+    const baseUrl = process.env.APP_BASE_URL ?? '';
+    const shareLinkUrl = task.shareLink?.token
+      ? `${baseUrl}/t/${task.shareLink.token}`
+      : null;
+    return { shareLinkUrl };
   }
 
   async cancel(id: string): Promise<Task> {

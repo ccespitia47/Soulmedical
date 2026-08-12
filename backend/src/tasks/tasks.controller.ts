@@ -114,6 +114,18 @@ export class TasksController {
     return this.tasksService.sendTask(id, steps, Number(user.id));
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/share-link')
+  async toggleShareLink(
+    @Param('id') id: string,
+    @Body() body: { enabled: boolean },
+    @Req() req: AuthedRequest,
+  ) {
+    const user = req.user;
+    if (!user) throw new UnauthorizedException('Usuario no autenticado');
+    return this.tasksService.toggleShareLink(id, body.enabled === true, Number(user.id));
+  }
+
   @Get('public/:token')
   async getByToken(@Param('token') token: string) {
     const { task, stepIndex } = await this.tasksService.getByToken(token);
