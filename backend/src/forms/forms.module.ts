@@ -6,6 +6,7 @@ import { UserFormAssignment, UserFormAssignmentSchema } from './user-form-assign
 import { PublicFormOtp, PublicFormOtpSchema } from './public-form-otp.schema';
 import { Folder, FolderSchema } from '../folders/folder.schema';
 import { Project, ProjectSchema } from '../projects/project.schema';
+import { Group, GroupSchema } from '../groups/group.schema';
 import { FormsService } from './forms.service';
 import { AssignmentsTreeService } from './assignments-tree.service';
 import { FormsController } from './forms.controller';
@@ -28,6 +29,9 @@ import { AdminAuditModule } from '../admin-audit/admin-audit.module';
       // modelo ya compilado en la conexión cuando el mismo name+schema se
       // registra en más de un módulo (mismo patrón ya usado con Folder).
       { name: Project.name, schema: ProjectSchema },
+      // Idem para Group: AssignmentsTreeService valida existencia/isActive
+      // del subject `groupId` antes de escribir (ver validateSubjectExists).
+      { name: Group.name, schema: GroupSchema },
     ]),
     EmailModule,
     // Ciclo: FormsModule necesita UsersModule (FormsService/OTP) y

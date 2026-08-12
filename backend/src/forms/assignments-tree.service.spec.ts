@@ -5,10 +5,12 @@ import { UserFormAssignment } from './user-form-assignment.schema';
 import { Form } from './form.schema';
 import { Folder } from '../folders/folder.schema';
 import { Project } from '../projects/project.schema';
+import { Group } from '../groups/group.schema';
+import { UsersService } from '../users/users.service';
 import { AssignmentsTreeDto } from './assignments-tree.dto';
 
 // No hay mongodb-memory-server en el proyecto (grep en package.json no lo
-// encuentra), así que mockeamos los 4 models con Jest. Catálogo estático de
+// encuentra), así que mockeamos los models con Jest. Catálogo estático de
 // forms/folders/projects reutilizado por todos los tests:
 //   p1 (proyecto) ── folA (carpeta) ── f5 (form)
 //   p2 (proyecto) ── folB (carpeta) ── f1 (form)
@@ -21,6 +23,9 @@ const foldersData = [
   { _id: 'folB', projectId: 'p2' },
 ];
 const projectsData = [{ _id: 'p1' }, { _id: 'p2' }];
+// Subjects existentes para las validaciones de existencia: userId 1 y group g1.
+const usersData = [{ id: 1, name: 'Test User' }];
+const groupsData = [{ _id: 'g1', isActive: true }];
 
 function matches(doc: Record<string, unknown>, filter: Record<string, unknown>): boolean {
   return Object.entries(filter).every(([k, v]) => doc[k] === v);
@@ -31,6 +36,15 @@ function staticReadOnlyModel(data: Array<Record<string, unknown>>) {
     find: jest.fn((filter: { _id: { $in: string[] } }) => ({
       lean: () =>
         Promise.resolve(data.filter((d) => filter._id.$in.includes(d._id as string))),
+    })),
+  };
+}
+
+/** Mock mínimo de un Mongoose model que solo necesita findById(...).lean(). */
+function findByIdModel(data: Array<Record<string, unknown>>) {
+  return {
+    findById: jest.fn((id: string) => ({
+      lean: () => Promise.resolve(data.find((d) => d._id === id) ?? null),
     })),
   };
 }
@@ -62,6 +76,10 @@ describe('AssignmentsTreeService', () => {
       ),
     };
 
+    const usersService = {
+      findById: jest.fn(async (id: number) => usersData.find((u) => u.id === id) ?? null),
+    };
+
     const mod = await Test.createTestingModule({
       providers: [
         AssignmentsTreeService,
@@ -69,6 +87,8 @@ describe('AssignmentsTreeService', () => {
         { provide: getModelToken(Form.name), useValue: staticReadOnlyModel(formsData) },
         { provide: getModelToken(Folder.name), useValue: staticReadOnlyModel(foldersData) },
         { provide: getModelToken(Project.name), useValue: staticReadOnlyModel(projectsData) },
+        { provide: getModelToken(Group.name), useValue: findByIdModel(groupsData) },
+        { provide: UsersService, useValue: usersService },
       ],
     }).compile();
 
@@ -142,5 +162,34 @@ describe('AssignmentsTreeService', () => {
     // No debe filtrarse hacia lecturas de usuario.
     const userBack = await service.read({ userId: 1 });
     expect(userBack.projects).toEqual([]);
+  });
+
+  it('rechaza 404 con userId inexistente', async () => {
+    const emptyDto: AssignmentsTreeDto = {
+      projects: [],
+      folders: [],
+      forms: [],
+      excludedFolders: [],
+      excludedForms: [],
+    };
+    await expect(service.write({ userId: 99999 }, emptyDto)).rejects.toThrow(
+      /no encontrado/i,
+    );
+    // No debe haber tocado la colección de assignments.
+    expect(assignmentModel.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('rechaza 404 con groupId inexistente', async () => {
+    const emptyDto: AssignmentsTreeDto = {
+      projects: [],
+      folders: [],
+      forms: [],
+      excludedFolders: [],
+      excludedForms: [],
+    };
+    await expect(
+      service.write({ groupId: 'grupo-borrado' }, emptyDto),
+    ).rejects.toThrow(/no encontrado/i);
+    expect(assignmentModel.deleteMany).not.toHaveBeenCalled();
   });
 });

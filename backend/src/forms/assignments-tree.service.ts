@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import {
@@ -8,6 +8,8 @@ import {
 import { Form, FormDocument } from './form.schema';
 import { Folder, FolderDocument } from '../folders/folder.schema';
 import { Project, ProjectDocument } from '../projects/project.schema';
+import { Group, GroupDocument } from '../groups/group.schema';
+import { UsersService } from '../users/users.service';
 import { AssignmentsTreeDto } from './assignments-tree.dto';
 
 type Subject = { userId: number } | { groupId: string };
@@ -31,6 +33,17 @@ export class AssignmentsTreeService {
     private readonly folderModel: Model<FolderDocument>,
     @InjectModel(Project.name)
     private readonly projectModel: Model<ProjectDocument>,
+    // Group vive en Mongoose (GroupsModule) — se registra también en
+    // FormsModule.forFeature (mismo patrón que Folder/Project) para no
+    // tener que importar GroupsModule entero y evitar un ciclo nuevo
+    // (GroupsModule ya importa FormsModule).
+    @InjectModel(Group.name)
+    private readonly groupModel: Model<GroupDocument>,
+    // User vive en TypeORM/Postgres (no Mongoose), así que reusamos
+    // UsersService.findById en vez de inyectar un repository aparte —
+    // UsersService ya está disponible porque FormsModule importa
+    // UsersModule (forwardRef) para el flujo de OTP de forms públicos.
+    private readonly usersService: UsersService,
   ) {}
 
   async read(subject: Subject): Promise<AssignmentsTreeDto> {
@@ -46,7 +59,19 @@ export class AssignmentsTreeService {
     };
   }
 
+  /**
+   * Reemplaza toda la config de assignments del subject de forma idempotente:
+   * dos llamadas iguales dejan el mismo estado en DB.
+   *
+   * NO ATÓMICO ante concurrencia: si dos PUT distintos llegan al mismo subject
+   * simultáneamente (dos pestañas del mismo admin editando), el resultado puede
+   * ser la unión de ambos payloads en vez del último. Aceptable en el uso
+   * actual (admin edita en una sola tab, no hay editor multiusuario). Si el
+   * despliegue Mongo soporta transacciones, envolver deleteMany+insertMany en
+   * `session.withTransaction(...)` cierra la ventana.
+   */
   async write(subject: Subject, dto: AssignmentsTreeDto): Promise<{ ok: true }> {
+    await this.validateSubjectExists(subject);
     this.validateSyntax(dto);
     await this.validateAncestors(dto);
 
@@ -88,6 +113,25 @@ export class AssignmentsTreeService {
 
   private subjectFilter(subject: Subject): { userId: number } | { groupId: string } {
     return 'userId' in subject ? { userId: subject.userId } : { groupId: subject.groupId };
+  }
+
+  /**
+   * Existence check del subject: si no existe, 404 antes de escribir nada.
+   * Sin esto, `PUT /users/99999/assignments/tree` (o un groupId borrado)
+   * retornaba 200 y dejaba assignments huérfanos en la colección.
+   */
+  private async validateSubjectExists(subject: Subject): Promise<void> {
+    if ('userId' in subject) {
+      const user = await this.usersService.findById(subject.userId);
+      if (!user) {
+        throw new NotFoundException(`Usuario ${subject.userId} no encontrado`);
+      }
+    } else {
+      const group = await this.groupModel.findById(subject.groupId).lean();
+      if (!group || group.isActive === false) {
+        throw new NotFoundException(`Grupo ${subject.groupId} no encontrado o inactivo`);
+      }
+    }
   }
 
   /** Validaciones puramente sintácticas del DTO (sin tocar la DB). */
@@ -172,6 +216,9 @@ export class AssignmentsTreeService {
       }
     }
 
+    // Nota: si excludedForms[i] tiene su folder también en excludedFolders,
+    // es redundante (la carpeta ya bloquea). Se acepta silenciosamente porque
+    // el resolver ignora la redundancia sin cambiar el resultado de acceso.
     for (const id of dto.excludedForms) {
       const form = formById.get(id);
       const folderAncestorOk = !!form && dto.folders.includes(form.folderId);

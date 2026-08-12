@@ -10,6 +10,7 @@ import {
   UseGuards,
   Req,
   BadRequestException,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -225,17 +226,17 @@ export class UsersController {
    */
   @UseGuards(JwtAuthGuard)
   @Get(':id/assignments/tree')
-  async getAssignmentsTree(@Param('id') id: string) {
-    return this.assignmentsTreeService.read({ userId: parseInt(id, 10) });
+  async getAssignmentsTree(@Param('id', ParseIntPipe) id: number) {
+    return this.assignmentsTreeService.read({ userId: id });
   }
 
   @UseGuards(JwtAuthGuard)
   @Put(':id/assignments/tree')
   async putAssignmentsTree(
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Body() dto: AssignmentsTreeDto,
   ) {
-    return this.assignmentsTreeService.write({ userId: parseInt(id, 10) }, dto);
+    return this.assignmentsTreeService.write({ userId: id }, dto);
   }
 }
 
