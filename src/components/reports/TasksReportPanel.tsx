@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   getFormTasksApi,
   getTaskDetailApi,
@@ -65,6 +65,13 @@ export default function TasksReportPanel({ formId, formName }: Props) {
   const [resendFeedback, setResendFeedback] = useState<Feedback>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkFeedback, setBulkFeedback] = useState<Feedback>(null);
+  const [shareCheckboxKey, setShareCheckboxKey] = useState(0);
+
+  // Contador de requests de detalle: clicks rápidos entre tarea A → B pueden
+  // hacer que la respuesta de A llegue después de B y la sobrescriba. Cada
+  // fetch se marca con un id; si al resolver ya no es el último emitido, se
+  // descarta (mismo patrón para el refetch tras resend).
+  const detailRequestId = useRef(0);
 
   // Carga el listado de tareas del formulario.
   useEffect(() => {
@@ -111,7 +118,9 @@ export default function TasksReportPanel({ formId, formName }: Props) {
     setDetail(null);
     resetDetailUiState();
     setDetailLoading(true);
+    const myReqId = ++detailRequestId.current;
     const res = await getTaskDetailApi(taskId);
+    if (myReqId !== detailRequestId.current) return; // respuesta obsoleta
     setDetailLoading(false);
     if (res.error || !res.data) {
       setDetailError(res.error ?? 'No se pudo cargar el detalle de la tarea');
@@ -130,13 +139,19 @@ export default function TasksReportPanel({ formId, formName }: Props) {
   const handleToggleShareLink = async (nextEnabled: boolean) => {
     if (!detail) return;
     if (!nextEnabled && detail.shareLinkUrl) {
-      if (!window.confirm('El enlace actual dejará de funcionar. ¿Continuar?')) return;
+      if (!window.confirm('El enlace actual dejará de funcionar. ¿Continuar?')) {
+        // El checkbox nativo ya cambió su estado DOM interno al clickear;
+        // forzar remount para que vuelva a reflejar detail.shareLinkUrl.
+        setShareCheckboxKey((k) => k + 1);
+        return;
+      }
     }
     setLinkBusy(true);
     const res = await toggleTaskShareLinkApi(detail.id, nextEnabled);
     setLinkBusy(false);
-    if (res.error) {
-      setDetailError(res.error);
+    if (res.error || !res.data) {
+      setShareCheckboxKey((k) => k + 1);
+      setDetailError(res.error ?? 'No se pudo actualizar el enlace');
       return;
     }
     if (res.data) {
@@ -159,7 +174,9 @@ export default function TasksReportPanel({ formId, formName }: Props) {
     }
     setResendFeedback({ kind: 'ok', msg: `Correo reenviado a ${recipient.email}` });
     // Refetch de detail para actualizar lastResendAt/canResend del paso.
+    const myReqId = ++detailRequestId.current;
     const fresh = await getTaskDetailApi(detail.id);
+    if (myReqId !== detailRequestId.current) return; // respuesta obsoleta
     if (fresh.data) setDetail(fresh.data);
   };
 
@@ -322,6 +339,7 @@ export default function TasksReportPanel({ formId, formName }: Props) {
                             )}
                           </span>
                           <input
+                            key={`share-cbx-${shareCheckboxKey}`}
                             type="checkbox"
                             checked={!!detail.shareLinkUrl}
                             disabled={linkBusy}

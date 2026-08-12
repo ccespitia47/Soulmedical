@@ -114,4 +114,23 @@ describe('TasksService.resendStep', () => {
     );
     expect(service.sendStepEmail).not.toHaveBeenCalled();
   });
+
+  it('rechaza 502 y no actualiza lastReminderAt si sendStepEmail falla', async () => {
+    const task = makeTaskDoc({
+      createdById: 1,
+      steps: [{ status: 'in_progress', lastReminderAt: null }],
+    });
+    const { service } = buildService({ 'task-1': task });
+    // Mismo bug que el cron (Task 4): si el SMTP falla, sendStepEmail
+    // resuelve `false` sin lanzar. resendStep debe respetar ese boolean en
+    // vez de asumir éxito silenciosamente.
+    (service.sendStepEmail as jest.Mock).mockResolvedValue(false);
+
+    await expect(service.resendStep('task-1', 0, 1)).rejects.toThrow(
+      HttpException,
+    );
+    expect(task.steps[0].lastReminderAt).toBeNull();
+    expect(task.markModified).not.toHaveBeenCalled();
+    expect(task.save).not.toHaveBeenCalled();
+  });
 });

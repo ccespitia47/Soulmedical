@@ -128,7 +128,7 @@ export class TasksController {
 
   @UseGuards(JwtAuthGuard)
   @Post(':id/steps/:stepIndex/resend')
-  @Throttle({ default: { limit: 1, ttl: 600_000 } }) // 1 vez cada 10 min por IP
+  @Throttle({ default: { limit: 30, ttl: 60_000 } }) // 30/min por IP (safety net; la lógica per-step gobierna el throttle real)
   async resendStep(
     @Param('id') id: string,
     @Param('stepIndex', ParseIntPipe) stepIndex: number,

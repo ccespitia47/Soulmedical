@@ -410,7 +410,10 @@ export class TasksService {
       );
     }
 
-    await this.sendStepEmail(task, stepIndex);
+    const ok = await this.sendStepEmail(task, stepIndex);
+    if (!ok) {
+      throw new HttpException('No se pudo enviar el correo', 502);
+    }
     step.lastReminderAt = now;
     task.markModified('steps');
     await task.save();
