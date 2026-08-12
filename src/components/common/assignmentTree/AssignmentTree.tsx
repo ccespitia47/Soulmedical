@@ -1,4 +1,5 @@
 import type { FolderItem, ProjectItem } from "../../../types/folder.types";
+import EntityIcon from "../EntityIcon";
 
 const ACCENT = "#00c2a8";
 
@@ -8,6 +9,8 @@ type AssignmentTreeProps = {
   assignedProjects: Set<string>;
   assignedFolders: Set<string>;
   assignedForms: Set<string>;
+  excludedFolders: Set<string>;
+  excludedForms: Set<string>;
   expandedProjects: Set<string>;
   onToggleExpand: (projectId: string) => void;
   onToggleProject: (projectId: string) => void;
@@ -50,7 +53,7 @@ function ProjectRow({
           className="flex h-6 w-6 items-center justify-center rounded-md text-[13px]"
           style={{ background: project.color + "28", color: project.color }}
         >
-          {project.icon}
+          <EntityIcon icon={project.icon} size={13} />
         </div>
         <span
           className="text-[13px] font-bold"
@@ -88,45 +91,65 @@ function ProjectRow({
 function FolderRow({
   folder,
   isProjectAssigned,
-  isFolderAssigned,
+  isFolderChecked,
+  isFolderExcluded,
   onToggle,
 }: {
   folder: FolderItem;
   isProjectAssigned: boolean;
-  isFolderAssigned: boolean;
+  isFolderChecked: boolean;
+  isFolderExcluded: boolean;
   onToggle: () => void;
 }) {
-  const disabled = isProjectAssigned;
+  const showHeredaTag = isProjectAssigned && !isFolderExcluded;
   return (
     <div
       className="flex items-center gap-2.5 border-t border-slate-100 py-2 pl-10 pr-3.5"
-      style={{ background: isFolderAssigned ? "#f0fdf4" : "#fafafa" }}
+      style={{
+        background: isFolderExcluded
+          ? "#fff7ed"
+          : isFolderChecked
+            ? "#f0fdf4"
+            : "#fafafa",
+      }}
     >
       <div
-        onClick={() => !disabled && onToggle()}
-        className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-[3px]"
+        onClick={onToggle}
+        className="flex h-4 w-4 flex-shrink-0 cursor-pointer items-center justify-center rounded-[3px]"
         style={{
-          border: `2px solid ${isFolderAssigned ? ACCENT : "#d1d5db"}`,
-          background: isFolderAssigned ? ACCENT : "#fff",
-          cursor: disabled ? "default" : "pointer",
-          opacity: disabled ? 0.6 : 1,
+          border: `2px solid ${isFolderChecked ? ACCENT : "#d1d5db"}`,
+          background: isFolderChecked ? ACCENT : "#fff",
         }}
       >
-        {isFolderAssigned && (
+        {isFolderChecked && (
           <span className="text-[10px] font-bold text-white">✓</span>
         )}
       </div>
-      <span className="text-[13px]">{folder.icon}</span>
+      <span className="flex" style={{ color: folder.color }}>
+        <EntityIcon icon={folder.icon} size={14} />
+      </span>
       <span
         className="flex-1 text-xs font-semibold"
-        style={{ color: isFolderAssigned ? "#065f46" : "#374151" }}
+        style={{
+          color: isFolderExcluded
+            ? "#9a3412"
+            : isFolderChecked
+              ? "#065f46"
+              : "#374151",
+          textDecoration: isFolderExcluded ? "line-through" : "none",
+        }}
       >
         {folder.name}
       </span>
-      {isProjectAssigned && (
-        <span className="text-[10px] italic text-gray-400">incluida</span>
+      {showHeredaTag && (
+        <span className="text-[10px] italic text-emerald-700">hereda del proyecto</span>
       )}
-      {!isProjectAssigned && isFolderAssigned && (
+      {isFolderExcluded && (
+        <span className="rounded-[10px] bg-amber-100 px-1.5 py-px text-[10px] font-semibold text-amber-900">
+          excluida
+        </span>
+      )}
+      {!isProjectAssigned && isFolderChecked && (
         <span className="rounded-[10px] bg-emerald-100 px-1.5 py-px text-[10px] font-semibold text-emerald-900">
           Carpeta completa
         </span>
@@ -140,41 +163,65 @@ function FolderRow({
 
 function FormRow({
   name,
-  isAssigned,
-  disabled,
+  isChecked,
+  isExcluded,
+  isInheritedFromAncestor,
+  isBlockedByFolderExclusion,
   onToggle,
 }: {
   name: string;
-  isAssigned: boolean;
-  disabled: boolean;
+  isChecked: boolean;
+  isExcluded: boolean;
+  isInheritedFromAncestor: boolean;
+  isBlockedByFolderExclusion: boolean;
   onToggle: () => void;
 }) {
+  const disabled = isBlockedByFolderExclusion;
   return (
     <div
       className="flex items-center gap-2.5 border-t border-slate-100 py-1.5 pl-[66px] pr-3.5"
-      style={{ background: isAssigned ? "#f0fdf4" : "#fafafa" }}
+      style={{
+        background:
+          isExcluded || isBlockedByFolderExclusion
+            ? "#fff7ed"
+            : isChecked
+              ? "#f0fdf4"
+              : "#fafafa",
+      }}
     >
       <div
         onClick={() => !disabled && onToggle()}
         className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-[3px]"
         style={{
-          border: `2px solid ${isAssigned ? ACCENT : "#d1d5db"}`,
-          background: isAssigned ? ACCENT : "#fff",
+          border: `2px solid ${isChecked ? ACCENT : disabled ? "#e5e7eb" : "#d1d5db"}`,
+          background: isChecked ? ACCENT : disabled ? "#f3f4f6" : "#fff",
           cursor: disabled ? "default" : "pointer",
-          opacity: disabled ? 0.6 : 1,
         }}
       >
-        {isAssigned && <span className="text-[9px] font-bold text-white">✓</span>}
+        {isChecked && <span className="text-[9px] font-bold text-white">✓</span>}
       </div>
       <span className="text-[11px]">📋</span>
       <span
         className="flex-1 text-xs"
-        style={{ color: isAssigned ? "#065f46" : "#6b7280" }}
+        style={{
+          color: isExcluded ? "#9a3412" : isChecked ? "#065f46" : "#6b7280",
+          textDecoration: isExcluded ? "line-through" : "none",
+        }}
       >
         {name}
       </span>
-      {disabled && (
-        <span className="text-[10px] italic text-gray-400">incluido</span>
+      {isBlockedByFolderExclusion && (
+        <span className="rounded-[10px] bg-gray-100 px-1.5 py-px text-[10px] font-semibold text-gray-500">
+          carpeta excluida
+        </span>
+      )}
+      {isExcluded && !isBlockedByFolderExclusion && (
+        <span className="rounded-[10px] bg-amber-100 px-1.5 py-px text-[10px] font-semibold text-amber-900">
+          excluido
+        </span>
+      )}
+      {isChecked && isInheritedFromAncestor && (
+        <span className="text-[10px] italic text-gray-400">hereda</span>
       )}
     </div>
   );
@@ -186,6 +233,8 @@ export default function AssignmentTree({
   assignedProjects,
   assignedFolders,
   assignedForms,
+  excludedFolders,
+  excludedForms,
   expandedProjects,
   onToggleExpand,
   onToggleProject,
@@ -216,29 +265,38 @@ export default function AssignmentTree({
 
             {isExpanded &&
               projectFolders.map((folder) => {
-                const isFolderAssigned =
-                  isProjAssigned || assignedFolders.has(folder.id);
+                const isFolderChecked =
+                  (isProjAssigned && !excludedFolders.has(folder.id)) ||
+                  assignedFolders.has(folder.id);
+                const isFolderExcluded = excludedFolders.has(folder.id);
                 return (
                   <div key={folder.id}>
                     <FolderRow
                       folder={folder}
                       isProjectAssigned={isProjAssigned}
-                      isFolderAssigned={isFolderAssigned}
+                      isFolderChecked={isFolderChecked}
+                      isFolderExcluded={isFolderExcluded}
                       onToggle={() => onToggleFolder(folder.id, project.id)}
                     />
                     {folder.forms.map((form) => {
-                      const isFormAssigned =
-                        isProjAssigned ||
-                        assignedFolders.has(folder.id) ||
-                        assignedForms.has(form.id);
-                      const formDisabled =
-                        isProjAssigned || assignedFolders.has(folder.id);
+                      const inheritsFromProject =
+                        isProjAssigned && !isFolderExcluded;
+                      const inheritsFromFolder = assignedFolders.has(folder.id);
+                      const inheritsFromAncestor =
+                        inheritsFromProject || inheritsFromFolder;
+                      const isDirect = assignedForms.has(form.id);
+                      const isExcluded =
+                        excludedForms.has(form.id) || isFolderExcluded;
+                      const isChecked =
+                        (isDirect || inheritsFromAncestor) && !isExcluded;
                       return (
                         <FormRow
                           key={form.id}
                           name={form.name}
-                          isAssigned={isFormAssigned}
-                          disabled={formDisabled}
+                          isChecked={isChecked}
+                          isExcluded={excludedForms.has(form.id) && !isFolderExcluded}
+                          isInheritedFromAncestor={inheritsFromAncestor}
+                          isBlockedByFolderExclusion={isFolderExcluded}
                           onToggle={() =>
                             onToggleForm(form.id, folder.id, project.id)
                           }
