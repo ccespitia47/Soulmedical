@@ -43,6 +43,11 @@ export class SubmissionsService {
     formId: string,
     dto: CreateSubmissionDto,
     userId?: number,
+    // taskId NUNCA viene del cliente (mismo criterio que templateSnapshot):
+    // solo tasks.service.ts lo pasa, derivado del token de tarea validado
+    // server-side. Aceptarlo del DTO permitiría a cualquiera "adoptar" su
+    // submission dentro de una tarea ajena.
+    taskId?: string,
   ): Promise<FormSubmissionDocument> {
     const form = await this.formsService.findOne(formId);
     const data = await this.offloadBinaries(form, dto.data, userId ?? null);
@@ -67,6 +72,7 @@ export class SubmissionsService {
       submittedById: userId ?? null,
       templateSnapshot,
       pdfFilename: dto.pdfFilename ?? null,
+      taskId: taskId ?? null,
     });
     return submission.save();
   }
@@ -137,6 +143,17 @@ export class SubmissionsService {
       this.submissionModel.countDocuments(query),
     ]);
     return { data, total, page, limit };
+  }
+
+  /**
+   * Submissions ligadas a una Tarea (flujo de enlace compartible). A
+   * diferencia de findByForm/findAll, SÍ incluye templateSnapshot: es
+   * necesario para derivar el flag hasPdf en TaskSubmissionDto (Task 2 del
+   * plan de tareas). El volumen esperado es bajo (submissions de una sola
+   * tarea, no de todo el formulario), así que el costo es aceptable.
+   */
+  async findByTaskId(taskId: string): Promise<FormSubmissionDocument[]> {
+    return this.submissionModel.find({ taskId }).sort({ submittedAt: -1 });
   }
 
   async findOne(id: string): Promise<FormSubmissionDocument> {

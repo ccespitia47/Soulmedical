@@ -17,6 +17,12 @@ import type {
 } from '../email/email.types';
 import { SubmissionsService } from '../submissions/submissions.service';
 import { FormsService } from '../forms/forms.service';
+import type {
+  TaskSummaryDto,
+  TaskDetailDto,
+  TaskRecipientDto,
+  TaskSubmissionDto,
+} from './tasks-list.dto';
 
 export type TaskShareResponse = {
   formName: string;
@@ -294,6 +300,82 @@ export class TasksService {
     return task;
   }
 
+  // ── Reportes de tarea (pestaña "Reportes") ─────────────────────────────────
+
+  /** Tareas de un formulario con stats agregadas, para la pestaña Reportes. */
+  async listByForm(formId: string): Promise<TaskSummaryDto[]> {
+    const tasks = await this.taskModel
+      .find({ formId })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return tasks.map((t) => {
+      const withMeta = t as unknown as { _id: string; createdAt?: Date };
+      return {
+        id: withMeta._id,
+        title: t.title,
+        status: t.status,
+        createdAt: (withMeta.createdAt ?? new Date()).toISOString(),
+        createdByName: t.createdByName,
+        totalRecipients: t.steps.length,
+        completedCount: t.steps.filter((s) => s.status === 'completed').length,
+        pendingCount: t.steps.filter((s) => s.status !== 'completed').length,
+        hasShareLink: !!t.shareLink?.token,
+      };
+    });
+  }
+
+  /** Detalle de una tarea: destinatarios (con estado de reenvío) + submissions ligadas. */
+  async getDetail(taskId: string): Promise<TaskDetailDto> {
+    const task = await this.taskModel.findById(taskId).lean();
+    if (!task) throw new NotFoundException('Tarea no encontrada');
+    const withMeta = task as unknown as { _id: string; createdAt: Date };
+
+    const now = Date.now();
+    const TEN_MIN = 10 * 60 * 1000;
+    const recipients: TaskRecipientDto[] = task.steps.map((s, i) => ({
+      stepIndex: i,
+      email: s.recipientEmail,
+      name: s.recipientName ?? s.recipientEmail,
+      status: s.status,
+      submittedAt: s.completedAt ? s.completedAt.toISOString() : null,
+      canResend:
+        s.status !== 'completed' &&
+        (!s.lastReminderAt || now - s.lastReminderAt.getTime() > TEN_MIN),
+      lastResendAt: s.lastReminderAt ? s.lastReminderAt.toISOString() : null,
+    }));
+
+    // Submissions ligadas a esta tarea (flujo de enlace compartible; ver
+    // submitFromShare más abajo, que persiste taskId en cada submission).
+    const subs = await this.submissionsService.findByTaskId(taskId);
+    const submissions: TaskSubmissionDto[] = subs.map((s) => ({
+      id: String(s._id),
+      submittedAt: s.submittedAt.toISOString(),
+      // Las submissions de tarea llegan siempre por el link público (sin
+      // JWT), así que submittedById es null — no hay nombre real que
+      // mostrar todavía. Task 6 puede enriquecer esto si aplica.
+      userName: s.submittedById != null ? `Usuario #${s.submittedById}` : 'Anónimo',
+      hasPdf: !!s.templateSnapshot,
+      summary: {}, // ver Task 6 para poblar; MVP lo deja vacío
+    }));
+
+    const baseUrl = process.env.APP_BASE_URL ?? '';
+    const shareLinkUrl = task.shareLink?.token
+      ? `${baseUrl}/t/${task.shareLink.token}`
+      : null;
+
+    return {
+      id: withMeta._id,
+      title: task.title,
+      status: task.status,
+      createdAt: withMeta.createdAt.toISOString(),
+      createdByName: task.createdByName,
+      shareLinkUrl,
+      recipients,
+      submissions,
+    };
+  }
+
   /**
    * Tareas activas en las que el usuario participa: ya sea porque le toca
    * ahora ('in_progress'), porque su paso está aún por llegar ('pending'),
@@ -496,6 +578,7 @@ export class TasksService {
         metadata: { source: 'task-share', taskId: task._id, shareToken: token },
       },
       undefined, // userId — anónimo, no hay JWT
+      task._id, // taskId — permite listar esta submission en GET /tasks/:id/detail
     );
 
     return { submissionId: String(submission._id) };

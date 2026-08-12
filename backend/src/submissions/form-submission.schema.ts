@@ -23,6 +23,12 @@ export class FormSubmission {
   @Prop({ type: Object, default: null })
   metadata: Record<string, unknown> | null;
 
+  // Enlaza la submission a la Tarea que la originó (flujo de enlace
+  // compartible en tasks.service.ts submitFromShare). null para submissions
+  // normales (formulario directo) — no requiere migración de datos viejos.
+  @Prop({ type: String, default: null, index: true })
+  taskId: string | null;
+
   @Prop({ default: () => new Date(), index: true })
   submittedAt: Date;
 

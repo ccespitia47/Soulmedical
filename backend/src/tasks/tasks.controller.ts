@@ -14,6 +14,9 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/permissions.guard';
+import { RequirePermission } from '../auth/permissions.decorator';
+import { Permission } from '../auth/permissions';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto, SubmitTaskStepDto } from './tasks.dto';
 import type { TaskDocument } from './task.schema';
@@ -92,6 +95,25 @@ export class TasksController {
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.tasksService.findOne(id);
+  }
+
+  // ── Reportes de tarea (pestaña "Reportes" en Records) ──────────────────────
+  // Registrado en TasksController (no en FormsController) con path
+  // 'by-form/:formId' para no chocar con el ':id' de arriba (segmentos
+  // distintos: /tasks/by-form/x tiene 2 segmentos, /tasks/:id tiene 1).
+
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission(Permission.REPORTS_VIEW)
+  @Get('by-form/:formId')
+  async listByForm(@Param('formId') formId: string) {
+    return this.tasksService.listByForm(formId);
+  }
+
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission(Permission.REPORTS_VIEW)
+  @Get(':id/detail')
+  async getDetail(@Param('id') id: string) {
+    return this.tasksService.getDetail(id);
   }
 
   @UseGuards(JwtAuthGuard)
