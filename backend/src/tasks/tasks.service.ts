@@ -649,7 +649,7 @@ export class TasksService {
 
   // Público: Task 4 (cron de recordatorios automáticos) y el endpoint de
   // reenvío manual (resendStep) lo invocan desde fuera de esta clase.
-  async sendStepEmail(task: TaskDocument, stepIndex: number): Promise<void> {
+  async sendStepEmail(task: TaskDocument, stepIndex: number): Promise<boolean> {
     const step = task.steps[stepIndex];
     const isFirst = stepIndex === 0;
     const taskUrl = this.getTaskUrl(step.token);
@@ -687,8 +687,10 @@ export class TasksService {
         toRecipients: [{ type: 'static', email: step.recipientEmail }],
         senderName: 'SoulForms — Tareas',
       });
+      return true;
     } catch (err) {
       console.error(`[TasksService] Error enviando email paso ${stepIndex}:`, err);
+      return false;
     }
   }
 

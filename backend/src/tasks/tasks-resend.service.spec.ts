@@ -53,7 +53,7 @@ describe('TasksService.resendStep', () => {
     // sendStepEmail hace side-effects de red (EmailService); lo mockeamos
     // para aislar la lógica de throttle/ownership de resendStep. Es público
     // desde este task, así que jest.spyOn funciona sin trucos de acceso.
-    jest.spyOn(service, 'sendStepEmail').mockResolvedValue(undefined);
+    jest.spyOn(service, 'sendStepEmail').mockResolvedValue(true);
     return { service, taskModel };
   }
 

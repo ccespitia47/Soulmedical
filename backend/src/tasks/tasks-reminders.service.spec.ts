@@ -41,7 +41,7 @@ describe('TasksRemindersService.sendReminders', () => {
       find: jest.fn().mockResolvedValue(tasks),
     };
     const tasksService = {
-      sendStepEmail: jest.fn().mockResolvedValue(undefined),
+      sendStepEmail: jest.fn().mockResolvedValue(true),
     };
     const service = new TasksRemindersService(
       taskModel as any,
@@ -87,7 +87,9 @@ describe('TasksRemindersService.sendReminders', () => {
       steps: [{ status: 'in_progress', lastReminderAt: null }],
     });
     const { service, tasksService } = buildService([task]);
-    tasksService.sendStepEmail.mockRejectedValue(new Error('SMTP down'));
+    // sendStepEmail nunca rethrow — atrapa el error de emailService y
+    // resuelve `false`. El cron debe respetar ese boolean, no un catch.
+    tasksService.sendStepEmail.mockResolvedValue(false);
 
     await service.sendReminders();
 

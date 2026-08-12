@@ -44,14 +44,22 @@ export class TasksRemindersService {
       }
 
       try {
-        await this.tasksService.sendStepEmail(task, idx);
+        const ok = await this.tasksService.sendStepEmail(task, idx);
+        if (!ok) {
+          // Log ya emitido dentro de sendStepEmail; no actualizar lastReminderAt.
+          this.logger.warn(
+            `Recordatorio task=${task._id} step=${idx} email FAILED — no se marca lastReminderAt`,
+          );
+          continue;
+        }
         step.lastReminderAt = new Date(now);
         task.markModified('steps');
         await task.save();
         sent++;
       } catch (err) {
+        // Fallo inesperado (no del envío) — log y continuar con siguiente task.
         this.logger.error(
-          `Recordatorio task=${task._id} step=${idx} falló: ${err instanceof Error ? err.message : err}`,
+          `Recordatorio task=${task._id} step=${idx} error inesperado: ${err instanceof Error ? err.message : err}`,
         );
       }
     }
