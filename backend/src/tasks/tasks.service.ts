@@ -551,11 +551,14 @@ export class TasksService {
     return { shareLinkUrl };
   }
 
-  async cancel(id: string): Promise<Task> {
+  async cancel(id: string, userId: number): Promise<Task> {
     const task = await this.taskModel.findById(id);
     if (!task) throw new NotFoundException('Tarea no encontrada');
-    if (task.status === 'completed') {
-      throw new BadRequestException('No se puede cancelar una tarea completada');
+    if (task.createdById !== userId) {
+      throw new ForbiddenException('No autorizado');
+    }
+    if (task.status === 'cancelled') {
+      return task; // idempotente
     }
     task.status = 'cancelled';
     await task.save();
@@ -569,6 +572,9 @@ export class TasksService {
       .findOne({ 'shareLink.token': token, 'shareLink.enabled': true })
       .lean();
     if (!task) throw new NotFoundException('Enlace no válido o desactivado');
+    if (task.status === 'cancelled') {
+      throw new NotFoundException('Enlace no válido o desactivado');
+    }
 
     // Si el admin cerro el form (isActive=false), lo despublico
     // (isPublic=false), o le puso verificacion de email, el link deja de
@@ -592,6 +598,9 @@ export class TasksService {
       .findOne({ 'shareLink.token': token, 'shareLink.enabled': true })
       .lean();
     if (!task) throw new NotFoundException('Enlace no válido o desactivado');
+    if (task.status === 'cancelled') {
+      throw new NotFoundException('Enlace no válido o desactivado');
+    }
 
     // SubmissionsService.submit() solo valida isActive del form, NO chequea
     // isPublic ni requiresEmailVerification. Un attacker podria reusar un link
