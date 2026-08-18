@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  cancelTaskApi,
   getFormTasksApi,
   getTaskDetailApi,
   resendTaskStepApi,
   requestTaskBulkPdfApi,
+  requestTaskReportByEmailApi,
   toggleTaskShareLinkApi,
   type TaskSummaryDto,
   type TaskDetailDto,
@@ -11,6 +13,7 @@ import {
 } from '../../services/api';
 import SubmissionsListView from './SubmissionsListView';
 import Icon from '../common/Icon';
+import ConfirmModal from '../common/ConfirmModal';
 
 type Props = {
   formId: string;
@@ -28,15 +31,17 @@ const RECIPIENT_STATUS_CFG: Record<
   pending: { bg: '#fef3c7', color: '#92400e', label: 'Pendiente', icon: 'clock' },
 };
 
-const TASK_STATUS_LABEL: Record<string, string> = {
-  active: 'Activa',
-  in_progress: 'En curso',
-  completed: 'Completada',
-  cancelled: 'Cancelada',
-};
-
-function formatTaskStatus(status: string): string {
-  return TASK_STATUS_LABEL[status] ?? status.charAt(0).toUpperCase() + status.slice(1);
+function statusBadge(status: string): { label: string; className: string } {
+  if (status === 'in_progress') {
+    return { label: 'Activa', className: 'bg-emerald-100 text-emerald-900' };
+  }
+  if (status === 'completed') {
+    return { label: 'Completada', className: 'bg-cyan-100 text-cyan-900' };
+  }
+  if (status === 'cancelled') {
+    return { label: 'Nula', className: 'bg-slate-200 text-slate-600 line-through' };
+  }
+  return { label: status, className: 'bg-slate-100 text-slate-700' };
 }
 
 function formatDateTime(iso: string): string {
@@ -60,12 +65,18 @@ export default function TasksReportPanel({ formId, formName }: Props) {
   const [detailError, setDetailError] = useState<string | null>(null);
 
   const [linkBusy, setLinkBusy] = useState(false);
+  const [confirmDisableLink, setConfirmDisableLink] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [resendBusy, setResendBusy] = useState<number | null>(null);
   const [resendFeedback, setResendFeedback] = useState<Feedback>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkFeedback, setBulkFeedback] = useState<Feedback>(null);
+  const [excelBusy, setExcelBusy] = useState(false);
+  const [excelFeedback, setExcelFeedback] = useState<Feedback>(null);
   const [shareCheckboxKey, setShareCheckboxKey] = useState(0);
+  const [oneShotBusy, setOneShotBusy] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   // Contador de requests de detalle: clicks rápidos entre tarea A → B pueden
   // hacer que la respuesta de A llegue después de B y la sobrescriba. Cada
@@ -104,6 +115,9 @@ export default function TasksReportPanel({ formId, formName }: Props) {
     setResendFeedback(null);
     setBulkBusy(false);
     setBulkFeedback(null);
+    setExcelBusy(false);
+    setExcelFeedback(null);
+    setOneShotBusy(false);
     setDetailError(null);
   };
 
@@ -136,16 +150,8 @@ export default function TasksReportPanel({ formId, formName }: Props) {
     setTimeout(() => setCopyFeedback(false), 2000);
   };
 
-  const handleToggleShareLink = async (nextEnabled: boolean) => {
+  const doToggleShareLink = async (nextEnabled: boolean) => {
     if (!detail) return;
-    if (!nextEnabled && detail.shareLinkUrl) {
-      if (!window.confirm('El enlace actual dejará de funcionar. ¿Continuar?')) {
-        // El checkbox nativo ya cambió su estado DOM interno al clickear;
-        // forzar remount para que vuelva a reflejar detail.shareLinkUrl.
-        setShareCheckboxKey((k) => k + 1);
-        return;
-      }
-    }
     setLinkBusy(true);
     const res = await toggleTaskShareLinkApi(detail.id, nextEnabled);
     setLinkBusy(false);
@@ -160,6 +166,60 @@ export default function TasksReportPanel({ formId, formName }: Props) {
         prev.map((t) => (t.id === detail.id ? { ...t, hasShareLink: !!res.data!.shareLinkUrl } : t)),
       );
     }
+  };
+
+  const handleToggleShareLink = async (nextEnabled: boolean) => {
+    if (!detail) return;
+    if (!nextEnabled && detail.shareLinkUrl) {
+      // En vez del confirm nativo del navegador, mostramos un modal. Revertimos
+      // el checkbox (remount) hasta que el usuario confirme en el modal.
+      setShareCheckboxKey((k) => k + 1);
+      setConfirmDisableLink(true);
+      return;
+    }
+    await doToggleShareLink(nextEnabled);
+  };
+
+  const handleToggleOneShot = async (nextValue: boolean) => {
+    if (!detail) return;
+    setOneShotBusy(true);
+    const res = await toggleTaskShareLinkApi(detail.id, true, nextValue);
+    if (res.error) {
+      setOneShotBusy(false);
+      setDetailError(res.error);
+      return;
+    }
+    // Refetch completo para reflejar el estado real que devuelve el backend
+    // (p. ej. shareLinkUrl puede seguir vigente o no según el flujo).
+    const myReqId = ++detailRequestId.current;
+    const fresh = await getTaskDetailApi(detail.id);
+    if (myReqId !== detailRequestId.current) return; // respuesta obsoleta
+    setOneShotBusy(false);
+    if (fresh.error || !fresh.data) {
+      setDetailError(fresh.error ?? 'No se pudo actualizar el enlace');
+      return;
+    }
+    setDetail(fresh.data);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTargetId) return;
+    const targetId = deleteTargetId;
+    setDeleteBusy(true);
+    const res = await cancelTaskApi(targetId);
+    setDeleteBusy(false);
+    setDeleteTargetId(null);
+    if (res.error) {
+      setError(res.error);
+      return;
+    }
+    if (expandedId === targetId) {
+      setExpandedId(null);
+      setDetail(null);
+      resetDetailUiState();
+    }
+    const list = await getFormTasksApi(formId);
+    if (list.data) setTasks(list.data);
   };
 
   const handleResend = async (recipient: TaskRecipientDto) => {
@@ -193,6 +253,22 @@ export default function TasksReportPanel({ formId, formName }: Props) {
     setBulkFeedback({ kind: 'ok', msg: res.data?.message ?? 'Los PDFs van en camino a tu correo.' });
   };
 
+  const handleTaskExcel = async () => {
+    if (!detail) return;
+    setExcelBusy(true);
+    setExcelFeedback(null);
+    const res = await requestTaskReportByEmailApi(formId, detail.id);
+    setExcelBusy(false);
+    if (res.error) {
+      setExcelFeedback({ kind: 'err', msg: res.error });
+      return;
+    }
+    setExcelFeedback({
+      kind: 'ok',
+      msg: res.data?.message ?? 'Te enviamos el enlace del Excel a tu correo.',
+    });
+  };
+
   return (
     <div className="animate-fade-up flex flex-col gap-3">
       {loading && (
@@ -223,15 +299,23 @@ export default function TasksReportPanel({ formId, formName }: Props) {
         !error &&
         tasks.map((t) => {
           const isExpanded = expandedId === t.id;
+          const badge = statusBadge(t.status);
           return (
             <div
               key={t.id}
               className="overflow-hidden rounded-[20px] border border-slate-200/80 bg-white shadow-[0_10px_30px_-18px_rgba(15,40,80,0.25)]"
             >
               {/* Fila resumen — clickeable */}
-              <button
-                type="button"
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => handleExpand(t.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleExpand(t.id);
+                  }
+                }}
                 className="flex w-full cursor-pointer items-center gap-3 px-4 py-3.5 text-left transition hover:bg-slate-50/70"
               >
                 <span
@@ -248,10 +332,9 @@ export default function TasksReportPanel({ formId, formName }: Props) {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="truncate text-[13.5px] font-bold text-slate-900">{t.title}</span>
                     <span
-                      className="rounded-full px-2 py-px text-[10px] font-bold uppercase tracking-wide"
-                      style={{ background: '#f1f5f9', color: '#475569' }}
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${badge.className}`}
                     >
-                      {formatTaskStatus(t.status)}
+                      {badge.label}
                     </span>
                     {t.hasShareLink && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-[#00c2a8]/10 px-2 py-px text-[10px] font-bold text-[#0891b2]">
@@ -276,12 +359,26 @@ export default function TasksReportPanel({ formId, formName }: Props) {
                   </span>
                 </div>
 
+                {t.status === 'in_progress' && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteTargetId(t.id);
+                    }}
+                    className="inline-flex flex-shrink-0 cursor-pointer items-center gap-1 rounded-lg border-[1.5px] border-red-200 bg-red-50 px-2.5 py-1 text-[11.5px] font-semibold text-red-700 transition hover:bg-red-100"
+                    title="Eliminar tarea"
+                  >
+                    <Icon name="trash" size={13} /> Eliminar
+                  </button>
+                )}
+
                 <Icon
                   name="chevronRight"
                   size={16}
                   className={`flex-shrink-0 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
                 />
-              </button>
+              </div>
 
               {/* Detalle expandido */}
               {isExpanded && (
@@ -301,7 +398,7 @@ export default function TasksReportPanel({ formId, formName }: Props) {
                   {!detailLoading && detail && (
                     <div className="flex flex-col gap-4">
                       {/* Stats */}
-                      <div className="grid grid-cols-3 gap-2.5">
+                      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
                         <StatChip
                           icon="users"
                           value={detail.recipients.length}
@@ -319,6 +416,12 @@ export default function TasksReportPanel({ formId, formName }: Props) {
                           value={detail.recipients.filter((r) => r.status !== 'completed').length}
                           label="Pendientes"
                           color="#b45309"
+                        />
+                        <StatChip
+                          icon="link"
+                          value={detail.externalCount}
+                          label="Externos"
+                          color="#0891b2"
                         />
                       </div>
 
@@ -369,6 +472,28 @@ export default function TasksReportPanel({ formId, formName }: Props) {
                               <Icon name={copyFeedback ? 'checkCircle' : 'copy'} size={13} />
                               {copyFeedback ? 'Copiado ✓' : 'Copiar'}
                             </button>
+                          </div>
+                        )}
+
+                        {detail.shareLinkUrl && (
+                          <label className="mt-2.5 flex items-center gap-2 text-[12px] text-slate-600">
+                            <input
+                              type="checkbox"
+                              checked={detail.shareLinkOneShot}
+                              disabled={oneShotBusy}
+                              onChange={(e) => handleToggleOneShot(e.target.checked)}
+                            />
+                            Solo permitir un llenado por link
+                            {oneShotBusy && (
+                              <Icon name="refresh" size={12} className="animate-spin text-slate-400" />
+                            )}
+                          </label>
+                        )}
+
+                        {detail.shareLinkOneShot && !detail.shareLinkUrl && (
+                          <div className="mt-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11.5px] text-slate-600">
+                            Este enlace ya fue utilizado y no acepta nuevas respuestas. Toca &quot;Generar
+                            enlace compartible&quot; para crear uno nuevo.
                           </div>
                         )}
                       </div>
@@ -430,31 +555,47 @@ export default function TasksReportPanel({ formId, formName }: Props) {
                         <span className="text-[11.5px] text-gray-400">
                           Recibirás un correo con el enlace de descarga.
                         </span>
-                        <button
-                          type="button"
-                          onClick={handleBulkPdf}
-                          disabled={bulkBusy || detail.submissions.length === 0}
-                          className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border-none bg-[linear-gradient(135deg,#00c2a8_0%,#0891b2_100%)] px-4 py-2.5 text-[12.5px] font-bold text-white shadow-[0_4px_14px_-4px_rgba(0,194,168,0.5)] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-6px_rgba(0,194,168,0.6)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none"
-                        >
-                          <Icon name="download" size={14} />
-                          {bulkBusy ? 'Enviando…' : 'Descargar todos los PDF'}
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={handleTaskExcel}
+                            disabled={excelBusy || detail.submissions.length === 0}
+                            className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border-[1.5px] border-[#00c2a8]/30 bg-[#00c2a8]/5 px-4 py-2.5 text-[12.5px] font-bold text-[#0891b2] transition hover:bg-[#00c2a8]/10 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <Icon name={excelBusy ? 'refresh' : 'table'} size={14} className={excelBusy ? 'animate-spin' : ''} />
+                            {excelBusy ? 'Enviando…' : 'Descargar Excel'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleBulkPdf}
+                            disabled={bulkBusy || detail.submissions.length === 0}
+                            className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border-none bg-[linear-gradient(135deg,#00c2a8_0%,#0891b2_100%)] px-4 py-2.5 text-[12.5px] font-bold text-white shadow-[0_4px_14px_-4px_rgba(0,194,168,0.5)] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-6px_rgba(0,194,168,0.6)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none"
+                          >
+                            <Icon name="download" size={14} />
+                            {bulkBusy ? 'Enviando…' : 'Descargar todos los PDF'}
+                          </button>
+                        </div>
                       </div>
 
-                      {bulkFeedback && (
-                        <div
-                          className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-[12.5px] ${
-                            bulkFeedback.kind === 'ok'
-                              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                              : 'border-red-200 bg-red-50 text-red-800'
-                          }`}
-                        >
-                          <Icon
-                            name={bulkFeedback.kind === 'ok' ? 'checkCircle' : 'alert'}
-                            size={15}
-                            className="flex-shrink-0"
-                          />
-                          <span>{bulkFeedback.msg}</span>
+                      {(bulkFeedback || excelFeedback) && (
+                        <div className="flex flex-col gap-2">
+                          {[excelFeedback, bulkFeedback].filter(Boolean).map((fb, i) => (
+                            <div
+                              key={i}
+                              className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-[12.5px] ${
+                                fb!.kind === 'ok'
+                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                                  : 'border-red-200 bg-red-50 text-red-800'
+                              }`}
+                            >
+                              <Icon
+                                name={fb!.kind === 'ok' ? 'checkCircle' : 'alert'}
+                                size={15}
+                                className="flex-shrink-0"
+                              />
+                              <span>{fb!.msg}</span>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
@@ -464,6 +605,31 @@ export default function TasksReportPanel({ formId, formName }: Props) {
             </div>
           );
         })}
+
+      {confirmDisableLink && (
+        <ConfirmModal
+          title="Inhabilitar enlace"
+          message="El enlace actual dejará de funcionar y las personas ya no podrán diligenciar la tarea con él. ¿Deseas continuar?"
+          confirmLabel="Inhabilitar enlace"
+          confirmColor="#ef4444"
+          onCancel={() => setConfirmDisableLink(false)}
+          onConfirm={() => {
+            setConfirmDisableLink(false);
+            void doToggleShareLink(false);
+          }}
+        />
+      )}
+
+      {deleteTargetId && (
+        <ConfirmModal
+          title="Eliminar tarea"
+          message="¿Eliminar esta tarea? Los destinatarios que no la completaron ya no recibirán recordatorios y el enlace compartible dejará de funcionar. Esta acción no se puede deshacer."
+          confirmLabel={deleteBusy ? 'Eliminando…' : 'Eliminar'}
+          confirmColor="#ef4444"
+          onCancel={() => setDeleteTargetId(null)}
+          onConfirm={handleDelete}
+        />
+      )}
     </div>
   );
 }

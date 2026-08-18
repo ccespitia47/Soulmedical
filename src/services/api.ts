@@ -522,6 +522,18 @@ export async function requestReportByEmailApi(formId: string, fieldIds: string[]
   );
 }
 
+/** Excel (por correo) de los registros de UNA tarea. Sin fieldIds → todas las columnas. */
+export async function requestTaskReportByEmailApi(
+  formId: string,
+  taskId: string,
+  fieldIds: string[] = [],
+) {
+  return request<{ success: boolean; message: string; recipients: number }>(
+    `/forms/${formId}/tasks/${taskId}/export-email`,
+    { method: 'POST', body: JSON.stringify({ fieldIds }) },
+  );
+}
+
 export type ReportDownloadMeta = {
   formName: string;
   expiresAt: string; // ISO date
@@ -769,11 +781,21 @@ export function requestBulkPdfApi(
 
 // --- Tareas ---
 
-export function toggleTaskShareLinkApi(taskId: string, enabled: boolean) {
+export function toggleTaskShareLinkApi(
+  taskId: string,
+  enabled: boolean,
+  oneShot?: boolean,
+) {
+  const body: { enabled: boolean; oneShot?: boolean } = { enabled };
+  if (oneShot !== undefined) body.oneShot = oneShot;
   return request<{ shareLinkUrl: string | null }>(
     `/tasks/${taskId}/share-link`,
-    { method: 'POST', body: JSON.stringify({ enabled }) },
+    { method: 'POST', body: JSON.stringify(body) },
   );
+}
+
+export function cancelTaskApi(taskId: string) {
+  return request<{ status: string }>(`/tasks/${taskId}/cancel`, { method: 'PATCH' });
 }
 
 export type TaskSummaryDto = {
@@ -805,8 +827,12 @@ export type TaskDetailDto = {
   createdAt: string;
   createdByName: string;
   shareLinkUrl: string | null;
+  /** Persiste aunque `shareLinkUrl` sea null (link ya utilizado/desactivado). */
+  shareLinkOneShot: boolean;
   recipients: TaskRecipientDto[];
   submissions: RecordRowDto[]; // reusa el tipo existente de records
+  /** Externos (sin cuenta) que diligenciaron la tarea vía el enlace. */
+  externalCount: number;
 };
 
 export function getFormTasksApi(formId: string) {
