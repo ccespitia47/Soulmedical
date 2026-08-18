@@ -61,15 +61,26 @@ describe('TasksService.cancel', () => {
     expect(task.save).toHaveBeenCalledTimes(1);
   });
 
-  it('rechaza 403 si createdById !== userId', async () => {
+  it('rechaza 403 si createdById !== userId y no es admin', async () => {
     const task = makeTaskDoc({ createdById: 1, status: 'in_progress' });
     const { service } = buildService({ 'task-1': task });
 
-    await expect(service.cancel('task-1', 2)).rejects.toThrow(
+    await expect(service.cancel('task-1', 2, 'coordinator')).rejects.toThrow(
       ForbiddenException,
     );
     expect(task.save).not.toHaveBeenCalled();
     expect(task.status).toBe('in_progress');
+  });
+
+  it('admin puede cancelar tarea ajena (override)', async () => {
+    const task = makeTaskDoc({ createdById: 1, status: 'in_progress' });
+    const { service } = buildService({ 'task-1': task });
+
+    const result = await service.cancel('task-1', 2, 'admin');
+
+    expect(task.status).toBe('cancelled');
+    expect(task.save).toHaveBeenCalledTimes(1);
+    expect(result.status).toBe('cancelled');
   });
 
   it('rechaza 404 si task no existe', async () => {

@@ -188,7 +188,7 @@ export class TasksController {
   async cancel(@Param('id') id: string, @Req() req: AuthedRequest) {
     const user = req.user;
     if (!user) throw new UnauthorizedException('Usuario no autenticado');
-    return this.tasksService.cancel(id, Number(user.id));
+    return this.tasksService.cancel(id, Number(user.id), user.role);
   }
 
   @UseGuards(JwtAuthGuard)

@@ -600,10 +600,13 @@ export class TasksService {
     return { shareLinkUrl };
   }
 
-  async cancel(id: string, userId: number): Promise<Task> {
+  async cancel(id: string, userId: number, userRole?: string): Promise<Task> {
     const task = await this.taskModel.findById(id);
     if (!task) throw new NotFoundException('Tarea no encontrada');
-    if (task.createdById !== userId) {
+    // Admin override: cualquier admin puede eliminar tareas de todo el equipo
+    // desde el panel de Reportes. Coordinator/user siguen restringidos al owner.
+    const isAdmin = userRole === 'admin';
+    if (!isAdmin && task.createdById !== userId) {
       throw new ForbiddenException('No autorizado');
     }
     if (task.status === 'completed') {
