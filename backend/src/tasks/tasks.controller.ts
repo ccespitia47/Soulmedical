@@ -59,6 +59,7 @@ export class TasksController {
         (body.emailTemplate as Record<string, unknown> | null | undefined) ??
         null,
       generateShareLink: body.generateShareLink === true,
+      oneShotLink: body.oneShotLink === true,
     };
 
     const task = await this.tasksService.create(
@@ -208,12 +209,17 @@ export class TasksController {
   @Post(':id/share-link')
   async toggleShareLink(
     @Param('id') id: string,
-    @Body() body: { enabled: boolean },
+    @Body() body: { enabled: boolean; oneShot?: boolean },
     @Req() req: AuthedRequest,
   ) {
     const user = req.user;
     if (!user) throw new UnauthorizedException('Usuario no autenticado');
-    return this.tasksService.toggleShareLink(id, body.enabled === true, Number(user.id));
+    return this.tasksService.toggleShareLink(
+      id,
+      body.enabled === true,
+      Number(user.id),
+      body.oneShot,
+    );
   }
 
   @Get('public/:token')
@@ -267,6 +273,23 @@ export class TasksController {
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
   async getShareByToken(@Param('token') token: string) {
     return this.tasksService.findByShareToken(token);
+  }
+
+  // Búsqueda pública (sin auth) para widgets "search" con fuente
+  // form_submissions dentro de un formulario compartido por enlace. El widget
+  // se resuelve por id dentro de la tarea del token (no se acepta un formId
+  // arbitrario del cliente). Rate-limit como el GET del share.
+  @Post('share/:token/search')
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  async searchShare(
+    @Param('token') token: string,
+    @Body() body: { widgetId?: string; q?: string },
+  ) {
+    return this.tasksService.searchFromShare(
+      token,
+      body?.widgetId ?? '',
+      body?.q ?? '',
+    );
   }
 
   @Post('share/:token/submit')

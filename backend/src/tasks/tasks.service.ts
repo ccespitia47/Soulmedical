@@ -108,6 +108,7 @@ export class TasksService {
         ? {
             token: randomBytes(8).toString('base64url'),
             enabled: true,
+            oneShot: dto.oneShotLink === true,
           }
         : null,
     });
@@ -408,6 +409,7 @@ export class TasksService {
       createdAt: withMeta.createdAt.toISOString(),
       createdByName: task.createdByName,
       shareLinkUrl,
+      shareLinkOneShot: task.shareLink?.oneShot === true,
       recipients,
       submissions,
       externalCount,
@@ -557,6 +559,7 @@ export class TasksService {
     taskId: string,
     enabled: boolean,
     userId: number,
+    oneShot?: boolean,
   ): Promise<{ shareLinkUrl: string | null }> {
     const task = await this.taskModel.findById(taskId);
     if (!task) throw new NotFoundException('Tarea no encontrada');
@@ -567,11 +570,16 @@ export class TasksService {
     if (enabled) {
       // Idempotente: si ya hay link con enabled=true, no rotar el token.
       if (task.shareLink?.enabled) {
-        // no-op, devolver el actual
+        // Solo tocamos oneShot si vino explícito en el body; sino no-op.
+        if (oneShot !== undefined) {
+          task.shareLink.oneShot = oneShot;
+          await task.save();
+        }
       } else {
         task.shareLink = {
           token: randomBytes(8).toString('base64url'),
           enabled: true,
+          oneShot: oneShot === true,
         };
         await task.save();
       }
@@ -731,6 +739,16 @@ export class TasksService {
       undefined, // userId — anónimo, no hay JWT
       task._id, // taskId — permite listar esta submission en GET /tasks/:id/detail
     );
+
+    // Enlace de un solo uso: tras el primer submit exitoso, se desactiva.
+    // `task` viene de un .lean() (arriba), así que no tiene .save(); usamos
+    // updateOne directo sobre el filtro por _id.
+    if (task.shareLink?.oneShot) {
+      await this.taskModel.updateOne(
+        { _id: task._id },
+        { $set: { 'shareLink.enabled': false } },
+      );
+    }
 
     return { submissionId: String(submission._id) };
   }

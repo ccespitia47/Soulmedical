@@ -40,6 +40,9 @@ export type TaskDetailDto = {
   createdAt: string;
   createdByName: string;
   shareLinkUrl: string | null;
+  shareLinkOneShot: boolean;
   recipients: TaskRecipientDto[];
   submissions: TaskSubmissionDto[];
+  /** Cuántos externos diligenciaron la tarea vía el enlace compartible. */
+  externalCount: number;
 };

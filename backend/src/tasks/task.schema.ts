@@ -45,6 +45,12 @@ export class TaskShareLink {
 
   @Prop({ default: true })
   enabled: boolean;
+
+  // Enlace de un solo uso: al primer submit exitoso vía submitFromShare, se
+  // fuerza enabled=false (ver tasks.service.ts). Default false para que
+  // docs viejos sin el campo se comporten como antes (link reutilizable).
+  @Prop({ type: Boolean, required: true, default: false })
+  oneShot: boolean;
 }
 
 export const TaskShareLinkSchema = SchemaFactory.createForClass(TaskShareLink);

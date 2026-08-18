@@ -20,6 +20,10 @@ export class CreateTaskDto {
   @IsBoolean()
   @IsOptional()
   generateShareLink?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  oneShotLink?: boolean;
 }
 
 export type SubmitAttachment = {
