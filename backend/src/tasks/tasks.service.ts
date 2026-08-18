@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   HttpException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -34,6 +35,8 @@ export type TaskShareResponse = {
 
 @Injectable()
 export class TasksService {
+  private readonly logger = new Logger(TasksService.name);
+
   constructor(
     @InjectModel(Task.name) private taskModel: Model<TaskDocument>,
     private readonly emailService: EmailService,
@@ -256,6 +259,30 @@ export class TasksService {
       task.markModified('steps');
       await task.save();
 
+      // Crear un registro (submission) ligado a la tarea, igual que el flujo de
+      // enlace compartible. Así la tarea completada por correo aparece en el
+      // reporte de Tareas con su "Ver PDF" (si el form tiene plantilla) y la
+      // descarga masiva encuentra registros. No rompemos el cierre de la tarea
+      // si esto falla — se registra y se sigue con el correo.
+      try {
+        await this.submissionsService.submit(
+          task.formId,
+          {
+            data: finalData,
+            metadata: { source: 'task-email', taskId: task._id },
+          },
+          undefined, // userId — el destinatario no tiene JWT
+          task._id, // taskId — permite listarla en GET /tasks/:id/detail
+        );
+      } catch (err) {
+        this.logger.error(
+          `[submitStep] No se pudo crear submission para tarea ${task._id}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+          err instanceof Error ? err.stack : undefined,
+        );
+      }
+
       // Notificar usando el template del form y los attachments (PDF)
       // que el cliente generó al completar el último paso.
       await this.sendCompletionEmail(task, dto.attachments ?? []);
@@ -360,6 +387,15 @@ export class TasksService {
       summary: {}, // ver Task 6 para poblar; MVP lo deja vacío
     }));
 
+    // Externos: personas sin cuenta que diligenciaron la tarea vía el enlace
+    // compartible (metadata.source === 'task-share'). Las completadas por
+    // correo llevan source 'task-email' y no cuentan como externas.
+    const externalCount = subs.filter(
+      (s) =>
+        (s.metadata as { source?: string } | null | undefined)?.source ===
+        'task-share',
+    ).length;
+
     const baseUrl = process.env.APP_BASE_URL ?? '';
     const shareLinkUrl = task.shareLink?.token
       ? `${baseUrl}/t/${task.shareLink.token}`
@@ -374,6 +410,7 @@ export class TasksService {
       shareLinkUrl,
       recipients,
       submissions,
+      externalCount,
     };
   }
 
@@ -557,6 +594,12 @@ export class TasksService {
     if (task.createdById !== userId) {
       throw new ForbiddenException('No autorizado');
     }
+    if (task.status === 'completed') {
+      // Defensa en profundidad: la UI solo muestra el botón "Eliminar" para
+      // tareas in_progress, pero un curl directo no debe poder revertir una
+      // completada a "nula" (perdería la info del cierre exitoso).
+      throw new BadRequestException('No se puede eliminar una tarea completada');
+    }
     if (task.status === 'cancelled') {
       return task; // idempotente
     }
@@ -588,6 +631,61 @@ export class TasksService {
       rules: task.rules ?? [],
       prefilledData: task.prefilledData ?? {},
     };
+  }
+
+  /**
+   * Búsqueda pública para un widget de tipo "search" dentro de un formulario
+   * compartido por enlace. La página pública no tiene sesión, así que no puede
+   * llamar al endpoint autenticado de búsqueda de envíos. Aquí resolvemos el
+   * widget por su id DENTRO de la tarea (no aceptamos un formId arbitrario del
+   * cliente) y solo servimos la fuente `form_submissions`: las demás
+   * (excel_web/sql/group) requieren credenciales del backend y no se exponen
+   * anónimamente; `google_sheets` no pasa por aquí (lee directo de Google).
+   */
+  async searchFromShare(
+    token: string,
+    widgetId: string,
+    q: string,
+  ): Promise<{ results: Record<string, unknown>[] }> {
+    const task = await this.taskModel
+      .findOne({ 'shareLink.token': token, 'shareLink.enabled': true })
+      .lean();
+    if (!task) throw new NotFoundException('Enlace no válido o desactivado');
+    await this.assertShareFormOpen(task.formId);
+
+    const query = (q ?? '').trim();
+    if (!query || !widgetId) return { results: [] };
+
+    const widgets = (task.widgets ?? []) as Array<{
+      id?: string;
+      type?: string;
+      config?: Record<string, unknown>;
+    }>;
+    const widget = widgets.find((w) => w?.id === widgetId);
+    const config = (widget?.config ?? {}) as {
+      sourceType?: string;
+      sourceFormId?: string;
+      searchableFields?: string[];
+    };
+
+    if (
+      !widget ||
+      widget.type !== 'search' ||
+      config.sourceType !== 'form_submissions' ||
+      !config.sourceFormId
+    ) {
+      return { results: [] };
+    }
+
+    const fields = Array.isArray(config.searchableFields)
+      ? config.searchableFields
+      : [];
+    return this.submissionsService.searchSubmissions(
+      config.sourceFormId,
+      query,
+      fields,
+      20,
+    );
   }
 
   async submitFromShare(
