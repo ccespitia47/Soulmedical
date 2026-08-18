@@ -3,6 +3,8 @@ import { useAuthStore } from "../../store/useAuthStore";
 import { useFolderStore } from "../../store/useFolderStore";
 import { getGroupsApi, getUsersApi, toggleTaskShareLinkApi, type GroupData } from "../../services/api";
 import type { FormRule, WidgetInstance } from "../../types/widget.types";
+import { evaluateRules } from "../../utils/formRules";
+import Icon from "../common/Icon";
 import InfoTab from "./taskBuilder/InfoTab";
 import PrefillTab from "./taskBuilder/PrefillTab";
 import StepsTab from "./taskBuilder/StepsTab";
@@ -23,10 +25,10 @@ type CreateTaskModalProps = {
 
 type Tab = "info" | "prefill" | "steps";
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: "info", label: "📋 Información" },
-  { id: "prefill", label: "✏️ Prediligenciar" },
-  { id: "steps", label: "👥 Destinatarios" },
+const TABS: { id: Tab; label: string; icon: string }[] = [
+  { id: "info", label: "Información", icon: "fileText" },
+  { id: "prefill", label: "Prediligenciar", icon: "edit" },
+  { id: "steps", label: "Destinatarios", icon: "users" },
 ];
 
 export default function CreateTaskModal({
@@ -46,12 +48,16 @@ export default function CreateTaskModal({
   const [title, setTitle] = useState(`Tarea — ${formName}`);
   const [description, setDescription] = useState("");
   const [prefilledData, setPrefilledData] = useState<Record<string, string>>({});
+  // Reglas de visibilidad aplicadas también al prediligenciar (igual que en la
+  // tarea/enlace): los campos ocultos por reglas no se muestran ni se prellenan.
+  const prefillHiddenIds = evaluateRules(rules, prefilledData);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [shareEnabled, setShareEnabled] = useState(false);
   const [shareLinkUrl, setShareLinkUrl] = useState<string | null>(null);
   const [taskCreated, setTaskCreated] = useState(false);
   const [createdTaskId, setCreatedTaskId] = useState<string | null>(null);
+  const [oneShotLink, setOneShotLink] = useState(false);
 
   const [allUsers, setAllUsers] = useState<SimpleUser[]>([]);
   const [groups, setGroups] = useState<GroupData[]>([]);
@@ -123,6 +129,60 @@ export default function CreateTaskModal({
     setPrefilledData(values);
   };
 
+  // Un widget (ej. search) puede rellenar OTROS campos tras una selección
+  // (fieldMappings) y también su propio valor. Igual que FormPage: seteamos el
+  // input destino con el setter nativo (compatible con React 19) y disparamos
+  // 'input' para que el form se entere y handlePrefillChange lo capture.
+  const handlePrefillWidgetValues = (vals: Record<string, string>) => {
+    const form = prefillFormRef.current;
+    if (!form) return;
+    const nativeInputSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    const nativeTextareaSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLTextAreaElement.prototype,
+      "value",
+    )?.set;
+    const nativeSelectSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLSelectElement.prototype,
+      "value",
+    )?.set;
+
+    const subformFills = new Map<string, Record<string, string>>();
+
+    for (const [name, value] of Object.entries(vals)) {
+      if (name.includes(":")) {
+        const [subformId, fieldId] = name.split(":", 2);
+        if (!subformId || !fieldId) continue;
+        const bag = subformFills.get(subformId) ?? {};
+        bag[fieldId] = value;
+        subformFills.set(subformId, bag);
+        continue;
+      }
+      const el = form.elements.namedItem(name) as HTMLElement | RadioNodeList | null;
+      if (!el || el instanceof RadioNodeList) continue;
+      if (el instanceof HTMLInputElement && nativeInputSetter) {
+        nativeInputSetter.call(el, value);
+      } else if (el instanceof HTMLTextAreaElement && nativeTextareaSetter) {
+        nativeTextareaSetter.call(el, value);
+      } else if (el instanceof HTMLSelectElement && nativeSelectSetter) {
+        nativeSelectSetter.call(el, value);
+      } else {
+        continue;
+      }
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+    for (const [subformId, fill] of subformFills) {
+      window.dispatchEvent(
+        new CustomEvent("subform:fill", { detail: { subformId, values: fill } }),
+      );
+    }
+
+    handlePrefillChange();
+  };
+
   const handleCreate = async () => {
     if (!title.trim()) {
       setError("El título es obligatorio");
@@ -140,6 +200,8 @@ export default function CreateTaskModal({
         if (val) finalPrefilled[w.id] = val;
       });
     }
+    // No prellenar campos ocultos por reglas (coherente con la vista del tab).
+    prefillHiddenIds.forEach((id) => delete finalPrefilled[id]);
 
     try {
       const res = await fetch(`${API_URL}/api/tasks`, {
@@ -163,6 +225,7 @@ export default function CreateTaskModal({
           prefilledData: finalPrefilled,
           steps: [], // <-- vacío: se agregan luego con /send
           generateShareLink: shareEnabled,
+          oneShotLink: shareEnabled ? oneShotLink : false,
         }),
       });
       if (!res.ok) {
@@ -259,44 +322,45 @@ export default function CreateTaskModal({
   const goNext = () => setTab(tab === "info" ? "prefill" : "steps");
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 p-5">
-      <div className="flex max-h-[92vh] w-full max-w-[680px] flex-col rounded-2xl bg-white shadow-[0_24px_60px_rgba(0,0,0,0.3)]">
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 p-5 backdrop-blur-[2px]">
+      <div className="animate-modal-in flex max-h-[92vh] w-full max-w-[680px] flex-col overflow-hidden rounded-[20px] bg-white shadow-[0_28px_70px_-18px_rgba(15,40,80,0.45)]">
         {/* Header */}
-        <div className="flex-shrink-0 px-6 pt-5">
-          <div className="mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-gradient-to-br from-[#00c2a8] to-[#0891b2] text-xl">
-                📋
+        <div className="flex-shrink-0 px-6 pt-6">
+          <div className="mb-5 flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3.5">
+              <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#00c2a8_0%,#0891b2_100%)] text-white shadow-[0_8px_20px_-6px_rgba(0,194,168,0.6)]">
+                <Icon name="send" size={22} />
               </div>
-              <div>
-                <div className="text-base font-extrabold text-gray-900">
-                  Crear Tarea
+              <div className="min-w-0">
+                <div className="text-[20px] font-extrabold tracking-tight text-slate-900">
+                  Crear tarea
                 </div>
-                <div className="text-xs text-gray-500">{formName}</div>
+                <div className="truncate text-[12.5px] text-gray-400">{formName}</div>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="h-8 w-8 cursor-pointer rounded-lg border-none bg-slate-100 text-base text-slate-500"
+              aria-label="Cerrar"
+              className="flex h-9 w-9 flex-shrink-0 cursor-pointer items-center justify-center rounded-xl border-none bg-slate-100 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-700"
             >
-              ✕
+              <Icon name="x" size={17} />
             </button>
           </div>
-          <div className="flex border-b border-slate-200">
+          <div className="flex gap-1 border-b border-slate-200">
             {TABS.map((t) => {
               const active = tab === t.id;
               return (
                 <button
                   key={t.id}
                   onClick={() => setTab(t.id)}
-                  className="-mb-px cursor-pointer border-b-2 border-none bg-transparent px-4 py-2.5 font-sans text-[13px]"
+                  className="-mb-px flex cursor-pointer items-center gap-1.5 border-b-2 border-none bg-transparent px-4 py-3 font-sans text-[13px] transition-all"
                   style={{
                     borderBottomColor: active ? "#00c2a8" : "transparent",
                     fontWeight: active ? 700 : 500,
-                    color: active ? "#00c2a8" : "#6b7280",
+                    color: active ? "#0891b2" : "#94a3b8",
                   }}
                 >
-                  {t.label}
+                  <Icon name={t.icon} size={15} /> {t.label}
                 </button>
               );
             })}
@@ -320,7 +384,9 @@ export default function CreateTaskModal({
               <PrefillTab
                 ref={prefillFormRef}
                 widgets={widgets}
+                hiddenWidgetIds={prefillHiddenIds}
                 onChange={handlePrefillChange}
+                onWidgetValues={handlePrefillWidgetValues}
               />
             </fieldset>
           </div>
@@ -344,40 +410,42 @@ export default function CreateTaskModal({
               shareCheckboxDisabled={linkBusy}
               shareCheckboxKey={shareCheckboxKey}
               shareLinkUrl={shareLinkUrl}
+              oneShotLink={oneShotLink}
+              onOneShotLinkChange={setOneShotLink}
             />
           </div>
         </div>
 
         {error && (
-          <div className="mx-6 rounded-lg border-[1.5px] border-red-200 bg-red-50 px-3.5 py-2.5 text-[13px] text-red-600">
-            ⚠️ {error}
+          <div className="mx-6 flex items-center gap-2 rounded-xl border-[1.5px] border-red-200 bg-red-50 px-3.5 py-2.5 text-[13px] font-medium text-red-600">
+            <Icon name="alert" size={15} className="flex-shrink-0" /> {error}
           </div>
         )}
 
         {/* Footer */}
-        <div className="flex flex-shrink-0 items-center justify-between border-t border-slate-200 px-6 py-4">
+        <div className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-slate-200 bg-slate-50/50 px-6 py-4">
           <div className="flex gap-2">
             {tab !== "info" && (
               <button
                 onClick={goPrev}
-                className="cursor-pointer rounded-lg border-[1.5px] border-slate-200 bg-transparent px-[18px] py-2 text-[13px] font-semibold text-gray-500"
+                className="inline-flex cursor-pointer items-center gap-1 rounded-lg border-[1.5px] border-slate-200 bg-white px-4 py-2 text-[13px] font-semibold text-gray-500 transition-all duration-150 hover:-translate-y-px hover:border-slate-300 hover:text-gray-800"
               >
-                ← Anterior
+                <Icon name="chevronRight" size={14} className="rotate-180" /> Anterior
               </button>
             )}
             {tab !== "steps" && (
               <button
                 onClick={goNext}
-                className="cursor-pointer rounded-lg border-[1.5px] border-emerald-200 bg-emerald-50 px-[18px] py-2 text-[13px] font-semibold text-emerald-700"
+                className="inline-flex cursor-pointer items-center gap-1 rounded-lg border-[1.5px] border-[#00c2a8]/30 bg-[#00c2a8]/5 px-4 py-2 text-[13px] font-semibold text-[#0891b2] transition-all duration-150 hover:-translate-y-px hover:bg-[#00c2a8]/10"
               >
-                Siguiente →
+                Siguiente <Icon name="chevronRight" size={14} />
               </button>
             )}
           </div>
           <div className="flex gap-2.5">
             <button
               onClick={onClose}
-              className="cursor-pointer rounded-lg border-[1.5px] border-slate-200 bg-transparent px-5 py-2 text-[13px] font-semibold text-gray-500"
+              className="cursor-pointer rounded-lg border-[1.5px] border-slate-200 bg-white px-5 py-2 text-[13px] font-semibold text-gray-500 transition-all duration-150 hover:-translate-y-px hover:border-slate-300 hover:text-gray-800"
             >
               Cancelar
             </button>
@@ -386,30 +454,34 @@ export default function CreateTaskModal({
                 <button
                   onClick={handleCreate}
                   disabled={saving || taskCreated || !title.trim()}
-                  className="cursor-pointer rounded-lg border-none px-6 py-2 text-[13px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border-none px-5 py-2.5 text-[13px] font-bold text-white shadow-[0_4px_14px_-4px_rgba(0,194,168,0.5)] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-6px_rgba(0,194,168,0.6)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none"
                   style={{
                     background: taskCreated
-                      ? "#10b981"
+                      ? "linear-gradient(135deg,#10b981,#059669)"
                       : saving || !title.trim()
                       ? "#94a3b8"
                       : "linear-gradient(135deg,#00c2a8,#0891b2)",
                   }}
                 >
-                  {taskCreated ? "✓ Tarea creada" : saving ? "Creando..." : "Crear tarea"}
+                  {taskCreated ? (
+                    <><Icon name="checkCircle" size={15} /> Tarea creada</>
+                  ) : saving ? (
+                    "Creando..."
+                  ) : (
+                    "Crear tarea"
+                  )}
                 </button>
                 <button
                   onClick={handleSend}
                   disabled={saving || !taskCreated}
-                  className="cursor-pointer rounded-lg border-none px-6 py-2 text-[13px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border-none px-5 py-2.5 text-[13px] font-bold text-white shadow-[0_4px_14px_-4px_rgba(0,194,168,0.5)] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-6px_rgba(0,194,168,0.6)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none"
                   style={{
-                    background: !taskCreated
-                      ? "#94a3b8"
-                      : saving
+                    background: !taskCreated || saving
                       ? "#94a3b8"
                       : "linear-gradient(135deg,#00c2a8,#0891b2)",
                   }}
                 >
-                  {saving ? "Enviando..." : "🚀 Enviar tarea"}
+                  <Icon name="send" size={14} /> {saving ? "Enviando..." : "Enviar tarea"}
                 </button>
               </>
             )}

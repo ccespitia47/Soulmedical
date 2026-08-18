@@ -22,6 +22,8 @@ type StepsTabProps = {
   shareCheckboxDisabled?: boolean;
   shareCheckboxKey?: number;
   shareLinkUrl?: string | null;
+  oneShotLink?: boolean;
+  onOneShotLinkChange?: (v: boolean) => void;
 };
 
 export default function StepsTab({
@@ -43,6 +45,8 @@ export default function StepsTab({
   shareCheckboxDisabled = false,
   shareCheckboxKey = 0,
   shareLinkUrl = null,
+  oneShotLink = false,
+  onOneShotLinkChange,
 }: StepsTabProps) {
   const getFiltered = (stepId: string): SimpleUser[] => {
     const q = (steps.find((s) => s.id === stepId)?.inputEmail || "").toLowerCase();
@@ -86,6 +90,27 @@ export default function StepsTab({
             </div>
           </div>
         </label>
+
+        {shareEnabled && (
+          <label
+            className={`ml-6 mt-2 flex items-center gap-2 text-[12px] ${
+              shareCheckboxDisabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={oneShotLink ?? false}
+              disabled={shareCheckboxDisabled}
+              onChange={(e) => onOneShotLinkChange?.(e.target.checked)}
+            />
+            <span>
+              Solo permitir un llenado por link
+              <span className="ml-1 text-[10.5px] text-slate-500">
+                (Tras el primer submit el enlace deja de funcionar.)
+              </span>
+            </span>
+          </label>
+        )}
       </div>
 
       {disabled && !shareLinkUrl && shareEnabled && (
