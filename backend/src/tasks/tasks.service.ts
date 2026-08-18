@@ -349,7 +349,11 @@ export class TasksService {
         totalRecipients: t.steps.length,
         completedCount: t.steps.filter((s) => s.status === 'completed').length,
         pendingCount: t.steps.filter((s) => s.status !== 'completed').length,
-        hasShareLink: !!t.shareLink?.token,
+        // Solo reportar "activo" si el token existe Y enabled=true. Tras un
+        // submit de link oneShot, enabled queda en false pero el token
+        // persiste — sin este check, la lista muestra "Enlace activo" para
+        // links ya invalidados (inconsistente con el badge del detalle).
+        hasShareLink: !!(t.shareLink?.token && t.shareLink?.enabled),
       };
     });
   }
@@ -684,6 +688,13 @@ export class TasksService {
     ) {
       return { results: [] };
     }
+
+    // El form fuente (config.sourceFormId) puede ser distinto al form de la
+    // tarea. Debe pasar los mismos checks de acceso público: activo,
+    // isPublic=true, sin requiresEmailVerification. Sin este assertion, un
+    // admin que marca privado el form fuente después de publicar la tarea
+    // sigue exponiendo esos submissions por el endpoint anónimo del share.
+    await this.assertShareFormOpen(config.sourceFormId);
 
     const fields = Array.isArray(config.searchableFields)
       ? config.searchableFields

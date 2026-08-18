@@ -646,6 +646,7 @@ export default function TasksReportPanel({ formId, formName }: Props) {
           message="¿Eliminar esta tarea? Los destinatarios que no la completaron ya no recibirán recordatorios y el enlace compartible dejará de funcionar. Esta acción no se puede deshacer."
           confirmLabel={deleteBusy ? 'Eliminando…' : 'Eliminar'}
           confirmColor="#ef4444"
+          busy={deleteBusy}
           onCancel={() => setDeleteTargetId(null)}
           onConfirm={handleDelete}
         />

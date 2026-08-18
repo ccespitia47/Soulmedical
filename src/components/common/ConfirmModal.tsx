@@ -7,6 +7,9 @@ type ConfirmModalProps = {
   confirmColor: string;
   onCancel: () => void;
   onConfirm: () => void;
+  /** Deshabilita ambos botones mientras dura la acción confirmada (p.ej.
+   * durante el fetch del backend). Previene doble-click. */
+  busy?: boolean;
 };
 
 export default function ConfirmModal({
@@ -16,6 +19,7 @@ export default function ConfirmModal({
   confirmColor,
   onCancel,
   onConfirm,
+  busy = false,
 }: ConfirmModalProps) {
   const icon = confirmColor === "#ef4444" ? "🗑️" : "📋";
 
@@ -38,13 +42,15 @@ export default function ConfirmModal({
         <div className="flex justify-center gap-2.5">
           <button
             onClick={onCancel}
-            className="cursor-pointer rounded-lg border-[1.5px] border-slate-200 bg-transparent px-6 py-2.5 text-sm font-semibold text-gray-500"
+            disabled={busy}
+            className="cursor-pointer rounded-lg border-[1.5px] border-slate-200 bg-transparent px-6 py-2.5 text-sm font-semibold text-gray-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Cancelar
           </button>
           <button
             onClick={onConfirm}
-            className="cursor-pointer rounded-lg border-none px-6 py-2.5 text-sm font-semibold text-white"
+            disabled={busy}
+            className="cursor-pointer rounded-lg border-none px-6 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
             style={{ background: confirmColor }}
           >
             {confirmLabel}
