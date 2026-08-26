@@ -43,6 +43,16 @@ export default defineConfig({
         globPatterns: [],
         sourcemap: false,
       },
+      // Necesario porque en producción soulforms.com.co corre `npm run dev`
+      // detras de Caddy (reverse_proxy a localhost:5173), no un build
+      // estatico. Sin devOptions.enabled=true, Vite dev NO inyecta el
+      // <link rel="manifest"> ni el <script src="/registerSW.js"> — la
+      // PWA queda invisible para el browser. Con esto el manifest tambien
+      // se sirve en dev, y Chrome/Edge muestran el prompt de instalar.
+      devOptions: {
+        enabled: true,
+        type: 'module',
+      },
     }),
   ],
   resolve: {
