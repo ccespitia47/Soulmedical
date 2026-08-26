@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useContext, useState } from "react";
 import type { WidgetRenderProps } from "../../../types/widget.types";
 import type { SearchWidgetConfig } from "./search.types";
 import { searchFormSubmissions } from "./sources/formSubmissions";
@@ -6,13 +6,21 @@ import { searchGroup } from "./sources/group";
 import { searchGoogleSheets } from "./sources/googleSheets";
 import { searchExcelWeb } from "./sources/excelWeb";
 import { searchSQL } from "./sources/sql";
+import { ShareSearchContext } from "./shareSearchContext";
 import ResultsModal from "./ResultsModal";
 
 type Row = Record<string, unknown>;
 
-async function searchSource(config: SearchWidgetConfig, q: string): Promise<Row[]> {
+/** Contexto de enlace compartible (público): token de la tarea + id del widget. */
+export type ShareLookup = { token: string; widgetId: string };
+
+async function searchSource(
+  config: SearchWidgetConfig,
+  q: string,
+  share?: ShareLookup,
+): Promise<Row[]> {
   switch (config.sourceType) {
-    case "form_submissions": return searchFormSubmissions(config, q);
+    case "form_submissions": return searchFormSubmissions(config, q, share);
     case "group": return searchGroup(config, q);
     case "google_sheets": return searchGoogleSheets(config, q);
     case "excel_web": return searchExcelWeb(config, q);
@@ -29,22 +37,49 @@ function getDisplayValue(row: Row, config: SearchWidgetConfig): string {
   return firstKey ? String(row[firstKey]) : "";
 }
 
+/**
+ * Lookup tolerante para leer un campo del row. Google Sheets suele tener
+ * headers con tildes/espacios/casing distinto al que el user escribio en
+ * el mapping. Match exacto primero, luego case+accent-insensitive.
+ */
+function normalize(s: string): string {
+  return s.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+function lookupRowValue(row: Row, key: string): unknown {
+  if (row[key] != null) return row[key];
+  const target = normalize(key);
+  for (const [k, v] of Object.entries(row)) {
+    if (normalize(k) === target) return v;
+  }
+  return undefined;
+}
+
 export default function SearchRender({ widget, onValue }: WidgetRenderProps) {
   const config = widget.config as SearchWidgetConfig;
+  const share = useContext(ShareSearchContext);
   const [showModal, setShowModal] = useState(false);
-  const [selectedValue, setSelectedValue] = useState("");
-  const [selectedDisplay, setSelectedDisplay] = useState("");
+  // Prediligenciado: los flujos de tarea (TaskPage) y enlace compartible
+  // (TaskSharePage) inyectan el valor en config.defaultValue, igual que el
+  // resto de widgets. Para búsqueda, valor == display, así que ambos parten
+  // de ese string. Si no hay prefill queda vacío (comportamiento normal).
+  const initialValue =
+    typeof widget.config.defaultValue === "string" ? widget.config.defaultValue : "";
+  const [selectedValue, setSelectedValue] = useState(initialValue);
+  const [selectedDisplay, setSelectedDisplay] = useState(initialValue);
 
   const minChars = config.minChars ?? 2;
   const columns = config.displayColumns ?? [];
 
   // Adapter que el modal invoca en cada tecla (con su propio debounce).
+  // En la página pública del enlace compartible (share activo) se pasa el token
+  // + id del widget para usar el endpoint público de búsqueda.
   const runSearch = useCallback(
     async (q: string): Promise<Row[]> => {
-      try { return await searchSource(config, q); }
+      const shareLookup = share ? { token: share.token, widgetId: widget.id } : undefined;
+      try { return await searchSource(config, q, shareLookup); }
       catch (e) { console.error("[SearchWidget] Error buscando:", e); return []; }
     },
-    [config],
+    [config, share, widget.id],
   );
 
   const handleSelect = (row: Row) => {
@@ -61,8 +96,13 @@ export default function SearchRender({ widget, onValue }: WidgetRenderProps) {
       const fill: Record<string, string> = { [widget.id]: value };
       for (const m of config.fieldMappings!) {
         if (m.targetWidgetId && m.sourceField) {
-          fill[m.targetWidgetId] = String(row[m.sourceField] ?? "");
+          fill[m.targetWidgetId] = String(lookupRowValue(row, m.sourceField) ?? "");
         }
+      }
+      if (import.meta.env.DEV) {
+        // `row` puede traer datos del paciente/registro completo — PII
+        // que no queremos loggear en la consola remota de producción.
+        console.log("[SearchWidget] fill:", fill, "row keys:", Object.keys(row), "mappings:", config.fieldMappings);
       }
       onValue(fill);
     }

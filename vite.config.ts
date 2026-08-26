@@ -31,8 +31,11 @@ export default defineConfig({
       // precachear el bundle principal y fallan si supera 2 MiB. Con
       // globPatterns vacio no se genera manifest de precache (el SW resultante
       // queda inerte y de todas formas no se registra, ver injectRegister).
+      // sourcemap:false evita generar sw.js.map/workbox-*.js.map (que Caddy
+      // serviria por URL directa aunque el JS no los referencie).
       workbox: {
         globPatterns: [],
+        sourcemap: false,
       },
     }),
   ],
@@ -42,7 +45,13 @@ export default defineConfig({
     },
   },
   build: {
-    sourcemap: 'hidden',
+    // Sin sourcemaps en prod. 'hidden' evita el comentario
+    // //# sourceMappingURL en el JS pero los .map se sirven igual por URL
+    // directa (bundle.js.map). Un atacante puede reconstruir la logica
+    // de negocio (endpoints, widgets, permisos). Preferimos no exponerlos
+    // y usar Safari devtools remoto + console.error del ErrorBoundary para
+    // debug movil.
+    sourcemap: false,
     minify: 'esbuild',
     brotliSize: false,
     target: 'es2016',

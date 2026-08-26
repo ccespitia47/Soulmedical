@@ -288,17 +288,21 @@ export default function TaskPage() {
     const isLast = task.stepOrder === task.totalSteps;
     const attachments: Attachment[] = [];
     const template = task.emailTemplate;
-    console.log("[TaskPage] submit", {
-      isLast,
-      stepOrder: task.stepOrder,
-      totalSteps: task.totalSteps,
-      hasTemplate: !!template,
-      templateEnabled: template?.enabled,
-      hasExcel: !!template?.excelBase64,
-      excelMappings: template?.excelMappings?.length ?? 0,
-      hasPdfTemplate: !!template?.pdfTemplate,
-      attachPDF: template?.attachPDF,
-    });
+    if (import.meta.env.DEV) {
+      // Solo en dev — evita exponer metadata del template en consoles
+      // remotas de iPhone/iPad de usuarios reales.
+      console.log("[TaskPage] submit", {
+        isLast,
+        stepOrder: task.stepOrder,
+        totalSteps: task.totalSteps,
+        hasTemplate: !!template,
+        templateEnabled: template?.enabled,
+        hasExcel: !!template?.excelBase64,
+        excelMappings: template?.excelMappings?.length ?? 0,
+        hasPdfTemplate: !!template?.pdfTemplate,
+        attachPDF: template?.attachPDF,
+      });
+    }
     if (isLast && template?.enabled) {
       const combined: Record<string, string> = {
         ...(task.previousStepsData ?? {}),
@@ -307,10 +311,14 @@ export default function TaskPage() {
       const labeled = buildLabeledData(task.widgets, combined, hiddenIds);
       try {
         await collectPdfAttachments(template, labeled, attachments);
-        console.log(
-          `[TaskPage] PDFs generados: ${attachments.length}`,
-          attachments.map((a) => ({ name: a.name, sizeKB: Math.round(a.contentBytes.length / 1024) })),
-        );
+        if (import.meta.env.DEV) {
+          // Los nombres de archivo suelen incluir nombre del paciente/tarea:
+          // PII que no queremos en consoles remotas de producción.
+          console.log(
+            `[TaskPage] PDFs generados: ${attachments.length}`,
+            attachments.map((a) => ({ name: a.name, sizeKB: Math.round(a.contentBytes.length / 1024) })),
+          );
+        }
       } catch (e) {
         console.error("[TaskPage] Error generando PDFs en último paso:", e);
       }
