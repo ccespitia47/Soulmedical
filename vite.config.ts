@@ -8,8 +8,14 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
+      // 'autoUpdate': cuando desplegamos version nueva, el SW la detecta y
+      // recarga automaticamente al proximo visit (no queda cache stale).
       registerType: 'autoUpdate',
-      injectRegister: null, // Sin SW por ahora
+      // 'auto' inyecta el <script> de registro en index.html. Necesario para
+      // que Chrome/Edge desktop y Android muestren el prompt "Instalar app"
+      // — sin SW registrado, la PWA no se considera "installable".
+      // iOS Safari no requiere SW (Apple usa manifest + meta tags iOS igual).
+      injectRegister: 'auto',
       manifest: {
         name: 'SoulForms',
         short_name: 'SoulForms',
