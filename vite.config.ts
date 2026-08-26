@@ -42,13 +42,15 @@ export default defineConfig({
     },
   },
   build: {
-    sourcemap: false,
+    sourcemap: 'hidden',
     minify: 'esbuild',
     brotliSize: false,
-    target: 'es2018',
+    target: 'es2016',
   },
   esbuild: {
-    drop: ['console', 'debugger'],
+    // Solo dropea 'debugger'; console.error/warn/log se preservan en prod
+    // para poder depurar remotamente (ej. Safari devtools por cable).
+    drop: ['debugger'],
   },
   server: {
     allowedHosts: ['soulforms.com.co', 'localhost', '10.10.20.15'],
