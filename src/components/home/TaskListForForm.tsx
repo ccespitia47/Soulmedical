@@ -64,6 +64,15 @@ export default function TaskListForForm({ formId, formName }: Props) {
     setDetailError(null);
   }, [formId]);
 
+  // Reset del acordeón al cambiar de página: la tarea expandida quizá ya no
+  // está en la nueva página. Sin este reset, el usuario que pagina hacia
+  // adelante y vuelve atrás ve el mismo accordion abierto con detail stale.
+  useEffect(() => {
+    setExpandedId(null);
+    setDetail(null);
+    setDetailError(null);
+  }, [page]);
+
   useEffect(() => {
     if (!formId) return;
     let cancelled = false;
@@ -124,10 +133,24 @@ export default function TaskListForForm({ formId, formName }: Props) {
     if (expandedId) void loadDetail(expandedId);
   };
 
-  const handleDeleted = () => {
+  const handleDeleted = async () => {
     setExpandedId(null);
     setDetail(null);
-    void refetchList();
+    // Al eliminar la última tarea de la página actual, page puede quedar
+    // fuera de rango (ej. total=21→20, limit=20, page=2 → pageCount=1).
+    // Clampeamos ANTES del refetch para no quedarnos en una página vacía
+    // sin controles de paginación (que solo se muestran si pageCount>1).
+    const res = await getFormTasksApi(formId, { page, limit: LIMIT });
+    if (res.data) {
+      const newPageCount = Math.max(1, Math.ceil(res.data.total / LIMIT));
+      if (page > newPageCount) {
+        setPage(newPageCount);
+        // El useEffect [page] se dispara y refetcha; nada más que hacer.
+        return;
+      }
+      setTasks(res.data.data);
+      setTotal(res.data.total);
+    }
   };
 
   return (
