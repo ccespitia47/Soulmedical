@@ -6,13 +6,12 @@ import { useAuthStore } from "../store/useAuthStore";
 import type { FormItem } from "../types/folder.types";
 import type { WidgetInstance } from "../types/widget.types";
 import RecordsTable from "../components/reports/RecordsTable";
-import TasksReportPanel from "../components/reports/TasksReportPanel";
 import TaskDownloadsPanel from "../components/reports/TaskDownloadsPanel";
 import ExcelFieldSelector from "../components/reports/ExcelFieldSelector";
 import Icon from "../components/common/Icon";
 import SelectMenu, { type SelectOption } from "../components/common/SelectMenu";
 
-type Tab = "excel" | "records" | "tasks" | "downloads-per-task";
+type Tab = "excel" | "records" | "downloads-per-task";
 
 export default function ReportsPage() {
   const { projects, selectedProjectId, selectProject, loadProjects } =
@@ -81,7 +80,6 @@ export default function ReportsPage() {
   const TABS = [
     { id: "excel" as Tab, icon: "table", label: "Excel por correo" },
     { id: "records" as Tab, icon: "fileText", label: "Registros y PDFs" },
-    { id: "tasks" as Tab, icon: "inbox", label: "Tareas" },
     { id: "downloads-per-task" as Tab, icon: "download", label: "Descargas por tarea" },
   ];
 
@@ -175,11 +173,6 @@ export default function ReportsPage() {
             <RecordsTable formId={selectedForm.id} formName={selectedForm.name} />
           )}
           {tab === "records" && !selectedForm && <SelectPrompt />}
-
-          {tab === "tasks" && selectedForm && (
-            <TasksReportPanel formId={selectedForm.id} formName={selectedForm.name} />
-          )}
-          {tab === "tasks" && !selectedForm && <SelectPrompt />}
 
           {tab === "downloads-per-task" && selectedForm && (
             <TaskDownloadsPanel
