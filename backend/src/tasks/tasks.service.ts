@@ -21,6 +21,7 @@ import { SubmissionsService } from '../submissions/submissions.service';
 import { FormsService } from '../forms/forms.service';
 import type {
   TaskSummaryDto,
+  TaskSummaryPageDto,
   TaskDetailDto,
   TaskRecipientDto,
   TaskSubmissionDto,
@@ -331,14 +332,29 @@ export class TasksService {
 
   // ── Reportes de tarea (pestaña "Reportes") ─────────────────────────────────
 
-  /** Tareas de un formulario con stats agregadas, para la pestaña Reportes. */
-  async listByForm(formId: string): Promise<TaskSummaryDto[]> {
-    const tasks = await this.taskModel
-      .find({ formId })
-      .sort({ createdAt: -1 })
-      .lean();
+  /**
+   * Tareas de un formulario con stats agregadas, para la pestaña Reportes.
+   * Paginado: page arranca en 1, limit clampado a [1, 100] (default 20).
+   */
+  async listByForm(
+    formId: string,
+    opts: { page?: number; limit?: number } = {},
+  ): Promise<TaskSummaryPageDto> {
+    const page = Math.max(1, opts.page ?? 1);
+    const limit = Math.min(100, Math.max(1, opts.limit ?? 20));
+    const skip = (page - 1) * limit;
 
-    return tasks.map((t) => {
+    const [tasks, total] = await Promise.all([
+      this.taskModel
+        .find({ formId })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      this.taskModel.countDocuments({ formId }),
+    ]);
+
+    const data: TaskSummaryDto[] = tasks.map((t) => {
       const withMeta = t as unknown as { _id: string; createdAt?: Date };
       return {
         id: withMeta._id,
@@ -356,6 +372,8 @@ export class TasksService {
         hasShareLink: !!(t.shareLink?.token && t.shareLink?.enabled),
       };
     });
+
+    return { data, total, page, limit };
   }
 
   /** Detalle de una tarea: destinatarios (con estado de reenvío) + submissions ligadas. */

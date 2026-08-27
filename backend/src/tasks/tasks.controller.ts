@@ -23,6 +23,7 @@ import { RequirePermission } from '../auth/permissions.decorator';
 import { Permission } from '../auth/permissions';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto, SubmitTaskStepDto } from './tasks.dto';
+import type { TaskSummaryPageDto } from './tasks-list.dto';
 import type { TaskDocument } from './task.schema';
 import { BulkPdfService } from '../submissions/bulk-pdf.service';
 
@@ -116,8 +117,15 @@ export class TasksController {
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermission(Permission.REPORTS_VIEW)
   @Get('by-form/:formId')
-  async listByForm(@Param('formId') formId: string) {
-    return this.tasksService.listByForm(formId);
+  async listByForm(
+    @Param('formId') formId: string,
+    @Query('page') page = '1',
+    @Query('limit') limit = '20',
+  ): Promise<TaskSummaryPageDto> {
+    return this.tasksService.listByForm(formId, {
+      page: parseInt(page, 10) || 1,
+      limit: parseInt(limit, 10) || 20,
+    });
   }
 
   @UseGuards(JwtAuthGuard, PermissionsGuard)

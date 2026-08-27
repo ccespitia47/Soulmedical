@@ -15,6 +15,14 @@ export type TaskSummaryDto = {
   hasShareLink: boolean;
 };
 
+/** Página de TasksService.listByForm() (pestaña "Reportes" de Tareas). */
+export type TaskSummaryPageDto = {
+  data: TaskSummaryDto[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
 export type TaskRecipientDto = {
   stepIndex: number;
   email: string;

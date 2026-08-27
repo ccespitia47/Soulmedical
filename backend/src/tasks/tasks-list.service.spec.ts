@@ -55,9 +55,18 @@ function buildService(opts: {
   const taskModel = {
     find: jest.fn(() => ({
       sort: jest.fn(() => ({
-        lean: jest.fn(() => Promise.resolve(tasks)),
+        skip: jest.fn((skip: number) => ({
+          limit: jest.fn((limit: number) => ({
+            lean: jest.fn(() =>
+              Promise.resolve(
+                limit > 0 ? tasks.slice(skip, skip + limit) : tasks.slice(skip),
+              ),
+            ),
+          })),
+        })),
       })),
     })),
+    countDocuments: jest.fn(() => Promise.resolve(tasks.length)),
     findById: jest.fn((id: string) => ({
       lean: jest.fn(() => Promise.resolve(taskById[id] ?? null)),
     })),
@@ -91,8 +100,8 @@ describe('TasksService.listByForm', () => {
 
     const result = await service.listByForm('form-1');
 
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0]).toMatchObject({
       id: 'task-1',
       totalRecipients: 3,
       completedCount: 1,
@@ -117,7 +126,8 @@ describe('TasksService.listByForm', () => {
 
     const result = await service.listByForm('form-sin-tareas');
 
-    expect(result).toEqual([]);
+    expect(result.data).toEqual([]);
+    expect(result.total).toBe(0);
   });
 
   it('hasShareLink=true solo si shareLink.token existe', async () => {
@@ -129,7 +139,70 @@ describe('TasksService.listByForm', () => {
 
     const result = await service.listByForm('form-1');
 
-    expect(result[0].hasShareLink).toBe(true);
+    expect(result.data[0].hasShareLink).toBe(true);
+  });
+
+  it('shape del response tiene data, total, page, limit', async () => {
+    const task = makeTask({ id: 'task-1' });
+    const { service } = buildService({ tasks: [task] });
+
+    const result = await service.listByForm('form-1');
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        data: expect.any(Array),
+        total: expect.any(Number),
+        page: expect.any(Number),
+        limit: expect.any(Number),
+      }),
+    );
+  });
+
+  it('page=1, limit=20 (default) devuelve máximo 20 items', async () => {
+    const tasks = Array.from({ length: 35 }, (_, i) =>
+      makeTask({ id: `task-${i}` }),
+    );
+    const { service } = buildService({ tasks });
+
+    const result = await service.listByForm('form-1');
+
+    expect(result.data).toHaveLength(20);
+    expect(result.total).toBe(35);
+    expect(result.page).toBe(1);
+    expect(result.limit).toBe(20);
+  });
+
+  it('page=2 hace skip=20', async () => {
+    const tasks = Array.from({ length: 35 }, (_, i) =>
+      makeTask({ id: `task-${i}` }),
+    );
+    const { service, taskModel } = buildService({ tasks });
+
+    const result = await service.listByForm('form-1', { page: 2 });
+
+    expect(result.data).toHaveLength(15);
+    expect(result.page).toBe(2);
+    const sortMock = taskModel.find.mock.results[0].value.sort;
+    const skipMock = sortMock.mock.results[0].value.skip;
+    expect(skipMock).toHaveBeenCalledWith(20);
+  });
+
+  it('limit=200 clampa a 100', async () => {
+    const tasks = Array.from({ length: 5 }, (_, i) => makeTask({ id: `task-${i}` }));
+    const { service } = buildService({ tasks });
+
+    const result = await service.listByForm('form-1', { limit: 200 });
+
+    expect(result.limit).toBe(100);
+  });
+
+  it('page=0 clampa a 1', async () => {
+    const task = makeTask({ id: 'task-1' });
+    const { service } = buildService({ tasks: [task] });
+
+    const result = await service.listByForm('form-1', { page: 0 });
+
+    expect(result.page).toBe(1);
   });
 });
 
