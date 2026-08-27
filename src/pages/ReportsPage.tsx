@@ -7,10 +7,9 @@ import type { FormItem } from "../types/folder.types";
 import type { WidgetInstance } from "../types/widget.types";
 import RecordsTable from "../components/reports/RecordsTable";
 import TasksReportPanel from "../components/reports/TasksReportPanel";
+import ExcelFieldSelector from "../components/reports/ExcelFieldSelector";
 import Icon from "../components/common/Icon";
 import SelectMenu, { type SelectOption } from "../components/common/SelectMenu";
-
-type Field = { id: string; label: string; type: string };
 
 type Tab = "excel" | "records" | "tasks";
 
@@ -201,6 +200,8 @@ function SelectPrompt() {
 }
 
 // ── Panel Excel (contenido previo de ReportsPage) ───────────────────────────
+type Field = { id: string; label: string; type: string };
+
 function ExcelReportPanel({
   selectedForm,
   currentUser,
@@ -228,15 +229,6 @@ function ExcelReportPanel({
     setSelectedFieldIds(new Set(fields.map((f) => f.id)));
     setFeedback(null);
   }, [selectedForm?.id, fields]);
-
-  const toggleField = (id: string) => {
-    setSelectedFieldIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
 
   const handleSendByEmail = async () => {
     if (!selectedForm || selectedFieldIds.size === 0) {
@@ -286,72 +278,11 @@ function ExcelReportPanel({
         </span>
       </div>
 
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="text-[12px] font-medium text-slate-500">
-          <span className="font-bold text-[#0891b2]">{selectedFieldIds.size}</span> de{" "}
-          {fields.length} campo{fields.length !== 1 ? "s" : ""}
-        </div>
-        <div className="flex gap-1.5">
-          <button
-            type="button"
-            onClick={() => setSelectedFieldIds(new Set(fields.map((f) => f.id)))}
-            className="cursor-pointer rounded-lg border-[1.5px] border-slate-200 bg-white px-2.5 py-1 text-[11.5px] font-semibold text-gray-600 transition hover:border-[#00c2a8]/40 hover:text-[#0891b2]"
-          >
-            Todos
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelectedFieldIds(new Set())}
-            className="cursor-pointer rounded-lg border-[1.5px] border-slate-200 bg-white px-2.5 py-1 text-[11.5px] font-semibold text-gray-600 transition hover:border-slate-300 hover:text-gray-900"
-          >
-            Ninguno
-          </button>
-        </div>
-      </div>
-
-      <div className="grid gap-2 sm:grid-cols-2">
-        {fields.map((f) => {
-          const checked = selectedFieldIds.has(f.id);
-          return (
-            <label
-              key={f.id}
-              className="flex cursor-pointer items-center gap-2.5 rounded-xl border-[1.5px] px-3 py-2.5 transition-all"
-              style={{
-                borderColor: checked ? "rgba(0,194,168,0.35)" : "#e2e8f0",
-                background: checked ? "rgba(0,194,168,0.06)" : "#fff",
-              }}
-            >
-              <span
-                className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-[6px] transition-colors"
-                style={{
-                  border: `2px solid ${checked ? "#00c2a8" : "#cbd5e1"}`,
-                  background: checked ? "#00c2a8" : "#fff",
-                }}
-              >
-                {checked && (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M5 12l5 5L20 7" />
-                  </svg>
-                )}
-              </span>
-              <input
-                type="checkbox"
-                checked={checked}
-                onChange={() => toggleField(f.id)}
-                className="sr-only"
-              />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[12.5px] font-semibold text-gray-900">
-                  {f.label}
-                </div>
-                <div className="text-[10px] uppercase tracking-wide text-gray-400">
-                  {f.type}
-                </div>
-              </div>
-            </label>
-          );
-        })}
-      </div>
+      <ExcelFieldSelector
+        widgets={(selectedForm.widgets ?? []) as WidgetInstance[]}
+        selectedFieldIds={selectedFieldIds}
+        onChange={setSelectedFieldIds}
+      />
 
       {feedback && (
         <div

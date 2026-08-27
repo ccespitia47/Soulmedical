@@ -101,7 +101,7 @@ export default function TasksReportPanel({ formId, formName }: Props) {
         setError(res.error ?? 'No se pudieron cargar las tareas');
         return;
       }
-      setTasks(res.data);
+      setTasks(res.data.data);
     };
     load();
     return () => {
@@ -223,7 +223,7 @@ export default function TasksReportPanel({ formId, formName }: Props) {
       resetDetailUiState();
     }
     const list = await getFormTasksApi(formId);
-    if (list.data) setTasks(list.data);
+    if (list.data) setTasks(list.data.data);
   };
 
   const handleResend = async (recipient: TaskRecipientDto) => {

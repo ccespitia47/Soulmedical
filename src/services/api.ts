@@ -835,8 +835,22 @@ export type TaskDetailDto = {
   externalCount: number;
 };
 
-export function getFormTasksApi(formId: string) {
-  return request<TaskSummaryDto[]>(`/tasks/by-form/${formId}`);
+export type TaskSummaryPageDto = {
+  data: TaskSummaryDto[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
+export function getFormTasksApi(
+  formId: string,
+  params: { page?: number; limit?: number } = {},
+) {
+  const qs = new URLSearchParams();
+  if (params.page) qs.set('page', String(params.page));
+  if (params.limit) qs.set('limit', String(params.limit));
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  return request<TaskSummaryPageDto>(`/tasks/by-form/${formId}${suffix}`);
 }
 
 export function getTaskDetailApi(taskId: string) {
