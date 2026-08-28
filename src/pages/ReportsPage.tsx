@@ -45,6 +45,14 @@ export default function ReportsPage() {
     [selectedFolder, selectedFormId],
   );
 
+  // Memo estable de widgets: sin esto el `?? []` en el JSX crea un array
+  // nuevo cada render, disparando useMemo/useEffect en los hijos
+  // (ExcelFieldSelector, TaskDownloadsPanel) y re-render en cascada.
+  const selectedFormWidgets = useMemo<WidgetInstance[]>(
+    () => (selectedForm?.widgets ?? []) as WidgetInstance[],
+    [selectedForm],
+  );
+
   const handleProjectChange = (id: string) => {
     selectProject(id);
     setSelectedFolderId("");
@@ -178,7 +186,7 @@ export default function ReportsPage() {
             <TaskDownloadsPanel
               formId={selectedForm.id}
               formName={selectedForm.name}
-              widgets={(selectedForm.widgets ?? []) as WidgetInstance[]}
+              widgets={selectedFormWidgets}
             />
           )}
           {tab === "downloads-per-task" && !selectedForm && <SelectPrompt />}

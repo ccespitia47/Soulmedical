@@ -95,14 +95,6 @@ export default function TaskListForForm({ formId, formName }: Props) {
     };
   }, [formId, page]);
 
-  const refetchList = async () => {
-    const res = await getFormTasksApi(formId, { page, limit: LIMIT });
-    if (res.data) {
-      setTasks(res.data.data);
-      setTotal(res.data.total);
-    }
-  };
-
   const loadDetail = async (taskId: string) => {
     setDetail(null);
     setDetailError(null);
@@ -116,6 +108,17 @@ export default function TaskListForForm({ formId, formName }: Props) {
       return;
     }
     setDetail(res.data);
+    // Sincronizar el badge "Enlace activo" en la fila del listado con el
+    // hasShareLink real recién refetcheado. Sin esto, apagar el link en el
+    // detail deja la píldora visible en la fila hasta recargar la página.
+    const fresh = res.data;
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === fresh.id
+          ? { ...t, hasShareLink: !!fresh.shareLinkUrl, status: fresh.status }
+          : t,
+      ),
+    );
   };
 
   const handleExpand = (taskId: string) => {
@@ -141,6 +144,12 @@ export default function TaskListForForm({ formId, formName }: Props) {
     // Clampeamos ANTES del refetch para no quedarnos en una página vacía
     // sin controles de paginación (que solo se muestran si pageCount>1).
     const res = await getFormTasksApi(formId, { page, limit: LIMIT });
+    if (res.error) {
+      // Sin este surface, el user cree que el delete fallo y reintenta.
+      // El backend YA proceso el delete; solo fallo el refetch de la lista.
+      setError(res.error);
+      return;
+    }
     if (res.data) {
       const newPageCount = Math.max(1, Math.ceil(res.data.total / LIMIT));
       if (page > newPageCount) {
