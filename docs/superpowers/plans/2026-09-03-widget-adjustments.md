@@ -1056,6 +1056,7 @@ git commit -m "feat(widget-phone): selector de pais opcional (LATAM+ES+US) con v
 - Modify: `src/components/widgets/idscanner/IdScannerWidget.ts`
 - Modify: `src/components/widgets/idscanner/IdScanner.properties.tsx`
 - Modify: `src/components/widgets/idscanner/IdScanner.render.tsx`
+- Create: `src/components/widgets/idscanner/IdScanner.ocr.ts` (helpers puros: preprocesamiento + extracción por tipo + validación post-OCR)
 
 **Interfaces:**
 - Consumes: `WidgetInstance.config`; `WidgetRenderProps`, `WidgetPropertiesProps`.
@@ -1098,39 +1099,26 @@ Editar `src/components/widgets/idscanner/IdScanner.properties.tsx`. Justo antes 
       </div>
 ```
 
-- [ ] **Step 3: Reemplazar `IdScanner.render.tsx` con la versión mejorada**
+- [ ] **Step 3a: Crear `IdScanner.ocr.ts` con helpers puros (sin React)**
 
-Reemplazar el contenido completo de `src/components/widgets/idscanner/IdScanner.render.tsx` con:
+Crear el archivo `src/components/widgets/idscanner/IdScanner.ocr.ts` con el contenido:
 
-```tsx
-import { useRef, useState, useCallback } from "react";
-import type { WidgetRenderProps } from "../../../types/widget.types";
+```ts
+export type DocumentType = "auto" | "cc" | "ce" | "ti" | "passport";
 
-type ScanStatus = "idle" | "camera" | "processing" | "done" | "error";
-type DocumentType = "auto" | "cc" | "ce" | "ti" | "passport";
-
-const FIELD_LABELS: Record<string, string> = {
-  nombre: "Nombre completo",
-  numero: "Número de documento",
-  fechaNacimiento: "Fecha de nacimiento",
-  sexo: "Sexo",
-  fechaExpedicion: "Fecha de expedición",
-  lugarExpedicion: "Lugar de expedición",
-};
+type ExtractResult = { fields: Record<string, string>; matchCount: number };
 
 // ─── Preprocesamiento de imagen (canvas nativo) ─────────────────────────────
 // El pipeline: upscale si es pequeña → grayscale → autolevel → binarización.
 // Todo se aplica in-place sobre el canvas (o uno nuevo si upscale). Coste:
 // < 100ms para 1920x1080. Sin dependencias externas.
-function preprocessImage(source: HTMLCanvasElement): HTMLCanvasElement {
-  const upscaled =
-    source.width < 1600 ? upscale(source, 2) : source;
+export function preprocessImage(source: HTMLCanvasElement): HTMLCanvasElement {
+  const upscaled = source.width < 1600 ? upscale(source, 2) : source;
   const ctx = upscaled.getContext("2d");
   if (!ctx) return upscaled;
   const imgData = ctx.getImageData(0, 0, upscaled.width, upscaled.height);
   const data = imgData.data;
 
-  // Grayscale + calcular min/max para autolevel
   let min = 255;
   let max = 0;
   for (let i = 0; i < data.length; i += 4) {
@@ -1143,7 +1131,6 @@ function preprocessImage(source: HTMLCanvasElement): HTMLCanvasElement {
   }
 
   const range = Math.max(1, max - min);
-  // Autolevel + threshold en una sola pasada
   for (let i = 0; i < data.length; i += 4) {
     const stretched = ((data[i] - min) * 255) / range;
     const binary = stretched < 180 ? 0 : 255;
@@ -1168,15 +1155,11 @@ function upscale(source: HTMLCanvasElement, factor: number): HTMLCanvasElement {
 
 // ─── Extracción por tipo de documento ───────────────────────────────────────
 
-type ExtractResult = { fields: Record<string, string>; matchCount: number };
-
 function extractCC(text: string, wantedFields: string[]): ExtractResult {
   const result: Record<string, string> = {};
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
 
   if (wantedFields.includes("numero")) {
-    // Cédula colombiana: acepta formato con puntos (1.234.567.890) o espacios,
-    // luego normaliza. Prioriza matches con separadores (más específicos).
     const dotted = text.match(/\b\d{1,3}(?:[.\s]\d{3}){2,3}\b/);
     if (dotted) {
       const num = dotted[0].replace(/[.\s]/g, "");
@@ -1188,7 +1171,6 @@ function extractCC(text: string, wantedFields: string[]): ExtractResult {
   }
 
   if (wantedFields.includes("nombre")) {
-    // Al menos 2 palabras consecutivas en mayúsculas (nombre + apellido).
     const nameLine = lines.find((l) =>
       /^[A-ZÁÉÍÓÚÑ]{2,}(\s+[A-ZÁÉÍÓÚÑ]{2,}){1,}$/.test(l),
     );
@@ -1196,8 +1178,8 @@ function extractCC(text: string, wantedFields: string[]): ExtractResult {
   }
 
   if (wantedFields.includes("fechaNacimiento")) {
-    result.fechaNacimiento = pickBestDate(text) ?? "";
-    if (!result.fechaNacimiento) delete result.fechaNacimiento;
+    const d = pickBestDate(text);
+    if (d) result.fechaNacimiento = d;
   }
 
   if (wantedFields.includes("sexo")) {
@@ -1214,7 +1196,6 @@ function extractCE(text: string, wantedFields: string[]): ExtractResult {
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
 
   if (wantedFields.includes("numero")) {
-    // CE puede tener letras y números.
     const m = text.match(/\b[A-Z0-9]{6,12}\b/);
     if (m && /\d/.test(m[0])) result.numero = m[0];
   }
@@ -1227,27 +1208,23 @@ function extractCE(text: string, wantedFields: string[]): ExtractResult {
   }
 
   if (wantedFields.includes("fechaNacimiento")) {
-    result.fechaNacimiento = pickBestDate(text) ?? "";
-    if (!result.fechaNacimiento) delete result.fechaNacimiento;
+    const d = pickBestDate(text);
+    if (d) result.fechaNacimiento = d;
   }
 
   return { fields: result, matchCount: Object.keys(result).length };
 }
 
 function extractTI(text: string, wantedFields: string[]): ExtractResult {
-  // Similar a CC pero TI suele tener años más recientes (menores de edad).
   return extractCC(text, wantedFields);
 }
 
 function extractPassport(text: string, wantedFields: string[]): ExtractResult {
   const result: Record<string, string> = {};
-  // Zona MRZ: 2 líneas de ~44 chars. Línea 1: P<PAI<APELLIDO<<NOMBRE...
-  // Línea 2: <numero><PAI><yymmdd>...
   const mrzMatch = text.match(/^P<[A-Z]{3}[A-Z<]+/m);
   if (mrzMatch) {
-    // Extraer apellido y nombre de la línea 1.
     const line1 = mrzMatch[0];
-    const namesPart = line1.slice(5); // después de "P<PAI"
+    const namesPart = line1.slice(5);
     const [surname, ...givenParts] = namesPart.split("<<");
     if (wantedFields.includes("nombre")) {
       const surnameClean = surname.replace(/</g, " ").trim();
@@ -1255,7 +1232,6 @@ function extractPassport(text: string, wantedFields: string[]): ExtractResult {
       const full = `${givenClean} ${surnameClean}`.trim();
       if (full.length > 3) result.nombre = full;
     }
-    // Línea 2 (siguiente línea del texto) para número.
     if (wantedFields.includes("numero")) {
       const lines = text.split("\n");
       const idx = lines.findIndex((l) => l.startsWith("P<"));
@@ -1264,21 +1240,19 @@ function extractPassport(text: string, wantedFields: string[]): ExtractResult {
       if (num) result.numero = num[0];
     }
   } else {
-    // Sin MRZ: fallback a extracción genérica.
     const generic = extractCC(text, wantedFields);
     Object.assign(result, generic.fields);
   }
 
   if (wantedFields.includes("fechaNacimiento")) {
-    result.fechaNacimiento = pickBestDate(text) ?? "";
-    if (!result.fechaNacimiento) delete result.fechaNacimiento;
+    const d = pickBestDate(text);
+    if (d) result.fechaNacimiento = d;
   }
 
   return { fields: result, matchCount: Object.keys(result).length };
 }
 
 function pickBestDate(text: string): string | null {
-  // Prioriza fechas con año 1900-2026 (razonables para nacimiento).
   const matches = [...text.matchAll(
     /\b(\d{1,2})[/\-\s](\d{1,2})[/\-\s](\d{2,4})\b|\b(\d{4})[/\-](\d{1,2})[/\-](\d{1,2})\b/g,
   )];
@@ -1289,7 +1263,7 @@ function pickBestDate(text: string): string | null {
   return matches[0]?.[0] ?? null;
 }
 
-function extractByType(
+export function extractByType(
   text: string,
   wantedFields: string[],
   docType: DocumentType,
@@ -1301,7 +1275,6 @@ function extractByType(
     case "passport": return extractPassport(text, wantedFields).fields;
     case "auto":
     default: {
-      // Intenta todos y devuelve el que más campos extrajo (empate → CC gana).
       const results = [
         extractCC(text, wantedFields),
         extractPassport(text, wantedFields),
@@ -1315,7 +1288,7 @@ function extractByType(
 }
 
 // ─── Validación post-OCR (no bloqueante) ────────────────────────────────────
-function validatePostOcr(data: Record<string, string>): Record<string, boolean> {
+export function validatePostOcr(data: Record<string, string>): Record<string, boolean> {
   const suspicious: Record<string, boolean> = {};
   if (data.numero && !/^[A-Z0-9]{6,12}$/.test(data.numero)) suspicious.numero = true;
   if (data.nombre && (data.nombre.length < 5 || !/\s/.test(data.nombre))) suspicious.nombre = true;
@@ -1330,8 +1303,32 @@ function validatePostOcr(data: Record<string, string>): Record<string, boolean> 
   }
   return suspicious;
 }
+```
 
-// ─── Componente principal ───────────────────────────────────────────────────
+- [ ] **Step 3b: Reemplazar `IdScanner.render.tsx` con la versión que importa los helpers**
+
+Reemplazar el contenido completo de `src/components/widgets/idscanner/IdScanner.render.tsx` con:
+
+```tsx
+import { useRef, useState, useCallback } from "react";
+import type { WidgetRenderProps } from "../../../types/widget.types";
+import {
+  preprocessImage,
+  extractByType,
+  validatePostOcr,
+  type DocumentType,
+} from "./IdScanner.ocr";
+
+type ScanStatus = "idle" | "camera" | "processing" | "done" | "error";
+
+const FIELD_LABELS: Record<string, string> = {
+  nombre: "Nombre completo",
+  numero: "Número de documento",
+  fechaNacimiento: "Fecha de nacimiento",
+  sexo: "Sexo",
+  fechaExpedicion: "Fecha de expedición",
+  lugarExpedicion: "Lugar de expedición",
+};
 
 export default function IdScannerRender({ widget, onValue }: WidgetRenderProps) {
   const fields = (widget.config.fields as string[]) || ["nombre", "numero", "fechaNacimiento"];
@@ -1590,7 +1587,7 @@ Expected: ambos con exit 0.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/components/widgets/idscanner/IdScannerWidget.ts src/components/widgets/idscanner/IdScanner.properties.tsx src/components/widgets/idscanner/IdScanner.render.tsx
+git add src/components/widgets/idscanner/IdScannerWidget.ts src/components/widgets/idscanner/IdScanner.properties.tsx src/components/widgets/idscanner/IdScanner.render.tsx src/components/widgets/idscanner/IdScanner.ocr.ts
 git commit -m "feat(widget-cedula): preprocesamiento imagen + PSM 6 + regex por tipo de documento"
 ```
 
