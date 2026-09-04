@@ -14,12 +14,26 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
+import { useState } from "react";
 import { useBuilderStore } from "../../store/useBuilderStore";
+import { useFolderStore } from "../../store/useFolderStore";
 import { widgetRegistry } from "../widgets/registry";
 import type { WidgetInstance } from "../../types/widget.types";
+import Icon from "../common/Icon";
+import WidgetActionMenu from "./WidgetActionMenu";
+import {
+  cloneRulesForNewWidget,
+  writeClipboard,
+} from "../../lib/widgetClone";
 
-function SortableItem({ widget }: { widget: WidgetInstance }) {
-  const { removeWidget, selectWidget, selectedWidgetId } = useBuilderStore();
+function SortableItem({ widget, folderId, formId }: {
+  widget: WidgetInstance;
+  folderId?: string;
+  formId?: string;
+}) {
+  const { removeWidget, selectWidget, selectedWidgetId, duplicateWidget } = useBuilderStore();
+  const { folders, saveFormRules } = useFolderStore();
+  const [menuOpen, setMenuOpen] = useState(false);
   const isSelected = widget.id === selectedWidgetId;
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -38,10 +52,48 @@ function SortableItem({ widget }: { widget: WidgetInstance }) {
       ? "0 0 0 3px rgba(0,194,168,0.15)"
       : "0 1px 3px rgba(0,0,0,0.08)",
     cursor: "pointer",
-    overflow: "hidden",
+    overflow: "visible",
   };
 
   const Preview = widgetRegistry[widget.type]?.preview;
+
+  // Helpers para leer las rules del form actual desde el folder store.
+  const currentRules = (() => {
+    if (!folderId || !formId) return [];
+    const folder = folders.find((f) => f.id === folderId);
+    const form = folder?.forms.find((fm) => fm.id === formId);
+    return form?.rules ?? [];
+  })();
+
+  const handleDuplicate = (withRules: boolean) => {
+    const result = duplicateWidget(widget.id);
+    if (!result) return;
+    if (withRules && folderId && formId) {
+      const clones = cloneRulesForNewWidget(currentRules, result.oldId, result.newId);
+      if (clones.length > 0) {
+        void saveFormRules(folderId, formId, [...currentRules, ...clones]);
+      }
+    }
+  };
+
+  const handleCopy = (withRules: boolean) => {
+    // Al copiar, si "con reglas": guardamos las rules donde el widget original
+    // aparezca, SIN remapear (se guardan con el id original del widget).
+    // Al pegar en otro form, el remapping y filtrado ocurre allá.
+    const rulesForClipboard = withRules
+      ? currentRules.filter(
+          (r) =>
+            r.conditions.some((c) => c.widgetId === widget.id) ||
+            r.targetWidgetIds.includes(widget.id),
+        )
+      : [];
+    writeClipboard({
+      widget,
+      rules: rulesForClipboard,
+      sourceFormId: formId ?? null,
+      copiedAt: Date.now(),
+    });
+  };
 
   return (
     <div ref={setNodeRef} style={style} onClick={() => selectWidget(widget.id)}>
@@ -74,6 +126,24 @@ function SortableItem({ widget }: { widget: WidgetInstance }) {
         <p style={{ padding: 12, fontSize: 14, color: "#9ca3af" }}>Sin preview</p>
       )}
 
+      {/* Botón ⋮ (menú de acciones) */}
+      <button
+        onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
+        style={{
+          position: "absolute", top: 4, right: 34,
+          background: "none", border: "none", cursor: "pointer",
+          fontSize: 16, color: "#9ca3af", width: 24, height: 24,
+          borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center",
+          lineHeight: 1,
+        }}
+        onMouseOver={(e) => { (e.currentTarget as HTMLElement).style.color = "#0f172a"; }}
+        onMouseOut={(e) => { (e.currentTarget as HTMLElement).style.color = "#9ca3af"; }}
+        aria-label="Acciones del widget"
+        title="Duplicar / Copiar"
+      >
+        ⋮
+      </button>
+
       {/* Botón eliminar */}
       <button
         onClick={(e) => { e.stopPropagation(); removeWidget(widget.id); }}
@@ -88,11 +158,24 @@ function SortableItem({ widget }: { widget: WidgetInstance }) {
       >
         ✕
       </button>
+
+      {menuOpen && (
+        <WidgetActionMenu
+          onDuplicate={() => handleDuplicate(false)}
+          onDuplicateWithRules={() => handleDuplicate(true)}
+          onCopy={() => handleCopy(false)}
+          onCopyWithRules={() => handleCopy(true)}
+          onClose={() => setMenuOpen(false)}
+        />
+      )}
     </div>
   );
 }
 
-export default function BuilderCanvas() {
+export default function BuilderCanvas({ folderId, formId }: {
+  folderId?: string;
+  formId?: string;
+}) {
   const { widgets, moveWidget, clearSelection } = useBuilderStore();
 
   const sensors = useSensors(
@@ -111,28 +194,33 @@ export default function BuilderCanvas() {
   return (
     <div style={{ maxWidth: 680, margin: "0 auto" }} onClick={clearSelection}>
       {/* Encabezado */}
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 20 }}>
-        <h2 style={{ fontSize: 22, fontWeight: 700, color: "#111827" }}>
-          Tu Formulario
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+        <h2 style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.02em", color: "#0f172a", margin: 0 }}>
+          Tu formulario
         </h2>
         <span style={{
-          fontSize: 13, color: "#9ca3af", background: "#f1f5f9",
-          padding: "2px 8px", borderRadius: 20, border: "1px solid #e2e8f0",
+          display: "inline-flex", alignItems: "center", gap: 5,
+          fontSize: 12, fontWeight: 600, color: "#64748b", background: "#f1f5f9",
+          padding: "3px 9px", borderRadius: 20, border: "1px solid #e2e8f0",
         }}>
+          <Icon name="clipboard" size={12} />
           {widgets.length} campo{widgets.length !== 1 ? "s" : ""}
         </span>
       </div>
 
       {/* Canvas vacío */}
       {widgets.length === 0 && (
-        <div style={{
+        <div className="animate-fade-up" style={{
           display: "flex", flexDirection: "column", alignItems: "center",
-          gap: 10, padding: "60px 24px",
-          border: "2px dashed #e2e8f0", borderRadius: 16,
-          textAlign: "center", color: "#9ca3af",
+          gap: 12, padding: "60px 24px",
+          border: "2px dashed #e2e8f0", borderRadius: 20,
+          background: "rgba(255,255,255,0.5)",
+          textAlign: "center", color: "#94a3b8",
         }}>
-          <span style={{ fontSize: 40 }}>📋</span>
-          <p style={{ fontSize: 14 }}>Agrega campos desde el panel de widgets</p>
+          <span style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 64, width: 64, borderRadius: 20, background: "rgba(0,194,168,0.1)", color: "#00c2a8" }}>
+            <Icon name="clipboard" size={30} />
+          </span>
+          <p style={{ fontSize: 15, fontWeight: 700, color: "#334155", margin: 0 }}>Agrega campos desde el panel de widgets</p>
           <span style={{ fontSize: 12 }}>En móvil usa el botón de abajo</span>
         </div>
       )}
@@ -142,7 +230,7 @@ export default function BuilderCanvas() {
         <SortableContext items={widgets.map((w) => w.id)} strategy={verticalListSortingStrategy}>
           <div onClick={(e) => e.stopPropagation()}>
             {widgets.map((widget) => (
-              <SortableItem key={widget.id} widget={widget} />
+              <SortableItem key={widget.id} widget={widget} folderId={folderId} formId={formId} />
             ))}
           </div>
         </SortableContext>

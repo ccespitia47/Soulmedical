@@ -3,14 +3,21 @@ import BuilderCanvas from "./BuilderCanvas";
 import WidgetPalette from "./WidgetPalette";
 import PropertyPanel from "../properties/PropertyPanel";
 import RulesPanel from "./RulesPanel";
+import Icon from "../common/Icon";
 import { useBuilderStore } from "../../store/useBuilderStore";
 import { useAuthStore } from "../../store/useAuthStore";
 import { useTemplatesStore } from "../../store/useTemplatesStore";
 import PreviewPage from "@/pages/PreviewPage";
 import EmailConfigPanel from "../email/EmailConfigPanel";
-import logo from "../../assets/Logo_GrupoSoul.png";
 import { useFolderStore } from "../../store/useFolderStore";
 import type { FormVersion } from "../../types/folder.types";
+import {
+  cloneWidgetWithNewId,
+  cloneRulesForNewWidget,
+  filterViableRulesForForm,
+  useClipboardWidget,
+} from "../../lib/widgetClone";
+import PasteMenu from "./PasteMenu";
 
 // ── Modal de éxito ────────────────────────────────────────────────────────────
 function SuccessModal({ title, message, onClose }: { title: string; message: string; onClose: () => void }) {
@@ -155,6 +162,34 @@ export default function BuilderLayout({ folderId, formId, onBack }: { folderId?:
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [successModal, setSuccessModal] = useState<{ title: string; message: string } | null>(null);
+  const clipboard = useClipboardWidget();
+  const [pasteMenuOpen, setPasteMenuOpen] = useState(false);
+  const [pasteToast, setPasteToast] = useState<string | null>(null);
+  const { insertWidget } = useBuilderStore();
+
+  const handlePaste = (withRules: boolean) => {
+    if (!clipboard) return;
+    const { widget: cloned, newId } = cloneWidgetWithNewId(clipboard.widget);
+    insertWidget(cloned);
+    let toastMsg = `Widget "${cloned.label}" pegado`;
+    if (withRules && clipboard.rules.length > 0 && folderId && formId) {
+      // Remapear las rules del clipboard al nuevo id del widget pegado.
+      const remapped = cloneRulesForNewWidget(clipboard.rules, clipboard.widget.id, newId);
+      // Filtrar rules que referencien widgets que NO existen en el form destino.
+      const existingIds = new Set([...widgets.map((w) => w.id), newId]);
+      const { viable, discarded } = filterViableRulesForForm(remapped, existingIds);
+      if (viable.length > 0) {
+        void saveFormRules(folderId, formId, [...rules, ...viable]);
+      }
+      const parts: string[] = [];
+      if (viable.length > 0) parts.push(`${viable.length} regla${viable.length === 1 ? "" : "s"} agregada${viable.length === 1 ? "" : "s"}`);
+      if (discarded > 0) parts.push(`${discarded} descartada${discarded === 1 ? "" : "s"} (referencian widgets que no existen aquí)`);
+      if (parts.length > 0) toastMsg = `${toastMsg}. ${parts.join(", ")}`;
+    }
+    setPasteToast(toastMsg);
+    setPasteMenuOpen(false);
+    setTimeout(() => setPasteToast(null), 4000);
+  };
 
   const folder = folders.find(f => f.id === folderId);
   const form = folder?.forms.find(fm => fm.id === formId);
@@ -210,36 +245,80 @@ export default function BuilderLayout({ folderId, formId, onBack }: { folderId?:
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
       <header style={{ height: 56, background: "#ffffff", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px", flexShrink: 0, zIndex: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <img src={logo} alt="Grupo Soul" style={{ height: 32, objectFit: "contain" }} />
-          <span style={{ fontWeight: 600, fontSize: 15, color: "#111827" }}>Editor de Formulario</span>
-          <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, fontWeight: 700, background: formStatus === "published" ? "#e6faf7" : "#fffbeb", color: formStatus === "published" ? "#00c2a8" : "#d97706", border: `1px solid ${formStatus === "published" ? "#00c2a8" : "#fde68a"}` }}>
-            {formStatus === "published" ? "✅ Publicado" : "📝 Borrador"}{currentVersion > 0 && ` · v${currentVersion}`}
+          <span style={{ display: "inline-flex", alignItems: "center", background: "#0F1623", borderRadius: 8, padding: "5px 9px" }}>
+            <img src="/soulforms-logo-dark.png" alt="SoulForms" style={{ height: 22, objectFit: "contain" }} />
+          </span>
+          <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: "-0.01em", color: "#0f172a" }}>Editor de Formulario</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, padding: "3px 9px", borderRadius: 20, fontWeight: 700, background: formStatus === "published" ? "#e6faf7" : "#fffbeb", color: formStatus === "published" ? "#0891b2" : "#d97706", border: `1px solid ${formStatus === "published" ? "rgba(0,194,168,0.4)" : "#fde68a"}` }}>
+            <Icon name={formStatus === "published" ? "checkCircle" : "edit"} size={12} />
+            {formStatus === "published" ? "Publicado" : "Borrador"}{currentVersion > 0 && ` · v${currentVersion}`}
           </span>
         </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          <button onClick={() => setShowPreview(true)} style={{ padding: "6px 12px", borderRadius: 6, border: "1.5px solid #e2e8f0", background: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#6b7280", fontFamily: "inherit" }}>👁️ Preview</button>
-          <button onClick={() => setShowEmailConfig(true)} style={{ padding: "6px 12px", borderRadius: 6, border: "1.5px solid #e2e8f0", background: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#6b7280", fontFamily: "inherit" }}>📧 Email</button>
-          <button onClick={() => { setShowRulesPanel(!showRulesPanel); setShowVersionHistory(false); }} style={{ padding: "6px 12px", borderRadius: 6, position: "relative", border: `1.5px solid ${showRulesPanel ? "#00c2a8" : "#e2e8f0"}`, background: showRulesPanel ? "#e6faf7" : "none", cursor: "pointer", fontSize: 12, fontWeight: 600, color: showRulesPanel ? "#00c2a8" : "#6b7280", fontFamily: "inherit" }}>
-            ⚙️ Reglas
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {clipboard && (
+            <div style={{ position: "relative" }}>
+              <button
+                onClick={() => setPasteMenuOpen((v) => !v)}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", background: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#0891b2", fontFamily: "inherit", transition: "all 0.15s ease" }}
+                onMouseOver={(e) => { e.currentTarget.style.borderColor = "#00c2a8"; }}
+                onMouseOut={(e) => { e.currentTarget.style.borderColor = "#e2e8f0"; }}
+                title={`Pegar "${clipboard.widget.label}"`}
+              >
+                📋 Pegar "{clipboard.widget.label.length > 20 ? `${clipboard.widget.label.slice(0, 20)}…` : clipboard.widget.label}"
+              </button>
+              {pasteMenuOpen && (
+                <PasteMenu
+                  clipboard={clipboard}
+                  onPaste={handlePaste}
+                  onClose={() => setPasteMenuOpen(false)}
+                />
+              )}
+            </div>
+          )}
+          <button onClick={() => setShowPreview(true)} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", background: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#64748b", fontFamily: "inherit", transition: "all 0.15s ease" }}
+            onMouseOver={(e) => { e.currentTarget.style.borderColor = "#cbd5e1"; e.currentTarget.style.color = "#334155"; }}
+            onMouseOut={(e) => { e.currentTarget.style.borderColor = "#e2e8f0"; e.currentTarget.style.color = "#64748b"; }}>
+            <Icon name="eye" size={14} /> Preview
+          </button>
+          <button onClick={() => setShowEmailConfig(true)} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", background: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#64748b", fontFamily: "inherit", transition: "all 0.15s ease" }}
+            onMouseOver={(e) => { e.currentTarget.style.borderColor = "#cbd5e1"; e.currentTarget.style.color = "#334155"; }}
+            onMouseOut={(e) => { e.currentTarget.style.borderColor = "#e2e8f0"; e.currentTarget.style.color = "#64748b"; }}>
+            <Icon name="mail" size={14} /> Email
+          </button>
+          <button onClick={() => { setShowRulesPanel(!showRulesPanel); setShowVersionHistory(false); }} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 8, position: "relative", border: `1.5px solid ${showRulesPanel ? "#00c2a8" : "#e2e8f0"}`, background: showRulesPanel ? "#e6faf7" : "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600, color: showRulesPanel ? "#0891b2" : "#64748b", fontFamily: "inherit" }}>
+            <Icon name="settings" size={14} /> Reglas
             {rules.length > 0 && <span style={{ position: "absolute", top: -6, right: -6, background: "#00c2a8", color: "#fff", fontSize: 9, fontWeight: 700, width: 16, height: 16, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>{rules.length}</span>}
           </button>
-          <button onClick={() => { setShowVersionHistory(!showVersionHistory); setShowRulesPanel(false); }} style={{ padding: "6px 12px", borderRadius: 6, position: "relative", border: `1.5px solid ${showVersionHistory ? "#8b5cf6" : "#e2e8f0"}`, background: showVersionHistory ? "#f5f3ff" : "none", cursor: "pointer", fontSize: 12, fontWeight: 600, color: showVersionHistory ? "#8b5cf6" : "#6b7280", fontFamily: "inherit" }}>
-            📋 Versiones
+          <button onClick={() => { setShowVersionHistory(!showVersionHistory); setShowRulesPanel(false); }} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 8, position: "relative", border: `1.5px solid ${showVersionHistory ? "#8b5cf6" : "#e2e8f0"}`, background: showVersionHistory ? "#f5f3ff" : "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600, color: showVersionHistory ? "#8b5cf6" : "#64748b", fontFamily: "inherit" }}>
+            <Icon name="clock" size={14} /> Versiones
             {versions.length > 0 && <span style={{ position: "absolute", top: -6, right: -6, background: "#8b5cf6", color: "#fff", fontSize: 9, fontWeight: 700, width: 16, height: 16, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>{versions.length}</span>}
           </button>
-          <button onClick={() => setShowTemplateModal(true)} style={{ padding: "6px 12px", borderRadius: 6, border: "1.5px solid #e2e8f0", background: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#6b7280", fontFamily: "inherit" }}>📑 Plantilla</button>
-          <div style={{ width: 1, background: "#e2e8f0", margin: "8px 4px" }} />
-          <button onClick={handleSave} disabled={saveStatus === "saving"} style={{ padding: "6px 14px", borderRadius: 6, border: "1.5px solid #e2e8f0", background: saveStatus === "saved" ? "#e6faf7" : "#fff", color: saveStatus === "saved" ? "#00c2a8" : "#374151", cursor: saveStatus === "saving" ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}>
-            {saveStatus === "saving" ? "💾 Guardando..." : saveStatus === "saved" ? "✅ Guardado" : "💾 Guardar"}
+          <button onClick={() => setShowTemplateModal(true)} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", background: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#64748b", fontFamily: "inherit", transition: "all 0.15s ease" }}
+            onMouseOver={(e) => { e.currentTarget.style.borderColor = "#cbd5e1"; e.currentTarget.style.color = "#334155"; }}
+            onMouseOut={(e) => { e.currentTarget.style.borderColor = "#e2e8f0"; e.currentTarget.style.color = "#64748b"; }}>
+            <Icon name="templates" size={14} /> Plantilla
           </button>
-          <button onClick={() => setShowPublishModal(true)} style={{ padding: "6px 16px", borderRadius: 6, border: "none", background: "linear-gradient(135deg, #00c2a8, #0891b2)", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 700, fontFamily: "inherit", boxShadow: "0 2px 8px rgba(0,194,168,0.35)" }}>🚀 Guardar y Publicar</button>
-          <button onClick={onBack} style={{ padding: "6px 14px", borderRadius: 6, border: "1.5px solid #e2e8f0", background: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#6b7280", fontFamily: "inherit" }}>✕ Cerrar</button>
+          <div style={{ width: 1, background: "#e2e8f0", margin: "8px 4px" }} />
+          <button onClick={handleSave} disabled={saveStatus === "saving"} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, border: "1.5px solid #e2e8f0", background: saveStatus === "saved" ? "#e6faf7" : "#fff", color: saveStatus === "saved" ? "#0891b2" : "#374151", cursor: saveStatus === "saving" ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 700, fontFamily: "inherit" }}>
+            <Icon name={saveStatus === "saving" ? "refresh" : saveStatus === "saved" ? "checkCircle" : "save"} size={14} className={saveStatus === "saving" ? "animate-spin" : ""} />
+            {saveStatus === "saving" ? "Guardando..." : saveStatus === "saved" ? "Guardado" : "Guardar"}
+          </button>
+          <button onClick={() => setShowPublishModal(true)} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 16px", borderRadius: 8, border: "none", background: "linear-gradient(135deg, #00c2a8, #0891b2)", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 700, fontFamily: "inherit", boxShadow: "0 4px 14px -4px rgba(0,194,168,0.55)", transition: "all 0.2s ease-out" }}
+            onMouseOver={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 10px 24px -6px rgba(0,194,168,0.6)"; }}
+            onMouseOut={(e) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "0 4px 14px -4px rgba(0,194,168,0.55)"; }}>
+            <Icon name="rocket" size={14} /> Guardar y Publicar
+          </button>
+          <button onClick={onBack} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", background: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#64748b", fontFamily: "inherit", transition: "all 0.15s ease" }}
+            onMouseOver={(e) => { e.currentTarget.style.borderColor = "#fecaca"; e.currentTarget.style.color = "#dc2626"; }}
+            onMouseOut={(e) => { e.currentTarget.style.borderColor = "#e2e8f0"; e.currentTarget.style.color = "#64748b"; }}>
+            <Icon name="x" size={14} /> Cerrar
+          </button>
         </div>
       </header>
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         <div style={{ width: 256, flexShrink: 0, borderRight: "1px solid #e2e8f0", overflowY: "auto", background: "#ffffff", display: "flex", flexDirection: "column" }} className="sf-hide-mobile"><WidgetPalette /></div>
-        <main style={{ flex: 1, overflowY: "auto", padding: 24, background: "#f0f4f8" }}><BuilderCanvas /></main>
+        <main style={{ flex: 1, overflowY: "auto", padding: 24, background: "#f0f4f8" }}><BuilderCanvas folderId={folderId} formId={formId} /></main>
         <div style={{ width: rightPanelWidth, flexShrink: 0, borderLeft: "1px solid #e2e8f0", overflowY: "auto", background: "#ffffff", transition: "width 0.2s ease" }} className="sf-hide-mobile">
           {rightPanelMode === "versions" ? <VersionHistoryPanel versions={versions} currentVersion={currentVersion} onRevert={handleRevert} onClose={() => setShowVersionHistory(false)} />
             : rightPanelMode === "rules" ? <RulesPanel widgets={widgets} rules={rules} onChange={(r) => folderId && formId && saveFormRules(folderId, formId, r)} onClose={() => setShowRulesPanel(false)} />
@@ -253,6 +332,28 @@ export default function BuilderLayout({ folderId, formId, onBack }: { folderId?:
       {showPreview && <div style={{ position: "fixed", inset: 0, zIndex: 200 }}><PreviewPage onClose={() => setShowPreview(false)} /></div>}
       {showEmailConfig && <EmailConfigPanel folderId={folderId} formId={formId} onClose={() => setShowEmailConfig(false)} />}
       <style>{`@media (max-width: 768px) { .sf-hide-mobile { display: none !important; } main { padding: 16px 12px 100px !important; } }`}</style>
+      {pasteToast && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "#0f172a",
+            color: "#fff",
+            padding: "12px 20px",
+            borderRadius: 10,
+            fontSize: 13,
+            fontWeight: 600,
+            boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+            zIndex: 500,
+            maxWidth: 480,
+            textAlign: "center",
+          }}
+        >
+          {pasteToast}
+        </div>
+      )}
     </div>
   );
 }
