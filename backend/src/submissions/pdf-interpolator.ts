@@ -95,5 +95,9 @@ async function resolveValue(
     }
   }
 
-  return escapeHtml(str);
+  // Convierte \n a <br/> DESPUÉS de escapar. Si el value venía con <br/>
+  // literal del usuario, escapeHtml ya lo convirtió a &lt;br/&gt; y esta
+  // sustitución no lo toca (solo actúa sobre newlines reales). Aplicar
+  // transversalmente a todos los widgets es inocuo — valores sin \n no cambian.
+  return escapeHtml(str).replace(/\n/g, '<br/>');
 }

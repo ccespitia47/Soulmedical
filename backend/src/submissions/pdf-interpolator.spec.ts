@@ -86,3 +86,25 @@ describe('interpolatePdfTemplate', () => {
     expect(html).toContain('<img src="data:image/png;base64,AQID"');
   });
 });
+
+describe('interpolatePdfTemplate — line breaks', () => {
+  it('convierte \\n a <br/> en valores interpolados (para preservar párrafos)', async () => {
+    const html = await interpolatePdfTemplate({
+      template: 'Observaciones: ${observaciones}',
+      data: { w1: 'Línea 1\nLínea 2\nLínea 3' },
+      widgets: [{ id: 'w1', label: 'Observaciones', type: 'textarea' }],
+      filesService: {} as never,
+    });
+    expect(html).toBe('Observaciones: Línea 1<br/>Línea 2<br/>Línea 3');
+  });
+
+  it('escapa HTML antes de convertir saltos de línea (no permite inyección)', async () => {
+    const html = await interpolatePdfTemplate({
+      template: '${obs}',
+      data: { w1: '<script>alert(1)</script>\nsegunda' },
+      widgets: [{ id: 'w1', label: 'obs', type: 'textarea' }],
+      filesService: {} as never,
+    });
+    expect(html).toBe('&lt;script&gt;alert(1)&lt;/script&gt;<br/>segunda');
+  });
+});
