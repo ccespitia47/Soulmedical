@@ -12,7 +12,9 @@ export default function PhoneRender({ widget }: WidgetRenderProps) {
   const [country, setCountry] = useState<Country>(() => findCountry(defaultCode));
   const [modalOpen, setModalOpen] = useState(false);
   const [touched, setTouched] = useState(false);
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState(
+    () => (widget.config.defaultValue as string) || "",
+  );
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Cuando cambia el país, re-validar el value actual contra el nuevo pattern.
@@ -49,15 +51,6 @@ export default function PhoneRender({ widget }: WidgetRenderProps) {
 
   const showError =
     enableSelector && touched && value !== "" && !country.pattern.test(value);
-
-  // Longitud máxima calculada del pattern (o fallback config.maxLength / 10).
-  // Extrae el número final del regex simple del país. Es best-effort.
-  const inferredMaxLength = (() => {
-    const src = country.pattern.source;
-    const m = src.match(/\{?(\d+)(?:,(\d+))?\}?\$/);
-    if (m) return parseInt(m[2] ?? m[1], 10);
-    return (widget.config.maxLength as number) || 15;
-  })();
 
   return (
     <div>
@@ -115,7 +108,7 @@ export default function PhoneRender({ widget }: WidgetRenderProps) {
           name={widget.id}
           required={widget.required}
           placeholder={configuredPlaceholder || (enableSelector ? country.placeholder : "300 123 4567")}
-          maxLength={enableSelector ? inferredMaxLength : (widget.config.maxLength as number) || 10}
+          maxLength={enableSelector ? country.maxLength : (widget.config.maxLength as number) || 10}
           value={value}
           onChange={handleChange}
           onBlur={() => setTouched(true)}
