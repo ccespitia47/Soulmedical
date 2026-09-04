@@ -37,6 +37,7 @@
 **Task 2 (Copy/Paste widgets — frontend):**
 - Create: `src/lib/widgetClone.ts`
 - Create: `src/components/builder/WidgetActionMenu.tsx`
+- Create: `src/components/builder/PasteMenu.tsx`
 - Modify: `src/store/useBuilderStore.ts`
 - Modify: `src/components/builder/BuilderCanvas.tsx`
 - Modify: `src/components/builder/BuilderLayout.tsx`
@@ -533,6 +534,7 @@ git commit -m "feat(widget-search): mostrar 50 registros al abrir modal (preview
 **Files:**
 - Create: `src/lib/widgetClone.ts`
 - Create: `src/components/builder/WidgetActionMenu.tsx`
+- Create: `src/components/builder/PasteMenu.tsx`
 - Modify: `src/store/useBuilderStore.ts`
 - Modify: `src/components/builder/BuilderCanvas.tsx`
 - Modify: `src/components/builder/BuilderLayout.tsx`
@@ -1085,9 +1087,100 @@ Por:
               <SortableItem key={widget.id} widget={widget} folderId={folderId} formId={formId} />
 ```
 
-### Sub-task 2.5 — BuilderLayout: botón "Pegar" y pasar props a BuilderCanvas
+### Sub-task 2.5 — PasteMenu componente + BuilderLayout integración
 
-- [ ] **Step 5: Modificar `BuilderLayout.tsx` — agregar botón Pegar en top-bar + pasar props**
+- [ ] **Step 5a: Crear `src/components/builder/PasteMenu.tsx`**
+
+Crear el archivo con el contenido:
+
+```tsx
+import { useEffect, useRef } from "react";
+import type { WidgetClipboard } from "../../lib/widgetClone";
+
+type Props = {
+  clipboard: WidgetClipboard;
+  onPaste: (withRules: boolean) => void;
+  onClose: () => void;
+};
+
+/**
+ * Dropdown que aparece al click en el botón "Pegar" del top-bar del builder.
+ * 2 opciones: Pegar (solo widget) / Pegar con reglas (N). Cierra al click
+ * fuera o ESC.
+ */
+export default function PasteMenu({ clipboard, onPaste, onClose }: Props) {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    // setTimeout para que el click que abrió el menú no lo cierre inmediatamente.
+    const t = setTimeout(() => document.addEventListener("mousedown", onDocClick), 0);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  const itemStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    width: "100%",
+    padding: "8px 12px",
+    background: "transparent",
+    border: "none",
+    cursor: "pointer",
+    fontSize: 13,
+    color: "#111827",
+    textAlign: "left",
+    fontFamily: "inherit",
+  };
+
+  return (
+    <div
+      ref={menuRef}
+      style={{
+        position: "absolute",
+        top: 40,
+        left: 0,
+        background: "#fff",
+        border: "1px solid #e2e8f0",
+        borderRadius: 8,
+        boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+        minWidth: 220,
+        zIndex: 30,
+        overflow: "hidden",
+      }}
+    >
+      <button
+        type="button"
+        style={itemStyle}
+        onMouseOver={(e) => { e.currentTarget.style.background = "#f1f5f9"; }}
+        onMouseOut={(e) => { e.currentTarget.style.background = "transparent"; }}
+        onClick={() => onPaste(false)}
+      >
+        📋 Pegar (solo widget)
+      </button>
+      <button
+        type="button"
+        style={itemStyle}
+        onMouseOver={(e) => { e.currentTarget.style.background = "#f1f5f9"; }}
+        onMouseOut={(e) => { e.currentTarget.style.background = "transparent"; }}
+        onClick={() => onPaste(true)}
+      >
+        📋 Pegar con reglas ({clipboard.rules.length})
+      </button>
+    </div>
+  );
+}
+```
+
+- [ ] **Step 5b: Modificar `BuilderLayout.tsx` — agregar botón Pegar en top-bar + pasar props**
 
 Editar `src/components/builder/BuilderLayout.tsx`.
 
@@ -1099,6 +1192,7 @@ import {
   filterViableRulesForForm,
   useClipboardWidget,
 } from "../../lib/widgetClone";
+import PasteMenu from "./PasteMenu";
 ```
 
 Dentro del componente `BuilderLayout`, después de la línea `const [successModal, setSuccessModal] = useState<...>(null);` (línea ~157), agregar:
@@ -1149,40 +1243,11 @@ Localizar el bloque donde se define el botón "Preview" (línea ~223-227). Justo
                 📋 Pegar "{clipboard.widget.label.length > 20 ? `${clipboard.widget.label.slice(0, 20)}…` : clipboard.widget.label}"
               </button>
               {pasteMenuOpen && (
-                <div
-                  style={{
-                    position: "absolute",
-                    top: 40,
-                    left: 0,
-                    background: "#fff",
-                    border: "1px solid #e2e8f0",
-                    borderRadius: 8,
-                    boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
-                    minWidth: 220,
-                    zIndex: 30,
-                    overflow: "hidden",
-                  }}
-                  onMouseLeave={() => setPasteMenuOpen(false)}
-                >
-                  <button
-                    type="button"
-                    onClick={() => handlePaste(false)}
-                    style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 12px", background: "transparent", border: "none", cursor: "pointer", fontSize: 13, color: "#111827", textAlign: "left", fontFamily: "inherit" }}
-                    onMouseOver={(e) => { e.currentTarget.style.background = "#f1f5f9"; }}
-                    onMouseOut={(e) => { e.currentTarget.style.background = "transparent"; }}
-                  >
-                    📋 Pegar (solo widget)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handlePaste(true)}
-                    style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 12px", background: "transparent", border: "none", cursor: "pointer", fontSize: 13, color: "#111827", textAlign: "left", fontFamily: "inherit" }}
-                    onMouseOver={(e) => { e.currentTarget.style.background = "#f1f5f9"; }}
-                    onMouseOut={(e) => { e.currentTarget.style.background = "transparent"; }}
-                  >
-                    📋 Pegar con reglas ({clipboard.rules.length})
-                  </button>
-                </div>
+                <PasteMenu
+                  clipboard={clipboard}
+                  onPaste={handlePaste}
+                  onClose={() => setPasteMenuOpen(false)}
+                />
               )}
             </div>
           )}
@@ -1239,7 +1304,7 @@ Expected: ambos exit 0.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/lib/widgetClone.ts src/components/builder/WidgetActionMenu.tsx src/store/useBuilderStore.ts src/components/builder/BuilderCanvas.tsx src/components/builder/BuilderLayout.tsx
+git add src/lib/widgetClone.ts src/components/builder/WidgetActionMenu.tsx src/components/builder/PasteMenu.tsx src/store/useBuilderStore.ts src/components/builder/BuilderCanvas.tsx src/components/builder/BuilderLayout.tsx
 git commit -m "feat(builder): duplicar/copiar/pegar widgets con opcion de traer reglas"
 ```
 
