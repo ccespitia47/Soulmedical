@@ -140,6 +140,29 @@ export default function TextProperties({ widget, updateWidget }: WidgetPropertie
         />
         <span>Permitir caracteres especiales</span>
       </label>
+
+      <label
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          fontSize: 13,
+          color: "#111827",
+          cursor: "pointer",
+          marginTop: 12,
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={(widget.config.allowLineBreaks as boolean) || false}
+          onChange={(e) =>
+            updateWidget(widget.id, {
+              config: { ...widget.config, allowLineBreaks: e.target.checked },
+            })
+          }
+        />
+        <span>Permitir salto de línea</span>
+      </label>
     </>
   );
 }

@@ -13,6 +13,7 @@ export const TextWidget: WidgetDefinition = {
     maxLength: 100,
     allowNumbers: false,
     allowSpecialChars: false,
+    allowLineBreaks: false,
   },
   preview: Preview,
   properties: Properties,
