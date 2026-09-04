@@ -14,10 +14,13 @@ type Props = {
   onClose: () => void;
 };
 
+// Cantidad de registros a mostrar como preview inicial (q="").
+const PREVIEW_LIMIT = 50;
+
 /**
- * Modal auto-contenido: tiene su propio input de búsqueda con debounce
- * de 300ms. Cada fila se selecciona con un clic (sin botón "Seleccionar").
- * Auto-focus en el input al abrir para escribir sin fricción.
+ * Modal auto-contenido: al abrir dispara onSearch("") para mostrar los
+ * primeros PREVIEW_LIMIT registros sin filtrar. Al escribir, filtra con
+ * debounce de 300ms (comportamiento previo). Auto-focus en el input al abrir.
  */
 export default function ResultsModal({
   columns,
@@ -31,6 +34,7 @@ export default function ResultsModal({
   const [query, setQuery] = useState(initialQuery);
   const [results, setResults] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isPreview, setIsPreview] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -43,9 +47,18 @@ export default function ResultsModal({
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
-      if (query.length < minChars) { setResults([]); return; }
+      const q = query.trim();
+      // 3 casos:
+      // - q === ""             → preview inicial (source devuelve primeros N)
+      // - q y q.length < minChars → mantener lo anterior visible (no re-buscar)
+      // - q.length >= minChars → búsqueda real
+      if (q !== "" && q.length < minChars) {
+        // No cambia results — deja lo que había (preview o última búsqueda).
+        return;
+      }
       setLoading(true);
-      try { setResults(await onSearch(query)); }
+      setIsPreview(q === "");
+      try { setResults(await onSearch(q)); }
       finally { setLoading(false); }
     }, 300);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
@@ -59,9 +72,7 @@ export default function ResultsModal({
   }, [onClose]);
 
   // Fallback: si no hay columns configuradas, mostrar hasta 5 columnas con
-  // las keys que tengan valor no vacío en al menos un row. El fallbackKey
-  // (típicamente el displayField del widget) va primero si existe y tiene
-  // datos. Evita filas vacías por caer en un solo campo sin valor.
+  // las keys que tengan valor no vacío en al menos un row.
   const nonEmptyKeys = (): string[] => {
     const seen = new Set<string>();
     const order: string[] = [];
@@ -79,7 +90,6 @@ export default function ResultsModal({
   const buildFallbackCols = () => {
     const keys = nonEmptyKeys();
     if (fallbackKey && keys.includes(fallbackKey)) {
-      // Poner el displayField primero, luego el resto
       const rest = keys.filter((k) => k !== fallbackKey);
       return [fallbackKey, ...rest].slice(0, 5).map((k) => ({ key: k, label: k }));
     }
@@ -92,6 +102,14 @@ export default function ResultsModal({
       : fallbackCols.length > 0
       ? fallbackCols
       : [{ key: "value", label: "Resultado" }];
+
+  const q = query.trim();
+  const hintText =
+    q === ""
+      ? `Mostrando primeros ${PREVIEW_LIMIT} — escribe para filtrar`
+      : q.length < minChars
+      ? `Escribe al menos ${minChars} caracter${minChars === 1 ? "" : "es"} para buscar`
+      : `${results.length} resultado${results.length === 1 ? "" : "s"}`;
 
   return (
     <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
@@ -116,7 +134,7 @@ export default function ResultsModal({
               ref={inputRef}
               type="text"
               value={query}
-              placeholder={`Escribe al menos ${minChars} caracter${minChars === 1 ? "" : "es"}...`}
+              placeholder="Escribe para filtrar..."
               onChange={(e) => setQuery(e.target.value)}
               className="w-full rounded-lg border-[1.5px] border-slate-200 bg-white px-3 py-2.5 pr-10 text-[14px] outline-none focus:border-[#00c2a8]"
             />
@@ -124,27 +142,23 @@ export default function ResultsModal({
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">⏳</span>
             )}
           </div>
-          <div className="mt-1.5 text-[11px] text-gray-400">
-            {query.length < minChars
-              ? `Escribe al menos ${minChars} caracter${minChars === 1 ? "" : "es"} para buscar`
-              : `${results.length} resultado${results.length === 1 ? "" : "s"}`}
-          </div>
+          <div className="mt-1.5 text-[11px] text-gray-400">{hintText}</div>
         </div>
 
-        {/* Tabla de resultados */}
+        {/* Tabla de resultados (preview inicial o búsqueda) */}
         <div className="flex-1 overflow-auto">
-          {query.length < minChars ? (
-            <div className="flex h-full items-center justify-center text-gray-300">
+          {loading && results.length === 0 ? (
+            <div className="flex h-full items-center justify-center text-gray-400">
               <div className="text-center">
-                <div className="mb-2 text-5xl">✍️</div>
-                <p className="text-sm">Empieza a escribir…</p>
+                <div className="mb-2 text-4xl">⏳</div>
+                <p className="text-sm">Cargando…</p>
               </div>
             </div>
-          ) : results.length === 0 && !loading ? (
+          ) : results.length === 0 ? (
             <div className="flex h-full items-center justify-center text-gray-400">
               <div className="text-center">
                 <div className="mb-2 text-4xl">🔍</div>
-                <p>No se encontraron resultados</p>
+                <p>{isPreview ? "Sin registros" : "No se encontraron resultados"}</p>
               </div>
             </div>
           ) : (

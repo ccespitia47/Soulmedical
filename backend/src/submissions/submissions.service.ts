@@ -5,6 +5,7 @@ import { FormSubmission, FormSubmissionDocument } from './form-submission.schema
 import { FormsService } from '../forms/forms.service';
 import { CreateSubmissionDto } from './dto/create-submission.dto';
 import { FilesService } from '../files/files.service';
+import { generateExcelTemplateHtml, type ExcelFieldMapping } from './excel-template';
 
 const BINARY_WIDGET_TYPES = new Set(['signature', 'photo']);
 const GRIDFS_PREFIX = 'gridfs:';
@@ -57,12 +58,33 @@ export class SubmissionsService {
     // después corría en Puppeteer (--no-sandbox) al generar el PDF: SSRF,
     // exfiltración, RCE potencial. Ver DTO para justificación completa.
     const emailTemplate = form.emailTemplate as
-      | { attachPDF?: boolean; pdfTemplate?: string }
+      | {
+          attachPDF?: boolean;
+          pdfTemplate?: string;
+          excelBase64?: string;
+          excelMappings?: ExcelFieldMapping[];
+          excelLogoBase64?: string;
+        }
       | null;
-    const templateSnapshot =
-      emailTemplate?.attachPDF && emailTemplate?.pdfTemplate?.trim()
-        ? emailTemplate.pdfTemplate
-        : null;
+    // El formato del PDF se define de DOS maneras: (a) plantilla HTML
+    // (pdfTemplate con ${placeholders}) o (b) Excel subido + mapeo de campos.
+    // Para (b) generamos aquí, server-side, el HTML del Excel dejando los
+    // ${placeholders} en las celdas mapeadas — el interpolador los llena al
+    // renderizar (igual que la vía HTML). Antes solo (a) funcionaba en el
+    // reporte; por eso los formatos definidos por Excel salían "sin PDF".
+    let templateSnapshot: string | null = null;
+    if (emailTemplate?.attachPDF && emailTemplate?.pdfTemplate?.trim()) {
+      templateSnapshot = emailTemplate.pdfTemplate;
+    } else if (
+      emailTemplate?.excelBase64 &&
+      (emailTemplate?.excelMappings?.length ?? 0) > 0
+    ) {
+      templateSnapshot = generateExcelTemplateHtml(
+        emailTemplate.excelBase64,
+        emailTemplate.excelMappings!,
+        emailTemplate.excelLogoBase64,
+      );
+    }
 
     const submission = new this.submissionModel({
       formId,
@@ -318,9 +340,22 @@ export class SubmissionsService {
     limit = 20,
   ): Promise<{ results: Record<string, unknown>[] }> {
     const query = q.trim();
-    if (!query) return { results: [] };
-
     const cappedLimit = Math.min(50, Math.max(1, limit || 20));
+
+    // Con q vacío: devolver los últimos N sin filtrar. Sirve como preview
+    // inicial del modal del widget Search — el usuario ve datos listos para
+    // seleccionar sin tener que escribir.
+    if (!query) {
+      const submissions = await this.submissionModel
+        .find({ formId })
+        .sort({ submittedAt: -1 })
+        .limit(cappedLimit)
+        .lean();
+      return {
+        results: submissions.map((s) => (s.data ?? {}) as Record<string, unknown>),
+      };
+    }
+
     // Escapa caracteres especiales de regex para que el input del usuario se
     // trate como texto literal, no como patrón (regex injection / ReDoS).
     const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

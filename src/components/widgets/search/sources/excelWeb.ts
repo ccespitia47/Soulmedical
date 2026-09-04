@@ -32,6 +32,10 @@ export async function searchExcelWeb(
   config: SearchWidgetConfig,
   q: string,
 ): Promise<Row[]> {
+  // Con q vacío devolvemos vacío por ahora — el backend /excel/search
+  // no soporta preview sin query y agregarlo requiere modificar el flujo
+  // Graph API. Deferido; el modal mostrará "sin resultados" hasta que el
+  // usuario escriba (mismo UX que hoy para este source específico).
   if (!config.excelUrl || !q.trim() || !config.excelSearchCol) return [];
   const res = await fetch(`${API_URL}/excel/search`, {
     method: "POST",

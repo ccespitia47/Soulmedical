@@ -3,6 +3,9 @@ import type { SearchWidgetConfig } from "../search.types";
 type Row = Record<string, unknown>;
 
 export async function searchSQL(config: SearchWidgetConfig, q: string): Promise<Row[]> {
+  // Con q vacío devolvemos vacío por ahora — el endpoint SQL configurable
+  // no tiene contrato definido para preview sin query. El usuario debe
+  // escribir para obtener resultados (mismo UX que hoy para SQL).
   if (!config.sqlEndpoint || !q.trim()) return [];
   // Allowlist same-origin: sin esto, la config del widget (guardada por
   // cualquier usuario con acceso al builder) podía apuntar a un endpoint

@@ -95,13 +95,12 @@ export async function fetchSheetsHeaders(url: string): Promise<string[]> {
 }
 
 export async function searchGoogleSheets(config: SearchWidgetConfig, q: string): Promise<Row[]> {
-  if (!config.sheetsUrl || !q.trim()) return [];
+  // Nota: ANTES bloqueábamos q vacío. Ahora q vacío devuelve los primeros
+  // 50 sin filtrar (preview inicial del modal).
+  if (!config.sheetsUrl) return [];
   const parsed = parseSheetsUrl(config.sheetsUrl);
   if (!parsed) return [];
-  // Prioridad: gid explícito de la config (nuevo), gid en la URL, o hoja default.
   const gid = config.sheetsGid ?? parsed.gid;
-  // El endpoint /pub?output=csv NO acepta el parámetro range — devuelve el
-  // sheet completo; filtramos en memoria abajo.
   const range = parsed.published ? undefined : (config.sheetsRange || undefined);
   const csvUrl = buildCsvUrl(parsed.id, gid, parsed.published, range);
   const res = await fetch(csvUrl);
@@ -109,12 +108,19 @@ export async function searchGoogleSheets(config: SearchWidgetConfig, q: string):
   const text = await res.text();
   const rows = parseCsv(text).map((r) => r.map((c) => c.trim()));
   const headers = rows[0] ?? [];
+  const dataRows = rows.slice(1);
+
+  // Preview inicial: primeros 50 sin filtrar.
+  if (!q.trim()) {
+    return dataRows
+      .slice(0, 50)
+      .map((r) => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ""])));
+  }
+
+  // Búsqueda con query: filtro por columna configurada, primeros 20.
   const searchCol = config.sheetsSearchCol ?? "";
-  // findIndex devuelve -1 (no undefined) cuando no encuentra match, así que
-  // `?? 0` nunca aplicaba — usamos Math.max(0, ...) para caer a la primera
-  // columna solo cuando realmente no hay match.
   const colIdx = Math.max(0, headers.findIndex((h) => h.toLowerCase() === searchCol.toLowerCase()));
-  return rows.slice(1)
+  return dataRows
     .filter((r) => r[colIdx]?.toLowerCase().includes(q.toLowerCase()))
     .slice(0, 20)
     .map((r) => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ""])));
