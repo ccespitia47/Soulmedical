@@ -10,6 +10,7 @@ export const IdScannerWidget: WidgetDefinition = {
   defaultConfig: {
     fields: ["nombre", "numero", "fechaNacimiento"],
     allowManual: true,
+    documentType: "auto",
   },
   preview: Preview,
   properties: Properties,

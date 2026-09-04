@@ -65,6 +65,25 @@ export default function IdScannerProperties({ widget, updateWidget }: WidgetProp
         <span>Permitir edición manual</span>
       </label>
 
+      <div style={{ marginBottom: 14 }}>
+        <label style={labelStyle}>Tipo de documento</label>
+        <select
+          style={inputStyle}
+          value={(widget.config.documentType as string) || "auto"}
+          onChange={(e) =>
+            updateWidget(widget.id, {
+              config: { ...widget.config, documentType: e.target.value },
+            })
+          }
+        >
+          <option value="auto">Detectar automáticamente</option>
+          <option value="cc">Cédula de Ciudadanía (Colombia)</option>
+          <option value="ce">Cédula de Extranjería (Colombia)</option>
+          <option value="ti">Tarjeta de Identidad (menores)</option>
+          <option value="passport">Pasaporte / Internacional</option>
+        </select>
+      </div>
+
       <div style={{
         padding: "10px 12px", background: "#fffbeb",
         border: "1px solid #fde68a", borderRadius: 6,
