@@ -1,6 +1,14 @@
 import type { WidgetPreviewProps } from "../../../types/widget.types";
+import { findCountry } from "../../../lib/countries";
 
 export default function PhonePreview({ widget }: WidgetPreviewProps) {
+  const enableSelector = (widget.config.enableCountrySelector as boolean) || false;
+  const defaultCode = (widget.config.defaultCountry as string) || "CO";
+  const country = findCountry(defaultCode);
+  const legacyPrefix = (widget.config.prefix as string) || "+57";
+  const placeholder = (widget.config.placeholder as string) ||
+    (enableSelector ? country.placeholder : "300 123 4567");
+
   return (
     <div style={{ padding: "12px" }}>
       <label style={{
@@ -25,14 +33,25 @@ export default function PhonePreview({ widget }: WidgetPreviewProps) {
             color: "#111827",
             fontWeight: 500,
             lineHeight: "1.5",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
           }}
         >
-          {(widget.config.prefix as string) || "+57"}
+          {enableSelector ? (
+            <>
+              <span style={{ fontSize: 16 }}>{country.flag}</span>
+              <span>{country.dialCode}</span>
+              <span style={{ fontSize: 10, color: "#6b7280" }}>▾</span>
+            </>
+          ) : (
+            legacyPrefix
+          )}
         </span>
         <input
           type="tel"
           disabled
-          placeholder={(widget.config.placeholder as string) || "300 123 4567"}
+          placeholder={placeholder}
           style={{
             flex: 1,
             padding: "8px 12px",

@@ -11,6 +11,8 @@ export const PhoneWidget: WidgetDefinition = {
     placeholder: "300 123 4567",
     prefix: "+57",
     maxLength: 10,
+    enableCountrySelector: false,
+    defaultCountry: "CO",
   },
   preview: Preview,
   properties: Properties,

@@ -1,4 +1,5 @@
 import type { WidgetPropertiesProps } from "../../../types/widget.types";
+import { COUNTRIES } from "../../../lib/countries";
 
 export default function PhoneProperties({ widget, updateWidget }: WidgetPropertiesProps) {
   const inputStyle = {
@@ -74,6 +75,50 @@ export default function PhoneProperties({ widget, updateWidget }: WidgetProperti
           }
         />
       </div>
+
+      <label
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          fontSize: 13,
+          color: "#111827",
+          cursor: "pointer",
+          marginBottom: 12,
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={(widget.config.enableCountrySelector as boolean) || false}
+          onChange={(e) =>
+            updateWidget(widget.id, {
+              config: { ...widget.config, enableCountrySelector: e.target.checked },
+            })
+          }
+        />
+        <span>Permitir al usuario cambiar país</span>
+      </label>
+
+      {(widget.config.enableCountrySelector as boolean) && (
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle}>País por defecto</label>
+          <select
+            style={inputStyle}
+            value={(widget.config.defaultCountry as string) || "CO"}
+            onChange={(e) =>
+              updateWidget(widget.id, {
+                config: { ...widget.config, defaultCountry: e.target.value },
+              })
+            }
+          >
+            {COUNTRIES.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.flag} {c.name} ({c.dialCode})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <label
         style={{
