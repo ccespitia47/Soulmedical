@@ -8,6 +8,7 @@ import {
   filterViableRulesForForm,
   useClipboardWidget,
 } from "../../lib/widgetClone";
+import { widgetRegistry } from "../widgets/registry";
 
 type Props = {
   folderId?: string;
@@ -31,6 +32,12 @@ export default function PasteButton({ folderId, formId, widgets, rules, saveForm
 
   const handlePaste = (withRules: boolean) => {
     if (!clipboard) return;
+    if (!widgetRegistry[clipboard.widget.type]) {
+      setPasteToast(`No se puede pegar: tipo de widget desconocido ("${clipboard.widget.type}")`);
+      setPasteMenuOpen(false);
+      setTimeout(() => setPasteToast(null), 4000);
+      return;
+    }
     const { widget: cloned, newId } = cloneWidgetWithNewId(clipboard.widget);
     insertWidget(cloned);
     let toastMsg = `Widget "${cloned.label}" pegado`;

@@ -12,5 +12,16 @@ export const useAuthStore = create<AuthState>((set) => ({
   currentUser: null,
   token: null,
   setUser: (user, token) => set({ currentUser: user, ...(token !== undefined ? { token } : {}) }),
-  clearUser: () => set({ currentUser: null, token: null }),
+  clearUser: () => {
+    // Limpiar el clipboard del builder al hacer logout. El clipboard puede
+    // contener config privado (URLs SharePoint, endpoints SQL, sourceFormId
+    // de otro tenant) que no debe heredar el siguiente usuario que entre en
+    // esta máquina.
+    try {
+      localStorage.removeItem("soulforms-widget-clipboard");
+    } catch {
+      /* localStorage no disponible — no-op */
+    }
+    set({ currentUser: null, token: null });
+  },
 }));

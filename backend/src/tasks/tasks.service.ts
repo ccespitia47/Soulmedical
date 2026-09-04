@@ -687,7 +687,7 @@ export class TasksService {
     await this.assertShareFormOpen(task.formId);
 
     const query = (q ?? '').trim();
-    if (!query || !widgetId) return { results: [] };
+    if (!widgetId) return { results: [] };
 
     const widgets = (task.widgets ?? []) as Array<{
       id?: string;
@@ -724,7 +724,7 @@ export class TasksService {
       config.sourceFormId,
       query,
       fields,
-      20,
+      query ? 20 : 50,
     );
   }
 
