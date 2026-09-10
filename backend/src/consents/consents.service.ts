@@ -170,4 +170,18 @@ export class ConsentsService {
     if (!updated) throw new NotFoundException(`Consentimiento ${id} no encontrado`);
     return updated as unknown as ConsentRecord;
   }
+
+  async verificar(id: string): Promise<{ valido: boolean; hash: string }> {
+    const d = (await this.model.findById(id).lean()) as any;
+    if (!d) throw new NotFoundException(`Consentimiento ${id} no encontrado`);
+    const base = {
+      tipo: d.tipo, entidad: d.entidad ?? null, tipoDoc: d.tipoDoc, numDoc: d.numDoc,
+      nombres: d.nombres, apellidos: d.apellidos, ciudad: d.ciudad ?? null,
+      profesional: d.profesional ?? null, respuestas: d.respuestas,
+      firmaPaciente: d.firmaPaciente ?? null, firmaResponsable: d.firmaResponsable ?? null,
+      foto: d.foto ?? null,
+    };
+    const hash = consentHash(base as unknown as Record<string, unknown>);
+    return { valido: hash === d.hashVerificacion, hash };
+  }
 }

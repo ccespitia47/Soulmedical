@@ -104,3 +104,34 @@ describe('ConsentsService.list/findOne/update/anular', () => {
     expect(r.estado).toBe('anulado');
   });
 });
+
+describe('ConsentsService.verificar', () => {
+  it('devuelve valido=true cuando el hash coincide', async () => {
+    const { service, model } = makeDeps();
+    const base = {
+      tipo: 'vih', entidad: null, tipoDoc: 'CC', numDoc: '1', nombres: 'A', apellidos: 'B',
+      ciudad: null, profesional: null, respuestas: { x: 1 },
+      firmaPaciente: 'gridfs:a', firmaResponsable: null, foto: null,
+    };
+    const { consentHash } = require('./consent-hash');
+    model.findById = jest.fn().mockReturnValue({
+      lean: () => Promise.resolve({ _id: 'r1', ...base, hashVerificacion: consentHash(base) }),
+    });
+    const res = await service.verificar('r1');
+    expect(res.valido).toBe(true);
+  });
+
+  it('devuelve valido=false si el contenido fue alterado', async () => {
+    const { service, model } = makeDeps();
+    model.findById = jest.fn().mockReturnValue({
+      lean: () => Promise.resolve({
+        _id: 'r1', tipo: 'vih', entidad: null, tipoDoc: 'CC', numDoc: '1',
+        nombres: 'A', apellidos: 'B', ciudad: null, profesional: null,
+        respuestas: { x: 999 }, firmaPaciente: 'gridfs:a', firmaResponsable: null, foto: null,
+        hashVerificacion: 'no-coincide',
+      }),
+    });
+    const res = await service.verificar('r1');
+    expect(res.valido).toBe(false);
+  });
+});
