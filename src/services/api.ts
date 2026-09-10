@@ -870,3 +870,44 @@ export function requestTaskBulkPdfApi(taskId: string) {
     { method: 'POST', body: '{}' },
   );
 }
+
+// ─── Consentimientos (API dedicada, Plan 1) ──────────────────────────────
+export type ConsentRecordDto = {
+  id: string; tipo: string; entidad: "SAI" | "SOUL" | null;
+  tipoDoc: string; numDoc: string; nombres: string; apellidos: string;
+  ciudad: string | null; profesional: string | null; estado: string;
+  respuestas: Record<string, unknown>;
+  firmaPaciente: string | null; firmaResponsable: string | null; foto: string | null;
+  hashVerificacion: string; createdAt: string; creadoPor?: string | null;
+};
+export type CreateConsentPayload = {
+  tipo: string; entidad?: "SAI" | "SOUL";
+  tipoDoc: string; numDoc: string; nombres: string; apellidos: string;
+  ciudad?: string; profesional?: string;
+  respuestas: Record<string, unknown>;
+  firmaPaciente: string; firmaResponsable?: string; foto?: string;
+};
+
+export function createConsentApi(payload: CreateConsentPayload) {
+  return request<ConsentRecordDto>("/consents", { method: "POST", body: JSON.stringify(payload) });
+}
+export function listConsentsApi(params: {
+  tipo?: string; search?: string; from?: string; to?: string; page?: number; limit?: number;
+} = {}) {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => { if (v != null && v !== "") qs.set(k, String(v)); });
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return request<{ data: ConsentRecordDto[]; total: number; page: number; limit: number }>(`/consents${suffix}`);
+}
+export function getConsentApi(id: string) {
+  return request<ConsentRecordDto>(`/consents/${id}`);
+}
+export function updateConsentApi(id: string, payload: Partial<CreateConsentPayload>) {
+  return request<ConsentRecordDto>(`/consents/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export function anularConsentApi(id: string) {
+  return request<ConsentRecordDto>(`/consents/${id}/anular`, { method: "POST" });
+}
+export function verifyConsentApi(id: string) {
+  return request<{ valido: boolean; hash: string }>(`/consents/${id}/verificar`);
+}
