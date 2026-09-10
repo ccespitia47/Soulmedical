@@ -13,14 +13,17 @@ export function FieldControl({
   field,
   value,
   onChange,
+  id,
 }: {
   field: ConsentField;
   value: string;
   onChange: (v: string) => void;
+  /** Asocia el control con su `<label htmlFor>` (accesibilidad + tests). */
+  id?: string;
 }) {
   if (field.type === "select") {
     return (
-      <select className={inputCls} value={value} onChange={(e) => onChange(e.target.value)}>
+      <select id={id} className={inputCls} value={value} onChange={(e) => onChange(e.target.value)}>
         <option value="">Selecciona…</option>
         {field.options?.map((opt) => (
           <option key={opt} value={opt}>
@@ -32,6 +35,7 @@ export function FieldControl({
   }
   return (
     <input
+      id={id}
       type={field.type === "number" ? "number" : field.type}
       className={inputCls}
       placeholder={field.placeholder}
@@ -54,11 +58,11 @@ export function FieldGrid({
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       {fields.map((f) => (
         <div key={f.id} className={f.half ? "" : "sm:col-span-2"}>
-          <label className={labelCls}>
+          <label className={labelCls} htmlFor={f.id}>
             {f.label}
             {f.required && <span className="ml-0.5 text-red-500">*</span>}
           </label>
-          <FieldControl field={f} value={values[f.id] ?? ""} onChange={(v) => setValue(f.id, v)} />
+          <FieldControl id={f.id} field={f} value={values[f.id] ?? ""} onChange={(v) => setValue(f.id, v)} />
         </div>
       ))}
     </div>
