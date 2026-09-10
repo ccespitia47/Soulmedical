@@ -60,6 +60,12 @@ export class ConsentRecord {
   @Prop({ default: () => new Date(), index: true }) createdAt: Date;
   @Prop({ type: Date, default: null }) updatedAt: Date | null;
   @Prop({ type: Date, default: null }) pdfGeneradoEn: Date | null;
+
+  // Id de la form_submission de origen (migración Vacunación → consent_records).
+  // Permite idempotencia (upsert) y reversibilidad (borrar por este campo).
+  // null para consentimientos creados directamente por el motor.
+  @Prop({ type: String, default: null, index: true })
+  origenSubmissionId?: string | null;
 }
 
 export const ConsentRecordSchema = SchemaFactory.createForClass(ConsentRecord);
