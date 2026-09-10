@@ -16,6 +16,9 @@ export enum EstadoConsentimiento {
   ANULADO = 'anulado',
 }
 
+export const ENTIDADES = ['SAI', 'SOUL'] as const;
+export type Entidad = (typeof ENTIDADES)[number];
+
 export type ConsentRecordDocument = ConsentRecord & Document;
 
 @Schema({ collection: 'consent_records' })
@@ -26,8 +29,8 @@ export class ConsentRecord {
   @Prop({ required: true, index: true, enum: Object.values(TipoConsentimiento) })
   tipo: TipoConsentimiento;
 
-  @Prop({ type: String, enum: ['SAI', 'SOUL'], default: null })
-  entidad: 'SAI' | 'SOUL' | null;
+  @Prop({ type: String, enum: ENTIDADES, default: null })
+  entidad: Entidad | null;
 
   @Prop({ required: true }) tipoDoc: string;
   @Prop({ required: true, index: true }) numDoc: string;

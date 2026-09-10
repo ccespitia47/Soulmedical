@@ -1,10 +1,10 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { TipoConsentimiento } from './consent-record.schema';
+import { Entidad, TipoConsentimiento } from './consent-record.schema';
 
 @Injectable()
 export class ConsentValidationService {
   /** Invariantes de tipo/entidad. Solo Vacunación usa entidad (SAI/SOUL). */
-  validate(input: { tipo: TipoConsentimiento; entidad?: 'SAI' | 'SOUL' }): void {
+  validate(input: { tipo: TipoConsentimiento; entidad?: Entidad }): void {
     const esVacunacion =
       input.tipo === TipoConsentimiento.VACUNACION ||
       input.tipo === TipoConsentimiento.VACUNACION_B;

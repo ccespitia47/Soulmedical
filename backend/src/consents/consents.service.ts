@@ -23,6 +23,13 @@ export class ConsentsService {
     private readonly validation: ConsentValidationService,
   ) {}
 
+  /** Normaliza un doc .lean() (o plano) a la misma forma que produce el
+   *  `toJSON` del schema: agrega `id`, conserva `_id` y descarta `__v`. */
+  private toView(doc: any): any {
+    const { __v, ...rest } = doc;
+    return { ...rest, id: doc._id };
+  }
+
   /** Sube un data URL a GridFS y devuelve 'gridfs:<id>'. Si ya es una
    *  referencia gridfs o está vacío, lo devuelve tal cual. */
   private async persistBinario(
@@ -108,8 +115,7 @@ export class ConsentsService {
     const users = ids.length ? await this.usersService.findByIds(ids) : {};
 
     const data = docs.map((d: any) => ({
-      ...d,
-      id: d._id,
+      ...this.toView(d),
       creadoPor: d.createdById != null ? users[d.createdById]?.name ?? null : null,
     }));
 
@@ -119,7 +125,7 @@ export class ConsentsService {
   async findOne(id: string): Promise<ConsentRecord> {
     const doc = await this.model.findById(id).lean();
     if (!doc) throw new NotFoundException(`Consentimiento ${id} no encontrado`);
-    return doc as unknown as ConsentRecord;
+    return this.toView(doc);
   }
 
   async update(id: string, dto: UpdateConsentDto, userId: number | null): Promise<ConsentRecord> {
@@ -160,7 +166,7 @@ export class ConsentsService {
     const updated = await this.model
       .findByIdAndUpdate(id, { ...base, hashVerificacion, updatedAt: new Date() }, { new: true })
       .lean();
-    return updated as unknown as ConsentRecord;
+    return this.toView(updated as any);
   }
 
   async anular(id: string): Promise<ConsentRecord> {
@@ -168,7 +174,7 @@ export class ConsentsService {
       .findByIdAndUpdate(id, { estado: EstadoConsentimiento.ANULADO }, { new: true })
       .lean();
     if (!updated) throw new NotFoundException(`Consentimiento ${id} no encontrado`);
-    return updated as unknown as ConsentRecord;
+    return this.toView(updated as any);
   }
 
   async verificar(id: string): Promise<{ valido: boolean; hash: string }> {

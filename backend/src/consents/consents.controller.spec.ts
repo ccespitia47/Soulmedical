@@ -9,9 +9,9 @@ describe('ConsentsController', () => {
 
   beforeEach(() => jest.clearAllMocks());
 
-  it('POST /consents pasa el userId del request', async () => {
+  it('POST /consents pasa el userId del request (coercionado a numero)', async () => {
     service.create.mockResolvedValue({ id: 'r1' });
-    await ctrl.create({ tipo: 'vih' } as any, { user: { id: 9 } } as any);
+    await ctrl.create({ tipo: 'vih' } as any, { user: { id: '9' } } as any);
     expect(service.create).toHaveBeenCalledWith({ tipo: 'vih' }, 9);
   });
 
@@ -21,6 +21,14 @@ describe('ConsentsController', () => {
     expect(service.list).toHaveBeenCalledWith({
       page: 2, limit: 10, tipo: 'vih', search: 'juan', from: '2026-01-01', to: '2026-02-01',
     });
+  });
+
+  it('GET /consents con page/limit invalidos cae a valores por defecto', async () => {
+    service.list.mockResolvedValue({ data: [], total: 0, page: 1, limit: 50 });
+    await ctrl.list('abc', 'abc');
+    expect(service.list).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 1, limit: 50 }),
+    );
   });
 
   it('GET /consents/:id/verificar delega en el servicio', async () => {

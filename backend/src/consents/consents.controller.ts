@@ -9,7 +9,7 @@ import { ConsentsService } from './consents.service';
 import { CreateConsentDto } from './dto/create-consent.dto';
 import { UpdateConsentDto } from './dto/update-consent.dto';
 
-interface AuthRequest { user?: { id: number } }
+interface AuthRequest { user?: { id: string } }
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @RequirePermission(Permission.CONSIENTIFY_ACCESS)
@@ -19,7 +19,8 @@ export class ConsentsController {
 
   @Post()
   create(@Body() dto: CreateConsentDto, @Request() req: AuthRequest) {
-    return this.service.create(dto, req.user?.id ?? null);
+    const userId = req.user?.id != null ? Number(req.user.id) : null;
+    return this.service.create(dto, userId);
   }
 
   @Get()
@@ -31,8 +32,10 @@ export class ConsentsController {
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limitNum = Math.min(200, Math.max(1, Number(limit) || 50));
     return this.service.list({
-      page: parseInt(page, 10), limit: parseInt(limit, 10), tipo, search, from, to,
+      page: pageNum, limit: limitNum, tipo, search, from, to,
     });
   }
 
@@ -47,7 +50,8 @@ export class ConsentsController {
     @Body() dto: UpdateConsentDto,
     @Request() req: AuthRequest,
   ) {
-    return this.service.update(id, dto, req.user?.id ?? null);
+    const userId = req.user?.id != null ? Number(req.user.id) : null;
+    return this.service.update(id, dto, userId);
   }
 
   @Post(':id/anular')

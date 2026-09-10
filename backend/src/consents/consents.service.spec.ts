@@ -49,7 +49,7 @@ describe('ConsentsService.list/findOne/update/anular', () => {
     const chain = {
       sort: () => chain, skip: () => chain, limit: () => chain,
       lean: () => Promise.resolve([
-        { _id: 'r1', tipo: 'vih', numDoc: '1', createdById: 7, createdAt: new Date() },
+        { _id: 'r1', tipo: 'vih', numDoc: '1', createdById: 7, createdAt: new Date(), __v: 0 },
       ]),
     };
     model.find = jest.fn().mockReturnValue(chain);
@@ -63,12 +63,26 @@ describe('ConsentsService.list/findOne/update/anular', () => {
     );
     expect(page.total).toBe(1);
     expect(page.data[0].creadoPor).toBe('Sara');
+    expect(page.data[0].id).toBe('r1');
+    expect(page.data[0]._id).toBe('r1');
+    expect(page.data[0]).not.toHaveProperty('__v');
   });
 
   it('findOne lanza NotFound si no existe', async () => {
     const { service, model } = makeDeps();
     model.findById = jest.fn().mockReturnValue({ lean: () => Promise.resolve(null) });
     await expect(service.findOne('x')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('findOne normaliza el doc lean (id presente, sin __v)', async () => {
+    const { service, model } = makeDeps();
+    model.findById = jest.fn().mockReturnValue({
+      lean: () => Promise.resolve({ _id: 'r1', tipo: 'vih', numDoc: '1', __v: 0 }),
+    });
+    const doc: any = await service.findOne('r1');
+    expect(doc.id).toBe('r1');
+    expect(doc._id).toBe('r1');
+    expect(doc).not.toHaveProperty('__v');
   });
 
   it('update recalcula hash y fija updatedAt', async () => {
@@ -81,27 +95,33 @@ describe('ConsentsService.list/findOne/update/anular', () => {
       }),
     });
     model.findByIdAndUpdate = jest.fn().mockReturnValue({
-      lean: () => Promise.resolve({ _id: 'r1', respuestas: { x: 2 } }),
+      lean: () => Promise.resolve({ _id: 'r1', respuestas: { x: 2 }, __v: 0 }),
     });
 
-    await service.update('r1', { respuestas: { x: 2 } } as any, 7);
+    const updated: any = await service.update('r1', { respuestas: { x: 2 } } as any, 7);
 
     const patch = model.findByIdAndUpdate.mock.calls[0][1];
     expect(patch.hashVerificacion).toMatch(/^[0-9a-f]{64}$/);
     expect(patch.updatedAt).toBeInstanceOf(Date);
     expect(filesService.uploadDataUrl).not.toHaveBeenCalled();
+    expect(updated.id).toBe('r1');
+    expect(updated._id).toBe('r1');
+    expect(updated).not.toHaveProperty('__v');
   });
 
   it('anular fija estado anulado', async () => {
     const { service, model } = makeDeps();
     model.findByIdAndUpdate = jest.fn().mockReturnValue({
-      lean: () => Promise.resolve({ _id: 'r1', estado: 'anulado' }),
+      lean: () => Promise.resolve({ _id: 'r1', estado: 'anulado', __v: 0 }),
     });
     const r: any = await service.anular('r1');
     expect(model.findByIdAndUpdate).toHaveBeenCalledWith(
       'r1', { estado: EstadoConsentimiento.ANULADO }, { new: true },
     );
     expect(r.estado).toBe('anulado');
+    expect(r.id).toBe('r1');
+    expect(r._id).toBe('r1');
+    expect(r).not.toHaveProperty('__v');
   });
 });
 

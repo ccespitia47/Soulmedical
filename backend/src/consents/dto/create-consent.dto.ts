@@ -1,15 +1,15 @@
 import {
   IsEnum, IsIn, IsNotEmpty, IsObject, IsOptional, IsString, MaxLength,
 } from 'class-validator';
-import { TipoConsentimiento } from '../consent-record.schema';
+import { ENTIDADES, Entidad, TipoConsentimiento } from '../consent-record.schema';
 
 export class CreateConsentDto {
   @IsEnum(TipoConsentimiento)
   tipo: TipoConsentimiento;
 
   @IsOptional()
-  @IsIn(['SAI', 'SOUL'])
-  entidad?: 'SAI' | 'SOUL';
+  @IsIn(ENTIDADES as unknown as string[])
+  entidad?: Entidad;
 
   @IsString() @IsNotEmpty() @MaxLength(20)
   tipoDoc: string;
