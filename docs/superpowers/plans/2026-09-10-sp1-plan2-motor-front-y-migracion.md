@@ -18,9 +18,68 @@
 - Nuevos envíos van a la API `/consents` (Plan 1), NO a `addSubmission`.
 - Binarios (firma/foto) viajan como data URL en el POST; el backend ya los sube a GridFS (Plan 1).
 - Cliente HTTP: reusar `request<T>(endpoint, options)` de `src/services/api.ts` (Bearer token desde localStorage).
-- Tests: Vitest/Jest según config del front (`npx vitest run <ruta>` o el runner configurado; verificar en `package.json`). Specs co-locados.
+- Tests: **el front NO tiene runner instalado hoy** — Task 0 instala/configura Vitest + `@testing-library/react` + jsdom. A partir de ahí, specs co-locados corridos con `npx vitest run <ruta>`.
 - Multi-entidad SOLO Vacunación.
 - Commits en español, convencionales, con footer de atribución del proyecto.
+
+---
+
+### Task 0: Setup del runner de tests del front (Vitest)
+
+**Files:**
+- Modify: `package.json` (devDeps + scripts `test`/`test:run`)
+- Create: `vitest.config.ts`
+- Create: `src/test/setup.ts`
+- Test: `src/test/smoke.spec.ts`
+
+**Interfaces:**
+- Produces: `npx vitest run <ruta>` funcionando con entorno jsdom y `@testing-library/react` + `@testing-library/jest-dom`. Script `npm test` = `vitest run`.
+
+- [ ] **Step 1: Instalar dependencias**
+
+```bash
+npm i -D vitest@^2 jsdom @testing-library/react @testing-library/jest-dom @testing-library/user-event
+```
+
+- [ ] **Step 2: Configurar Vitest**
+
+`vitest.config.ts` (usa el plugin de React de Vite, entorno jsdom, `setupFiles`):
+```ts
+import { defineConfig } from "vitest/config";
+import react from "@vitejs/plugin-react";
+export default defineConfig({
+  plugins: [react()],
+  test: { environment: "jsdom", globals: true, setupFiles: ["src/test/setup.ts"] },
+});
+```
+`src/test/setup.ts`:
+```ts
+import "@testing-library/jest-dom/vitest";
+```
+Añadir a `package.json` scripts: `"test": "vitest run"`, `"test:watch": "vitest"`.
+
+- [ ] **Step 3: Smoke test**
+
+```ts
+// src/test/smoke.spec.ts
+import { describe, it, expect } from "vitest";
+describe("vitest", () => { it("corre", () => { expect(1 + 1).toBe(2); }); });
+```
+
+- [ ] **Step 4: Verificar**
+
+Run: `npx vitest run src/test/smoke.spec.ts` → PASS. Run: `npm run build` → sigue compilando (Vitest no afecta el build de Vite).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add package.json package-lock.json vitest.config.ts src/test/
+git commit -m "chore(test): configurar Vitest + testing-library en el front
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+```
+
+> Si `@vitejs/plugin-react` no está en devDeps, instalarlo también en el Step 1. Verificar el import del plugin contra `vite.config.ts` existente.
 
 ---
 
