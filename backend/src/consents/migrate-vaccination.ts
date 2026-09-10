@@ -106,8 +106,20 @@ export function mapSubmissionToConsent(
   return result as unknown as Partial<ConsentRecord>;
 }
 
+/** Subset mínimo de un Model<FormSubmission> que la migración necesita. */
+export type SubmissionModelLike = Pick<mongoose.Model<FormSubmission>, 'find'>;
+/** Subset mínimo de un Model<ConsentRecord> que la migración necesita. */
+export type ConsentModelLike = Pick<mongoose.Model<ConsentRecord>, 'find' | 'updateOne'>;
+
 export interface RunMigrationOptions {
   dryRun?: boolean;
+  /**
+   * Solo para tests: inyecta modelos ya resueltos (p. ej. mocks Jest sobre un
+   * store en memoria, mismo patrón que `assignments-tree.service.spec.ts` /
+   * `tasks-*.service.spec.ts` — este proyecto no usa mongodb-memory-server).
+   * Si se provee, `runMigration` NO abre conexión real a Mongo.
+   */
+  models?: { submissionModel: SubmissionModelLike; consentModel: ConsentModelLike };
 }
 
 export interface RunMigrationResult {
@@ -123,18 +135,23 @@ export interface RunMigrationResult {
  * por `origenSubmissionId`. En `dryRun` (default) no escribe nada.
  */
 export async function runMigration(
-  { dryRun = true }: RunMigrationOptions = {},
+  { dryRun = true, models }: RunMigrationOptions = {},
 ): Promise<RunMigrationResult> {
-  const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/soulformsdb';
-  await mongoose.connect(mongoUri);
+  const usingRealConnection = !models;
+  if (usingRealConnection) {
+    const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/soulformsdb';
+    await mongoose.connect(mongoUri);
+  }
 
   try {
-    const SubmissionModel =
-      (mongoose.models[FormSubmission.name] as mongoose.Model<FormSubmission>) ||
-      model(FormSubmission.name, FormSubmissionSchema);
-    const ConsentModel =
-      (mongoose.models[ConsentRecord.name] as mongoose.Model<ConsentRecord>) ||
-      model(ConsentRecord.name, ConsentRecordSchema);
+    const SubmissionModel: SubmissionModelLike =
+      models?.submissionModel ??
+      ((mongoose.models[FormSubmission.name] as mongoose.Model<FormSubmission>) ||
+        model(FormSubmission.name, FormSubmissionSchema));
+    const ConsentModel: ConsentModelLike =
+      models?.consentModel ??
+      ((mongoose.models[ConsentRecord.name] as mongoose.Model<ConsentRecord>) ||
+        model(ConsentRecord.name, ConsentRecordSchema));
 
     const formIds = Object.keys(VACCINATION_FORM_IDS);
     const submissions = await SubmissionModel.find({ formId: { $in: formIds } }).lean();
@@ -161,7 +178,7 @@ export async function runMigration(
         await ConsentModel.updateOne(
           { origenSubmissionId: mapped.origenSubmissionId },
           { $set: mapped },
-          { upsert: true },
+          { upsert: true, runValidators: true },
         );
         upserted++;
       }
@@ -183,7 +200,7 @@ export async function runMigration(
 
     return { scanned: submissions.length, toInsert, toUpdate, upserted };
   } finally {
-    await mongoose.disconnect();
+    if (usingRealConnection) await mongoose.disconnect();
   }
 }
 
