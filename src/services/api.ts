@@ -882,7 +882,7 @@ export type ConsentRecordDto = {
 };
 export type CreateConsentPayload = {
   tipo: string; entidad?: "SAI" | "SOUL";
-  tipoDoc: string; numDoc: string; nombres: string; apellidos: string;
+  tipoDoc: string; numDoc: string; nombres: string; apellidos?: string;
   ciudad?: string; profesional?: string;
   respuestas: Record<string, unknown>;
   firmaPaciente: string; firmaResponsable?: string; foto?: string;

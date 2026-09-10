@@ -35,7 +35,7 @@ export class ConsentRecord {
   @Prop({ required: true }) tipoDoc: string;
   @Prop({ required: true, index: true }) numDoc: string;
   @Prop({ required: true }) nombres: string;
-  @Prop({ required: true }) apellidos: string;
+  @Prop({ type: String, required: false, default: null }) apellidos: string | null;
 
   @Prop({ type: String, default: null }) ciudad: string | null;
   @Prop({ type: String, default: null }) profesional: string | null;

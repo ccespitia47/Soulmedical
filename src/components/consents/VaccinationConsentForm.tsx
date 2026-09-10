@@ -1,15 +1,12 @@
 import { useMemo, useState } from "react";
-import { getEntityConfig, ENTITY_ORDER, ENTITIES, type EntityKey } from "./config";
-import { useVaccinationConsent } from "./useVaccinationConsent";
-import { collectMissing, flattenConsent } from "./flattenConsent";
-import { buildVaccinationConsentHtml } from "./vaccinationConsentPdf";
+import { ENTITY_ORDER, ENTITIES, type EntityKey } from "./config";
+import { vacunacionDefinition } from "./definitions/vacunacion";
+import ConsentRenderer from "./engine/ConsentRenderer";
+import { useConsentSubmission } from "./engine/useConsentSubmission";
+import { collectMissing, flattenConsent } from "./engine/consentState";
+import { buildConsentPdf } from "./engine/buildConsentPdf";
+import type { ConsentState } from "./engine/consentDefinition";
 import { htmlToPdfBase64 } from "../../utils/pdfExporter";
-import GeneralDataSection from "./sections/GeneralDataSection";
-import SectionA from "./sections/SectionA";
-import SectionB from "./sections/SectionB";
-import LiveVaccinesSection from "./sections/LiveVaccinesSection";
-import SectionC from "./sections/SectionC";
-import LegalSection from "./sections/LegalSection";
 import MissingFieldsModal from "../form/MissingFieldsModal";
 import SuccessModal from "../form/SuccessModal";
 import ConfirmModal from "../common/ConfirmModal";
@@ -21,34 +18,42 @@ type Props = {
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
+const initialState = (): ConsentState => ({
+  values: { fecha: todayISO() },
+  firma: "",
+  firmaResp: "",
+  foto: "",
+  accepted: false,
+});
+
 export default function VaccinationConsentForm({ onBack }: Props) {
-  const { submitConsent, submitting, emailStatus, emailError, done, reset } = useVaccinationConsent();
-
   const [entityKey, setEntityKey] = useState<EntityKey>("soul");
-  const config = useMemo(() => getEntityConfig(entityKey), [entityKey]);
+  const def = useMemo(() => vacunacionDefinition(entityKey), [entityKey]);
 
-  const [values, setValues] = useState<Record<string, string>>({ fecha: todayISO() });
-  const [firma, setFirma] = useState("");
-  const [firmaResp, setFirmaResp] = useState("");
-  const [accepted, setAccepted] = useState(false);
-  const [resetKey, setResetKey] = useState(0);
+  const { submitConsent, submitting, emailStatus, emailError, done, reset } =
+    useConsentSubmission(def);
+
+  const [state, setState] = useState<ConsentState>(initialState);
+  // Fuerza el remontaje del renderer (limpia firmas y tabla) al reiniciar o
+  // cambiar de entidad, ya que esos controles guardan estado interno propio.
+  const [remountKey, setRemountKey] = useState(0);
   const [missing, setMissing] = useState<string[]>([]);
   const [pendingEntity, setPendingEntity] = useState<EntityKey | null>(null);
   const [previewing, setPreviewing] = useState(false);
 
-  const setValue = (id: string, v: string) => setValues((prev) => ({ ...prev, [id]: v }));
+  const patch = (p: Partial<ConsentState>) => setState((prev) => ({ ...prev, ...p }));
 
   const hasData = useMemo(
-    () => Object.entries(values).some(([k, v]) => k !== "fecha" && v.trim() !== "") || !!firma || !!firmaResp,
-    [values, firma, firmaResp],
+    () =>
+      Object.entries(state.values).some(([k, v]) => k !== "fecha" && v.trim() !== "") ||
+      !!state.firma ||
+      !!state.firmaResp,
+    [state],
   );
 
   const doResetForm = () => {
-    setValues({ fecha: todayISO() });
-    setFirma("");
-    setFirmaResp("");
-    setAccepted(false);
-    setResetKey((k) => k + 1);
+    setState(initialState());
+    setRemountKey((k) => k + 1);
     reset();
   };
 
@@ -71,13 +76,12 @@ export default function VaccinationConsentForm({ onBack }: Props) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const miss = collectMissing(config, { values, firma, firmaResp, accepted });
+    const miss = collectMissing(def, state);
     if (miss.length > 0) {
       setMissing(miss);
       return;
     }
-    const flat = flattenConsent(config, { values, firma, firmaResp, accepted });
-    submitConsent(config, flat);
+    submitConsent(state);
   };
 
   const handleNew = () => doResetForm();
@@ -88,8 +92,8 @@ export default function VaccinationConsentForm({ onBack }: Props) {
     if (previewing) return;
     setPreviewing(true);
     try {
-      const flat = flattenConsent(config, { values, firma, firmaResp, accepted });
-      const html = buildVaccinationConsentHtml(config, flat);
+      const flat = flattenConsent(def, state);
+      const html = buildConsentPdf(def, flat);
       const base64 = await htmlToPdfBase64(html);
       const bytes = atob(base64);
       const arr = new Uint8Array(bytes.length);
@@ -118,13 +122,13 @@ export default function VaccinationConsentForm({ onBack }: Props) {
               ← Volver
             </button>
           )}
-          <img src={config.meta.logo} alt={config.meta.displayName} className="h-9 w-auto" />
+          <img src={def.meta.logo} alt={def.meta.displayName} className="h-9 w-auto" />
           <div className="mr-auto">
             <h1 className="m-0 text-base font-bold text-slate-900 dark:text-slate-100">
               Consentimiento de Vacunación
             </h1>
             <p className="m-0 text-xs text-slate-500 dark:text-slate-400">
-              {config.meta.entidadNombre} · {config.meta.codigo} v{config.meta.version}
+              {def.meta.entidadNombre} · {def.meta.codigo} v{def.meta.version}
             </p>
           </div>
           <label className="flex items-center gap-2 text-[13px] font-medium text-slate-600 dark:text-slate-300">
@@ -145,19 +149,7 @@ export default function VaccinationConsentForm({ onBack }: Props) {
       </div>
 
       <form onSubmit={handleSubmit} className="mx-auto max-w-3xl px-5 py-6">
-        <GeneralDataSection config={config} values={values} setValue={setValue} />
-        <SectionA config={config} values={values} setValue={setValue} />
-        <SectionB config={config} values={values} setValue={setValue} />
-        <LiveVaccinesSection config={config} values={values} setValue={setValue} />
-        <SectionC config={config} onTableChange={(json) => setValue("seccionC", json)} resetKey={resetKey} />
-        <LegalSection
-          config={config}
-          accepted={accepted}
-          setAccepted={setAccepted}
-          onFirma={setFirma}
-          onFirmaResp={setFirmaResp}
-          resetKey={resetKey}
-        />
+        <ConsentRenderer key={`${entityKey}-${remountKey}`} definition={def} state={state} onChange={patch} />
 
         <div className="flex flex-col gap-3 sm:flex-row">
           <button

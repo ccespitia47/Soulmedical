@@ -20,8 +20,8 @@ export class CreateConsentDto {
   @IsString() @IsNotEmpty() @MaxLength(120)
   nombres: string;
 
-  @IsString() @IsNotEmpty() @MaxLength(120)
-  apellidos: string;
+  @IsOptional() @IsString() @MaxLength(120)
+  apellidos?: string;
 
   @IsOptional() @IsString() @MaxLength(120)
   ciudad?: string;

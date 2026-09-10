@@ -69,7 +69,7 @@ export class ConsentsService {
       tipoDoc: dto.tipoDoc,
       numDoc: dto.numDoc,
       nombres: dto.nombres,
-      apellidos: dto.apellidos,
+      apellidos: dto.apellidos ?? null,
       ciudad: dto.ciudad ?? null,
       profesional: dto.profesional ?? null,
       respuestas: dto.respuestas,
