@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { labelCls } from "../sections/sharedUi";
 
 type Props = {
@@ -7,6 +8,8 @@ type Props = {
 };
 
 export default function PhotoField({ label, value, onChange }: Props) {
+  const inputId = useId();
+
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -19,11 +22,11 @@ export default function PhotoField({ label, value, onChange }: Props) {
 
   return (
     <div>
-      <label className={labelCls} htmlFor="photo-field-input">
+      <label className={labelCls} htmlFor={inputId}>
         {label}
       </label>
       <input
-        id="photo-field-input"
+        id={inputId}
         type="file"
         accept="image/*"
         onChange={handleFile}
