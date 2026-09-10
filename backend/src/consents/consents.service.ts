@@ -6,6 +6,7 @@ import { UsersService } from '../users/users.service';
 import { ConsentValidationService } from './consent-validation.service';
 import { consentHash } from './consent-hash';
 import { CreateConsentDto } from './dto/create-consent.dto';
+import { UpdateConsentDto } from './dto/update-consent.dto';
 import {
   ConsentRecord,
   ConsentRecordDocument,
@@ -79,5 +80,94 @@ export class ConsentsService {
       createdById: userId,
       createdAt: new Date(),
     });
+  }
+
+  async list(opts: {
+    page: number; limit: number; tipo?: string; search?: string; from?: string; to?: string;
+  }): Promise<{ data: any[]; total: number; page: number; limit: number }> {
+    const query: Record<string, unknown> = {};
+    if (opts.tipo) query.tipo = opts.tipo;
+    if (opts.from || opts.to) {
+      const range: Record<string, Date> = {};
+      if (opts.from) range.$gte = new Date(opts.from);
+      if (opts.to) range.$lte = new Date(opts.to + 'T23:59:59.999Z');
+      query.createdAt = range;
+    }
+    if (opts.search && opts.search.trim()) {
+      const rx = new RegExp(opts.search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      query.$or = [{ numDoc: rx }, { nombres: rx }, { apellidos: rx }];
+    }
+
+    const skip = (opts.page - 1) * opts.limit;
+    const [docs, total] = await Promise.all([
+      this.model.find(query).sort({ createdAt: -1 }).skip(skip).limit(opts.limit).lean(),
+      this.model.countDocuments(query),
+    ]);
+
+    const ids = [...new Set(docs.map((d: any) => d.createdById).filter((x): x is number => x != null))];
+    const users = ids.length ? await this.usersService.findByIds(ids) : {};
+
+    const data = docs.map((d: any) => ({
+      ...d,
+      id: d._id,
+      creadoPor: d.createdById != null ? users[d.createdById]?.name ?? null : null,
+    }));
+
+    return { data, total, page: opts.page, limit: opts.limit };
+  }
+
+  async findOne(id: string): Promise<ConsentRecord> {
+    const doc = await this.model.findById(id).lean();
+    if (!doc) throw new NotFoundException(`Consentimiento ${id} no encontrado`);
+    return doc as unknown as ConsentRecord;
+  }
+
+  async update(id: string, dto: UpdateConsentDto, userId: number | null): Promise<ConsentRecord> {
+    const current = (await this.model.findById(id).lean()) as any;
+    if (!current) throw new NotFoundException(`Consentimiento ${id} no encontrado`);
+    if (dto.tipo || dto.entidad) {
+      this.validation.validate({
+        tipo: dto.tipo ?? current.tipo,
+        entidad: (dto.entidad ?? current.entidad) ?? undefined,
+      });
+    }
+
+    const tipo = dto.tipo ?? current.tipo;
+    const firmaPaciente = dto.firmaPaciente
+      ? await this.persistBinario(dto.firmaPaciente, tipo, 'firma_paciente', 'signature', userId)
+      : current.firmaPaciente;
+    const firmaResponsable = dto.firmaResponsable
+      ? await this.persistBinario(dto.firmaResponsable, tipo, 'firma_responsable', 'signature', userId)
+      : current.firmaResponsable;
+    const foto = dto.foto
+      ? await this.persistBinario(dto.foto, tipo, 'foto', 'photo', userId)
+      : current.foto;
+
+    const base = {
+      tipo,
+      entidad: (dto.entidad ?? current.entidad) ?? null,
+      tipoDoc: dto.tipoDoc ?? current.tipoDoc,
+      numDoc: dto.numDoc ?? current.numDoc,
+      nombres: dto.nombres ?? current.nombres,
+      apellidos: dto.apellidos ?? current.apellidos,
+      ciudad: (dto.ciudad ?? current.ciudad) ?? null,
+      profesional: (dto.profesional ?? current.profesional) ?? null,
+      respuestas: dto.respuestas ?? current.respuestas,
+      firmaPaciente, firmaResponsable, foto,
+    };
+    const hashVerificacion = consentHash(base as unknown as Record<string, unknown>);
+
+    const updated = await this.model
+      .findByIdAndUpdate(id, { ...base, hashVerificacion, updatedAt: new Date() }, { new: true })
+      .lean();
+    return updated as unknown as ConsentRecord;
+  }
+
+  async anular(id: string): Promise<ConsentRecord> {
+    const updated = await this.model
+      .findByIdAndUpdate(id, { estado: EstadoConsentimiento.ANULADO }, { new: true })
+      .lean();
+    if (!updated) throw new NotFoundException(`Consentimiento ${id} no encontrado`);
+    return updated as unknown as ConsentRecord;
   }
 }

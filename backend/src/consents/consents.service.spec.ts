@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { ConsentsService } from './consents.service';
 import { TipoConsentimiento, EstadoConsentimiento } from './consent-record.schema';
 
@@ -39,5 +40,67 @@ describe('ConsentsService.create', () => {
     await service.create({ ...baseDto, firmaPaciente: 'gridfs:existente' }, 7);
     expect(filesService.uploadDataUrl).not.toHaveBeenCalled();
     expect(model.create.mock.calls[0][0].firmaPaciente).toBe('gridfs:existente');
+  });
+});
+
+describe('ConsentsService.list/findOne/update/anular', () => {
+  it('list arma query por tipo y rango, y enriquece nombres de creador', async () => {
+    const { service, model, usersService } = makeDeps();
+    const chain = {
+      sort: () => chain, skip: () => chain, limit: () => chain,
+      lean: () => Promise.resolve([
+        { _id: 'r1', tipo: 'vih', numDoc: '1', createdById: 7, createdAt: new Date() },
+      ]),
+    };
+    model.find = jest.fn().mockReturnValue(chain);
+    model.countDocuments = jest.fn().mockResolvedValue(1);
+    usersService.findByIds.mockResolvedValue({ 7: { name: 'Sara', email: 's@x' } });
+
+    const page = await service.list({ page: 1, limit: 50, tipo: 'vih', from: '2026-01-01' });
+
+    expect(model.find).toHaveBeenCalledWith(
+      expect.objectContaining({ tipo: 'vih', createdAt: expect.any(Object) }),
+    );
+    expect(page.total).toBe(1);
+    expect(page.data[0].creadoPor).toBe('Sara');
+  });
+
+  it('findOne lanza NotFound si no existe', async () => {
+    const { service, model } = makeDeps();
+    model.findById = jest.fn().mockReturnValue({ lean: () => Promise.resolve(null) });
+    await expect(service.findOne('x')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('update recalcula hash y fija updatedAt', async () => {
+    const { service, model, filesService } = makeDeps();
+    model.findById = jest.fn().mockReturnValue({
+      lean: () => Promise.resolve({
+        _id: 'r1', tipo: 'vih', entidad: null, tipoDoc: 'CC', numDoc: '1',
+        nombres: 'A', apellidos: 'B', ciudad: null, profesional: null,
+        respuestas: { x: 1 }, firmaPaciente: 'gridfs:a', firmaResponsable: null, foto: null,
+      }),
+    });
+    model.findByIdAndUpdate = jest.fn().mockReturnValue({
+      lean: () => Promise.resolve({ _id: 'r1', respuestas: { x: 2 } }),
+    });
+
+    await service.update('r1', { respuestas: { x: 2 } } as any, 7);
+
+    const patch = model.findByIdAndUpdate.mock.calls[0][1];
+    expect(patch.hashVerificacion).toMatch(/^[0-9a-f]{64}$/);
+    expect(patch.updatedAt).toBeInstanceOf(Date);
+    expect(filesService.uploadDataUrl).not.toHaveBeenCalled();
+  });
+
+  it('anular fija estado anulado', async () => {
+    const { service, model } = makeDeps();
+    model.findByIdAndUpdate = jest.fn().mockReturnValue({
+      lean: () => Promise.resolve({ _id: 'r1', estado: 'anulado' }),
+    });
+    const r: any = await service.anular('r1');
+    expect(model.findByIdAndUpdate).toHaveBeenCalledWith(
+      'r1', { estado: EstadoConsentimiento.ANULADO }, { new: true },
+    );
+    expect(r.estado).toBe('anulado');
   });
 });
