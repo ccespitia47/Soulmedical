@@ -96,7 +96,7 @@ export function buildCreatePayload(def: ConsentDefinition, state: ConsentState):
     tipo: def.meta.tipo,
     entidad: def.meta.entidad,
     nombres: values.nombres ?? "",
-    apellidos: values.apellidos ?? "",
+    apellidos: values.apellidos || undefined,
     tipoDoc: values.tipoDoc ?? "",
     numDoc: values.numDoc ?? "",
     ciudad: values.ciudad || undefined,

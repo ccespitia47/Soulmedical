@@ -874,7 +874,7 @@ export function requestTaskBulkPdfApi(taskId: string) {
 // ─── Consentimientos (API dedicada, Plan 1) ──────────────────────────────
 export type ConsentRecordDto = {
   id: string; tipo: string; entidad: "SAI" | "SOUL" | null;
-  tipoDoc: string; numDoc: string; nombres: string; apellidos: string;
+  tipoDoc: string; numDoc: string; nombres: string; apellidos: string | null;
   ciudad: string | null; profesional: string | null; estado: string;
   respuestas: Record<string, unknown>;
   firmaPaciente: string | null; firmaResponsable: string | null; foto: string | null;

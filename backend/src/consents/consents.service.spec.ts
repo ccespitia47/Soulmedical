@@ -141,6 +141,24 @@ describe('ConsentsService.verificar', () => {
     expect(res.valido).toBe(true);
   });
 
+  it('un consentimiento creado SIN apellidos verifica valido=true (apellidos null es parte del hash)', async () => {
+    const { service, model, filesService } = makeDeps();
+    filesService.uploadDataUrl.mockResolvedValue('64ab');
+
+    // Crear omitiendo apellidos: el servicio lo normaliza a null y lo incluye en el hash.
+    const { apellidos, ...dtoSinApellidos } = baseDto;
+    await service.create(dtoSinApellidos as any, 7);
+    const savedDoc = model.create.mock.calls[0][0];
+    expect(savedDoc.apellidos).toBeNull();
+
+    // verificar sobre el mismo doc guardado (findById().lean() lo devuelve tal cual).
+    model.findById = jest
+      .fn()
+      .mockReturnValue({ lean: () => Promise.resolve({ _id: 'r1', ...savedDoc }) });
+    const res = await service.verificar('r1');
+    expect(res.valido).toBe(true);
+  });
+
   it('devuelve valido=false si el contenido fue alterado', async () => {
     const { service, model } = makeDeps();
     model.findById = jest.fn().mockReturnValue({

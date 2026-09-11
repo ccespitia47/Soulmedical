@@ -44,5 +44,12 @@ describe("consentState", () => {
     expect(p.firmaPaciente).toBe("data:image/png;base64,AA");
     expect(p.respuestas.acepta).toBe("Sí");
     expect(p.respuestas.nombres).toBeUndefined();
+    expect(p.apellidos).toBe("Perez");
+  });
+
+  it("buildCreatePayload manda apellidos=undefined cuando está ausente (backend → null)", () => {
+    const noApellidos = { ...full, values: { ...full.values, apellidos: "" } };
+    const p = buildCreatePayload(def, noApellidos);
+    expect(p.apellidos).toBeUndefined();
   });
 });

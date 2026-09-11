@@ -127,6 +127,8 @@ export interface RunMigrationResult {
   toInsert: number;
   toUpdate: number;
   upserted: number;
+  /** Registros cuyo upsert lanzó un error: se loguea y el loop continúa. */
+  failed: number;
 }
 
 /**
@@ -166,6 +168,7 @@ export async function runMigration(
     let toInsert = 0;
     let toUpdate = 0;
     let upserted = 0;
+    let failed = 0;
 
     for (const sub of submissions as unknown as SubmissionLike[]) {
       const entidad = VACCINATION_FORM_IDS[(sub as any).formId as string];
@@ -175,12 +178,22 @@ export async function runMigration(
       else toInsert++;
 
       if (!dryRun) {
-        await ConsentModel.updateOne(
-          { origenSubmissionId: mapped.origenSubmissionId },
-          { $set: mapped },
-          { upsert: true, runValidators: true },
-        );
-        upserted++;
+        // Robustez: un registro malformado no debe abortar toda la migración.
+        // Logueamos el fallo, lo contabilizamos y seguimos con el siguiente.
+        try {
+          await ConsentModel.updateOne(
+            { origenSubmissionId: mapped.origenSubmissionId },
+            { $set: mapped },
+            { upsert: true, runValidators: true },
+          );
+          upserted++;
+        } catch (err) {
+          failed++;
+          console.warn(
+            `ADVERTENCIA: fallo al migrar submission ${String(sub._id)} (se omite y se continúa):`,
+            err instanceof Error ? err.message : err,
+          );
+        }
       }
     }
 
@@ -192,13 +205,14 @@ export async function runMigration(
     console.log(`Ya migrados (se actualizarían): ${toUpdate}`);
     if (!dryRun) {
       console.log(`Upserts realizados: ${upserted}`);
+      console.log(`Fallidos (omitidos): ${failed}`);
     } else {
       console.log(
         '(SECO) no se escribió nada. Para aplicar: npx ts-node src/consents/migrate-vaccination.ts --apply',
       );
     }
 
-    return { scanned: submissions.length, toInsert, toUpdate, upserted };
+    return { scanned: submissions.length, toInsert, toUpdate, upserted, failed };
   } finally {
     if (usingRealConnection) await mongoose.disconnect();
   }

@@ -32,11 +32,12 @@ describe("useConsentSubmission", () => {
     expect(result.current.done).toBe(true);
   });
 
-  it("si createConsentApi devuelve error, expone emailError y NO envía correo", async () => {
+  it("si createConsentApi devuelve error, expone submitError y NO envía correo", async () => {
     (createConsentApi as any).mockResolvedValue({ data: null, error: "numDoc duplicado" });
     const { result } = renderHook(() => useConsentSubmission(def));
     await act(async () => { await result.current.submitConsent(state); });
-    expect(result.current.emailError).toBe("numDoc duplicado");
+    expect(result.current.submitError).toBe("numDoc duplicado");
+    expect(result.current.emailError).toBeNull();
     expect(result.current.done).toBe(false);
     expect(sendFormEmail).not.toHaveBeenCalled();
   });

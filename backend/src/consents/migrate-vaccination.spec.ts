@@ -184,6 +184,7 @@ describe('runMigration (idempotencia + dry-run)', () => {
     expect(result.toInsert).toBe(2);
     expect(result.toUpdate).toBe(0);
     expect(result.upserted).toBe(0);
+    expect(result.failed).toBe(0);
   });
 
   it('dos corridas consecutivas sin dry-run son idempotentes: 1 doc por submission, sin duplicados', async () => {
@@ -212,5 +213,34 @@ describe('runMigration (idempotencia + dry-run)', () => {
 
     const ids = store.map((d) => d.origenSubmissionId);
     expect(new Set(ids).size).toBe(2);
+    expect(first.failed).toBe(0);
+    expect(second.failed).toBe(0);
+  });
+
+  it('un registro que falla en updateOne no aborta la migración: se cuenta en failed y el loop continúa', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const store: Array<Record<string, unknown>> = [];
+    // El primer updateOne lanza (registro malformado), el resto persiste.
+    const consentModel: any = {
+      find: jest.fn(() => ({ lean: () => Promise.resolve([]) })),
+      updateOne: jest
+        .fn()
+        .mockRejectedValueOnce(new Error('E11000 duplicate key'))
+        .mockImplementation(async (filter: any, update: any) => {
+          store.push({ ...update.$set });
+        }),
+    };
+
+    const result = await runMigration({
+      dryRun: false,
+      models: { submissionModel: fakeSubmissionModel(submissions), consentModel },
+    });
+
+    expect(result.scanned).toBe(2);
+    expect(result.failed).toBe(1);
+    expect(result.upserted).toBe(1);
+    expect(store).toHaveLength(1); // el segundo registro sí se persistió
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
   });
 });

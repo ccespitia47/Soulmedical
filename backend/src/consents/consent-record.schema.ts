@@ -64,13 +64,24 @@ export class ConsentRecord {
   // Id de la form_submission de origen (migración Vacunación → consent_records).
   // Permite idempotencia (upsert) y reversibilidad (borrar por este campo).
   // null para consentimientos creados directamente por el motor.
-  @Prop({ type: String, default: null, index: true })
+  // El índice (único parcial) se define abajo, no en el @Prop, para no generar
+  // una definición de índice duplicada.
+  @Prop({ type: String, default: null })
   origenSubmissionId?: string | null;
 }
 
 export const ConsentRecordSchema = SchemaFactory.createForClass(ConsentRecord);
 
 ConsentRecordSchema.index({ tipo: 1, createdAt: -1 });
+
+// Único parcial sobre `origenSubmissionId`: garantiza que la migración no
+// duplique registros para una misma submission de origen, sin colisionar entre
+// los consentimientos creados por el motor (donde el campo es null y por tanto
+// queda fuera del índice al filtrar por $type: 'string').
+ConsentRecordSchema.index(
+  { origenSubmissionId: 1 },
+  { unique: true, partialFilterExpression: { origenSubmissionId: { $type: 'string' } } },
+);
 
 ConsentRecordSchema.set('toJSON', {
   virtuals: true,

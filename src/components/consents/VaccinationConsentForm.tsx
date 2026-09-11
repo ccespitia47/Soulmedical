@@ -30,7 +30,7 @@ export default function VaccinationConsentForm({ onBack }: Props) {
   const [entityKey, setEntityKey] = useState<EntityKey>("soul");
   const def = useMemo(() => vacunacionDefinition(entityKey), [entityKey]);
 
-  const { submitConsent, submitting, emailStatus, emailError, done, reset } =
+  const { submitConsent, submitting, emailStatus, emailError, submitError, done, reset } =
     useConsentSubmission(def);
 
   const [state, setState] = useState<ConsentState>(initialState);
@@ -150,6 +150,16 @@ export default function VaccinationConsentForm({ onBack }: Props) {
 
       <form onSubmit={handleSubmit} className="mx-auto max-w-3xl px-5 py-6">
         <ConsentRenderer key={`${entityKey}-${remountKey}`} definition={def} state={state} onChange={patch} />
+
+        {submitError && (
+          <div
+            role="alert"
+            className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300"
+          >
+            <p className="m-0 font-semibold">No se pudo guardar el consentimiento</p>
+            <p className="m-0 mt-0.5 text-red-600 dark:text-red-400">{submitError}</p>
+          </div>
+        )}
 
         <div className="flex flex-col gap-3 sm:flex-row">
           <button

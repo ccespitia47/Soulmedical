@@ -76,6 +76,11 @@ export function useConsentSubmission(def: ConsentDefinition) {
   const [submitting, setSubmitting] = useState(false);
   const [emailStatus, setEmailStatus] = useState<EmailStatus>("idle");
   const [emailError, setEmailError] = useState<string | null>(null);
+  // Error de PERSISTENCIA (POST /consents), distinto de `emailError`: cuando el
+  // registro no llega a guardarse no marcamos `done`, así que el `SuccessModal`
+  // (que sí muestra el estado del correo) nunca aparece. Este estado se pinta
+  // como banner de error para que el fallo sea visible (spec §11).
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
   async function submitConsent(state: ConsentState) {
@@ -83,15 +88,16 @@ export function useConsentSubmission(def: ConsentDefinition) {
     setSubmitting(true);
     setEmailStatus("idle");
     setEmailError(null);
+    setSubmitError(null);
 
     // 1. Persistir el consentimiento en `consent_records` vía la API dedicada.
     const payload = buildCreatePayload(def, state);
     const res = await createConsentApi(payload);
 
     if (res.error) {
-      // El POST falló: exponemos el error y NO enviamos correo ni marcamos
-      // `done` (nada quedó registrado, la UI debe permitir reintentar).
-      setEmailError(res.error);
+      // El POST falló: exponemos el error de persistencia y NO enviamos correo
+      // ni marcamos `done` (nada quedó registrado, la UI debe permitir reintentar).
+      setSubmitError(res.error);
       setSubmitting(false);
       return;
     }
@@ -132,7 +138,8 @@ export function useConsentSubmission(def: ConsentDefinition) {
     setDone(false);
     setEmailStatus("idle");
     setEmailError(null);
+    setSubmitError(null);
   }
 
-  return { submitConsent, submitting, emailStatus, emailError, done, reset };
+  return { submitConsent, submitting, emailStatus, emailError, submitError, done, reset };
 }
