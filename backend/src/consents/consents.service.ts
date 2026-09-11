@@ -177,6 +177,21 @@ export class ConsentsService {
     return this.toView(updated as any);
   }
 
+  async pdfPayload(id: string): Promise<{
+    record: ConsentRecord;
+    firmaPacienteDataUrl: string | null;
+    firmaResponsableDataUrl: string | null;
+    fotoDataUrl: string | null;
+  }> {
+    const record = (await this.findOne(id)) as any;
+    const [firmaPacienteDataUrl, firmaResponsableDataUrl, fotoDataUrl] = await Promise.all([
+      record.firmaPaciente ? this.filesService.readAsDataUrl(record.firmaPaciente) : Promise.resolve(null),
+      record.firmaResponsable ? this.filesService.readAsDataUrl(record.firmaResponsable) : Promise.resolve(null),
+      record.foto ? this.filesService.readAsDataUrl(record.foto) : Promise.resolve(null),
+    ]);
+    return { record, firmaPacienteDataUrl, firmaResponsableDataUrl, fotoDataUrl };
+  }
+
   async verificar(id: string): Promise<{ valido: boolean; hash: string }> {
     const d = (await this.model.findById(id).lean()) as any;
     if (!d) throw new NotFoundException(`Consentimiento ${id} no encontrado`);

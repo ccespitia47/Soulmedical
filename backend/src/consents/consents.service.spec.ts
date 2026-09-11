@@ -125,6 +125,22 @@ describe('ConsentsService.list/findOne/update/anular', () => {
   });
 });
 
+describe('ConsentsService.pdfPayload', () => {
+  it('resuelve las refs gridfs de firmas/foto a data URLs', async () => {
+    const { service, model, filesService } = makeDeps();
+    model.findById = jest.fn().mockReturnValue({ lean: () => Promise.resolve({
+      _id: 'r1', tipo: 'infectologia', firmaPaciente: 'gridfs:a', firmaResponsable: null, foto: 'gridfs:c',
+    }) });
+    filesService.readAsDataUrl = jest.fn()
+      .mockResolvedValueOnce('data:image/png;base64,AA')  // firma
+      .mockResolvedValueOnce('data:image/jpeg;base64,BB'); // foto
+    const p = await service.pdfPayload('r1');
+    expect(p.firmaPacienteDataUrl).toBe('data:image/png;base64,AA');
+    expect(p.firmaResponsableDataUrl).toBeNull();
+    expect(p.fotoDataUrl).toBe('data:image/jpeg;base64,BB');
+  });
+});
+
 describe('ConsentsService.verificar', () => {
   it('devuelve valido=true cuando el hash coincide', async () => {
     const { service, model } = makeDeps();

@@ -3,7 +3,7 @@ import { ConsentsController } from './consents.controller';
 describe('ConsentsController', () => {
   const service: any = {
     create: jest.fn(), list: jest.fn(), findOne: jest.fn(),
-    update: jest.fn(), anular: jest.fn(), verificar: jest.fn(),
+    update: jest.fn(), anular: jest.fn(), verificar: jest.fn(), pdfPayload: jest.fn(),
   };
   const ctrl = new ConsentsController(service);
 
@@ -35,5 +35,12 @@ describe('ConsentsController', () => {
     service.verificar.mockResolvedValue({ valido: true, hash: 'h' });
     const r = await ctrl.verificar('r1');
     expect(r.valido).toBe(true);
+  });
+
+  it('GET /consents/:id/pdf delega en pdfPayload', async () => {
+    service.pdfPayload = jest.fn().mockResolvedValue({ record: { id: 'r1' }, firmaPacienteDataUrl: null, firmaResponsableDataUrl: null, fotoDataUrl: null });
+    const r = await ctrl.pdf('r1');
+    expect(service.pdfPayload).toHaveBeenCalledWith('r1');
+    expect(r.record.id).toBe('r1');
   });
 });

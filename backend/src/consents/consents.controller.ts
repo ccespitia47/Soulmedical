@@ -63,4 +63,9 @@ export class ConsentsController {
   verificar(@Param('id') id: string) {
     return this.service.verificar(id);
   }
+
+  @Get(':id/pdf')
+  pdf(@Param('id') id: string) {
+    return this.service.pdfPayload(id);
+  }
 }

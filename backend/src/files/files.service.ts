@@ -118,6 +118,35 @@ export class FilesService {
     return { buffer: Buffer.concat(chunks), contentType };
   }
 
+  /**
+   * Lee un archivo de GridFS y lo devuelve como data URL
+   * ("data:<contentType>;base64,..."). Acepta una referencia con prefijo
+   * "gridfs:" o un id crudo. Devuelve null si el id es inválido, el archivo
+   * no existe, o ocurre cualquier error de lectura.
+   */
+  async readAsDataUrl(ref: string): Promise<string | null> {
+    try {
+      const idStr = ref.startsWith('gridfs:') ? ref.slice('gridfs:'.length) : ref;
+      const oid = new Types.ObjectId(idStr);
+
+      const files = await this.bucket.find({ _id: oid }).toArray();
+      if (files.length === 0) return null;
+      const contentType =
+        (files[0].metadata as { contentType?: string } | undefined)?.contentType ??
+        'application/octet-stream';
+
+      const chunks: Buffer[] = [];
+      const stream = this.bucket.openDownloadStream(oid);
+      for await (const chunk of stream) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+      const buffer = Buffer.concat(chunks);
+      return `data:${contentType};base64,${buffer.toString('base64')}`;
+    } catch {
+      return null;
+    }
+  }
+
   async delete(fileId: string): Promise<void> {
     try {
       await this.bucket.delete(new Types.ObjectId(fileId));

@@ -26,6 +26,10 @@ export class ConsentRecord {
   @Prop({ type: String, default: () => crypto.randomUUID() })
   _id: string;
 
+  /** Virtual agregado por el transform de `toJSON` (y por `toView` en el
+   *  servicio) — no es un campo persistido, es un alias de `_id`. */
+  id?: string;
+
   @Prop({ required: true, index: true, enum: Object.values(TipoConsentimiento) })
   tipo: TipoConsentimiento;
 
