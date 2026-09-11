@@ -3,7 +3,7 @@
 // conjunto de filtros y siempre vuelve a la página 1 (una nueva búsqueda no
 // debería quedarse en una página que puede no existir para el nuevo filtro).
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { listConsentsApi, type ConsentRecordDto } from "../../../services/api";
 
 export type ConsentRecordFilters = {
@@ -22,10 +22,17 @@ export function useConsentRecords() {
   const [limit] = useState(DEFAULT_LIMIT);
   const [filters, setFiltersState] = useState<ConsentRecordFilters>({});
   const [loading, setLoading] = useState(false);
+  // "Latest wins": cada refetch obtiene un id incremental; si una respuesta
+  // más lenta de una llamada anterior resuelve después de que ya se disparó
+  // una más reciente (ej. el usuario cambia de filtro/página rápido), se
+  // descarta en vez de pisar el estado con datos obsoletos.
+  const requestIdRef = useRef(0);
 
   const refetch = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     const { data } = await listConsentsApi({ ...filters, page, limit });
+    if (requestId !== requestIdRef.current) return;
     setRows(data?.data ?? []);
     setTotal(data?.total ?? 0);
     setLoading(false);

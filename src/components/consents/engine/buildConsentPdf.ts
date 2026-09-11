@@ -35,10 +35,19 @@ function fieldValue(value: string): string {
   return `<span style="font-weight:600;color:#111;">${escapeHtml(value)}</span>`;
 }
 
-/** Imagen embebida (firma/foto); si no hay dataUrl, deja un espacio en blanco
- *  en vez de emitir un `<img src="">` roto. */
+// Data-URL de imagen bien formada: solo mimes de imagen soportados + base64
+// puro. No confiamos en que el backend ya haya saneado `contentType` — si
+// alguna vez llega algo como `data:image/png" onerror=...;base64,...`
+// (inyección de atributo), este regex lo rechaza y cae al espaciador en vez
+// de emitir un `<img>` vivo, ya que `htmlToPdfBase64` renderiza este HTML en
+// un iframe same-origin no aislado.
+const SAFE_IMAGE_DATA_URL_RE = /^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/i;
+
+/** Imagen embebida (firma/foto); si no hay dataUrl (o no es una data-URL de
+ *  imagen segura), deja un espacio en blanco en vez de emitir un `<img>`
+ *  potencialmente inyectado o roto. */
 function imageBlock(dataUrl: string, label: string, maxHeight = 70): string {
-  const img = dataUrl.startsWith("data:image/")
+  const img = SAFE_IMAGE_DATA_URL_RE.test(dataUrl)
     ? `<img src="${dataUrl}" alt="${escapeHtml(label)}" style="max-height:${maxHeight}px;max-width:100%;object-fit:contain;display:block;" />`
     : `<div style="height:${Math.min(maxHeight, 60)}px;"></div>`;
   return `

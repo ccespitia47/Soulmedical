@@ -269,6 +269,7 @@ export default function ConsentForm({ tipo, onBack, editRecord }: Props) {
           emailError={emailError}
           onNewRegistration={isEdit ? onBack ?? handleNew : handleNew}
           onClose={onBack}
+          primaryLabel={isEdit ? "Volver a registros" : undefined}
         />
       )}
     </div>

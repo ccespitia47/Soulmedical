@@ -21,6 +21,17 @@ describe("buildConsentPdf", () => {
     expect(html).toContain("data:image/png;base64,AA");
   });
 
+  it("no emite un <img> vivo cuando la data-URL de la firma trae un mime no permitido (XSS)", () => {
+    // Simula un contentType manipulado que intenta cerrar el atributo src y
+    // agregar un handler (ej. onerror) — aunque llegara así desde el backend,
+    // buildConsentPdf debe rechazarlo por su cuenta.
+    const malicious = 'data:image/png" onerror=alert(1);base64,AAAA';
+    const html = buildConsentPdf(def, { nombres: "Juan", firma_paciente: malicious, acepta: "Sí" });
+    expect(html).not.toContain("onerror");
+    expect(html).not.toContain(malicious);
+    expect(html).not.toContain(`src="${malicious}"`);
+  });
+
   it("no emite <img> vacío cuando falta la firma o la foto", () => {
     const withPhoto: ConsentDefinition = {
       ...def,

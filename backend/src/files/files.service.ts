@@ -19,6 +19,27 @@ export interface DownloadResult {
 
 const BUCKET_NAME = 'submission_files';
 
+// Whitelist de mimes de imagen que este servicio maneja (firmas/fotos). Todo
+// lo demás — incluyendo mimes malformados con comillas/espacios que podrían
+// escapar del atributo `src="data:...">` en el HTML del PDF — cae a
+// application/octet-stream, que nunca se interpreta como <img>.
+const ALLOWED_IMAGE_MIMES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp']);
+const MIME_SHAPE_RE = /^[\w.+-]+\/[\w.+-]+$/;
+const FALLBACK_MIME = 'application/octet-stream';
+
+/**
+ * Sanitiza un contentType arbitrario (leído de GridFS o recibido del
+ * cliente) contra la whitelist de imágenes soportadas. Rechaza cualquier
+ * valor que no tenga forma de mime válido (previene inyección de atributos
+ * cuando el valor termina embebido en `data:${contentType};base64,...`).
+ */
+function sanitizeImageMime(contentType: unknown): string {
+  const raw = typeof contentType === 'string' ? contentType.trim() : '';
+  if (!MIME_SHAPE_RE.test(raw)) return FALLBACK_MIME;
+  const lower = raw.toLowerCase();
+  return ALLOWED_IMAGE_MIMES.has(lower) ? lower : FALLBACK_MIME;
+}
+
 @Injectable()
 export class FilesService {
   private bucketRef: mongo.GridFSBucket | null = null;
@@ -43,7 +64,11 @@ export class FilesService {
     const match = /^data:([^;]+);base64,(.+)$/s.exec(dataUrl ?? '');
     if (!match) return null;
 
-    const contentType = match[1];
+    // Sanitiza el mime capturado del data URL entrante: solo se persiste si
+    // pertenece a la whitelist de imágenes; cualquier otra cosa (incluyendo
+    // mimes con comillas/espacios inyectados) se normaliza antes de guardar,
+    // para que nunca lleguen mimes maliciosos a GridFS.
+    const contentType = sanitizeImageMime(match[1]);
     const buffer = Buffer.from(match[2], 'base64');
     if (buffer.length === 0) return null;
 
@@ -131,9 +156,13 @@ export class FilesService {
 
       const files = await this.bucket.find({ _id: oid }).toArray();
       if (files.length === 0) return null;
-      const contentType =
-        (files[0].metadata as { contentType?: string } | undefined)?.contentType ??
-        'application/octet-stream';
+      // Sanitiza el contentType almacenado antes de embeberlo en el data URL:
+      // un doc de GridFS con metadata manipulada (o legado, previo a esta
+      // whitelist) no debe poder inyectar atributos en el <img> que consume
+      // buildConsentPdf.ts.
+      const contentType = sanitizeImageMime(
+        (files[0].metadata as { contentType?: string } | undefined)?.contentType,
+      );
 
       const chunks: Buffer[] = [];
       const stream = this.bucket.openDownloadStream(oid);

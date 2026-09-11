@@ -5,6 +5,10 @@ type SuccessModalProps = {
   emailError: string | null;
   onNewRegistration: () => void;
   onClose?: () => void;
+  /** Texto del botón primario; por defecto "📋 Diligenciar otro registro".
+   *  En modo edición, `onNewRegistration` en realidad vuelve al listado, así
+   *  que el label debe reflejar esa acción (ej. "Volver a registros"). */
+  primaryLabel?: string;
 };
 
 export default function SuccessModal({
@@ -12,6 +16,7 @@ export default function SuccessModal({
   emailError,
   onNewRegistration,
   onClose,
+  primaryLabel = "📋 Diligenciar otro registro",
 }: SuccessModalProps) {
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 p-5">
@@ -57,7 +62,7 @@ export default function SuccessModal({
             onClick={onNewRegistration}
             className="cursor-pointer rounded-[10px] border-none bg-[#00c2a8] px-8 py-3 text-sm font-semibold text-white shadow-[0_4px_16px_rgba(0,194,168,0.3)]"
           >
-            📋 Diligenciar otro registro
+            {primaryLabel}
           </button>
           {onClose && (
             <button
