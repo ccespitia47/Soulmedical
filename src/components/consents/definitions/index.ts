@@ -1,10 +1,11 @@
 // Registro de tipos de consentimiento del módulo Consientify.
 //
 // Ruling del controlador (Plan 3, Task 2): las definiciones de tuberculina y
-// venopunción se implementaron en Task 4; `vih` e `infectologia` en Task 3.
-// Solo `vacunacion_b` queda pendiente (Task 5).
+// venopunción se implementaron en Task 4; `vih` e `infectologia` en Task 3;
+// `vacunacion_b` en Task 5. Los 6 tipos resuelven.
 
 import { vacunacionDefinition } from "./vacunacion";
+import { vacunacionBDefinition } from "./vacunacionB";
 import { vihDefinition } from "./vih";
 import { infectologiaDefinition } from "./infectologia";
 import { tuberculinaDefinition } from "./tuberculina";
@@ -55,7 +56,7 @@ export function getDefinition(tipo: ConsentTipo, entity: EntityKey = "soul"): Co
     case "venopuncion":
       return venopuncionDefinition;
     case "vacunacion_b":
-      throw new Error("Consentimiento no implementado: " + tipo);
+      return vacunacionBDefinition(entity);
     default: {
       const _exhaustive: never = tipo;
       throw new Error("Consentimiento no implementado: " + String(_exhaustive));

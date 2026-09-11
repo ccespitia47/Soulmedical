@@ -2,9 +2,8 @@ import { describe, it, expect } from "vitest";
 import { CONSENT_TYPES, getDefinition } from "./index";
 
 // Ruling del controlador (Plan 3, Task 2): las definiciones de tuberculina y
-// venopunción se agregaron en Task 4. Este registro ya resuelve `vacunacion`,
-// `vih`, `infectologia`, `tuberculina` y `venopuncion`; solo `vacunacion_b`
-// (Task 5) lanza un error claro hasta que exista su definición.
+// venopunción se agregaron en Task 4; `vacunacion_b` en Task 5. Este registro
+// ya resuelve los 6 tipos sin lanzar.
 describe("definitions registry", () => {
   it("expone los 6 tipos en orden con etiqueta e icono", () => {
     expect(CONSENT_TYPES.map((t) => t.tipo)).toEqual([
@@ -32,7 +31,8 @@ describe("definitions registry", () => {
     expect(getDefinition("venopuncion").meta.tipo).toBe("venopuncion");
   });
 
-  it("getDefinition lanza un error claro para tipos aún no implementados", () => {
-    expect(() => getDefinition("vacunacion_b")).toThrow(/no implementado/);
+  it("getDefinition resuelve vacunacion_b, multi-entidad (Task 5)", () => {
+    expect(getDefinition("vacunacion_b", "soul").meta.entidad).toBe("SOUL");
+    expect(getDefinition("vacunacion_b", "sai").meta.tipo).toBe("vacunacion_b");
   });
 });
