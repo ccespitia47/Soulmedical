@@ -4,15 +4,16 @@
 // Generaliza el antiguo formulario dedicado de vacunación para que cualquier
 // `ConsentTipo` del registro (`definitions/index.ts`) use el mismo shell.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ENTITY_ORDER, ENTITIES, type EntityKey } from "./config";
 import { getDefinition, type ConsentTipo } from "./definitions";
 import ConsentRenderer from "./engine/ConsentRenderer";
 import { useConsentSubmission } from "./engine/useConsentSubmission";
-import { collectMissing, flattenConsent } from "./engine/consentState";
+import { collectMissing, flattenConsent, buildEditState } from "./engine/consentState";
 import { buildConsentPdf } from "./engine/buildConsentPdf";
 import type { ConsentState } from "./engine/consentDefinition";
 import { htmlToPdfBase64 } from "../../utils/pdfExporter";
+import { getConsentPdfPayloadApi, type ConsentRecordDto } from "../../services/api";
 import MissingFieldsModal from "../form/MissingFieldsModal";
 import SuccessModal from "../form/SuccessModal";
 import ConfirmModal from "../common/ConfirmModal";
@@ -20,8 +21,15 @@ import ConfirmModal from "../common/ConfirmModal";
 type Props = {
   /** Tipo de consentimiento a renderizar (ver `CONSENT_TYPES`). */
   tipo: ConsentTipo;
-  /** Vuelve al selector de Consientify. */
+  /** Vuelve al selector de Consientify (o a la vista de registros, en edición). */
   onBack?: () => void;
+  /**
+   * Registro existente a editar (Task 6, vista de registros). Cuando viene,
+   * el formulario precarga su estado (identidad + respuestas + firmas/foto
+   * desde GridFS) y el envío llama `updateConsentApi` en vez de crear uno
+   * nuevo. La entidad SOUL/SAI queda fija a la del registro original.
+   */
+  editRecord?: ConsentRecordDto;
 };
 
 /** Tipos que distinguen entidad SOUL/SAI y muestran el selector del header. */
@@ -37,21 +45,49 @@ const initialState = (): ConsentState => ({
   accepted: false,
 });
 
-export default function ConsentForm({ tipo, onBack }: Props) {
+export default function ConsentForm({ tipo, onBack, editRecord }: Props) {
+  const isEdit = !!editRecord;
   const isMultiEntidad = MULTI_ENTIDAD_TIPOS.includes(tipo);
-  const [entityKey, setEntityKey] = useState<EntityKey>("soul");
+  const [entityKey, setEntityKey] = useState<EntityKey>(() =>
+    editRecord?.entidad === "SAI" ? "sai" : "soul",
+  );
   const def = useMemo(() => getDefinition(tipo, entityKey), [tipo, entityKey]);
 
   const { submitConsent, submitting, emailStatus, emailError, submitError, done, reset } =
-    useConsentSubmission(def);
+    useConsentSubmission(def, isEdit ? { editId: editRecord!.id } : undefined);
 
-  const [state, setState] = useState<ConsentState>(initialState);
+  const [state, setState] = useState<ConsentState>(isEdit ? { values: {}, firma: "", firmaResp: "", foto: "", accepted: false } : initialState);
   // Fuerza el remontaje del renderer (limpia firmas y tabla) al reiniciar o
   // cambiar de entidad, ya que esos controles guardan estado interno propio.
   const [remountKey, setRemountKey] = useState(0);
   const [missing, setMissing] = useState<string[]>([]);
   const [pendingEntity, setPendingEntity] = useState<EntityKey | null>(null);
   const [previewing, setPreviewing] = useState(false);
+  const [loadingEdit, setLoadingEdit] = useState(isEdit);
+  const [loadEditError, setLoadEditError] = useState<string | null>(null);
+
+  // Modo edición: precarga el estado desde el registro guardado + los data
+  // URLs de firmas/foto (viven en GridFS, no en el registro). Solo al montar
+  // — `editRecord`/`tipo` no cambian durante la vida de este formulario.
+  useEffect(() => {
+    if (!editRecord) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await getConsentPdfPayloadApi(editRecord.id);
+      if (cancelled) return;
+      if (error || !data) {
+        setLoadEditError(error ?? "No se pudo cargar el registro");
+        setLoadingEdit(false);
+        return;
+      }
+      setState(buildEditState(def, editRecord, data));
+      setLoadingEdit(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const patch = (p: Partial<ConsentState>) => setState((prev) => ({ ...prev, ...p }));
 
@@ -143,7 +179,12 @@ export default function ConsentForm({ tipo, onBack }: Props) {
               {def.meta.entidadNombre} · {def.meta.codigo} v{def.meta.version}
             </p>
           </div>
-          {isMultiEntidad && (
+          {isEdit && (
+            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+              Editando
+            </span>
+          )}
+          {isMultiEntidad && !isEdit && (
             <label className="flex items-center gap-2 text-[13px] font-medium text-slate-600 dark:text-slate-300">
               Entidad:
               <select
@@ -162,37 +203,52 @@ export default function ConsentForm({ tipo, onBack }: Props) {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="mx-auto max-w-3xl px-5 py-6">
-        <ConsentRenderer key={`${entityKey}-${remountKey}`} definition={def} state={state} onChange={patch} />
-
-        {submitError && (
+      {loadingEdit ? (
+        <div className="mx-auto max-w-3xl px-5 py-16 text-center text-sm text-slate-500 dark:text-slate-400">
+          Cargando registro…
+        </div>
+      ) : loadEditError ? (
+        <div className="mx-auto max-w-3xl px-5 py-10">
           <div
             role="alert"
-            className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300"
+            className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300"
           >
-            <p className="m-0 font-semibold">No se pudo guardar el consentimiento</p>
-            <p className="m-0 mt-0.5 text-red-600 dark:text-red-400">{submitError}</p>
+            No se pudo cargar el registro para editar: {loadEditError}
           </div>
-        )}
-
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <button
-            type="button"
-            onClick={handlePreview}
-            disabled={previewing}
-            className="rounded-xl border-[1.5px] border-[#00c2a8] bg-transparent px-6 py-3.5 text-sm font-semibold text-[#00c2a8] transition-colors hover:bg-[#00c2a8]/5 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-          >
-            {previewing ? "Generando…" : "Vista previa PDF"}
-          </button>
-          <button
-            type="submit"
-            disabled={submitting}
-            className="flex-1 rounded-xl bg-[#00c2a8] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_4px_16px_rgba(0,194,168,0.3)] transition-opacity hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {submitting ? "Procesando…" : "Firmar y enviar consentimiento"}
-          </button>
         </div>
-      </form>
+      ) : (
+        <form onSubmit={handleSubmit} className="mx-auto max-w-3xl px-5 py-6">
+          <ConsentRenderer key={`${entityKey}-${remountKey}`} definition={def} state={state} onChange={patch} />
+
+          {submitError && (
+            <div
+              role="alert"
+              className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300"
+            >
+              <p className="m-0 font-semibold">No se pudo guardar el consentimiento</p>
+              <p className="m-0 mt-0.5 text-red-600 dark:text-red-400">{submitError}</p>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={handlePreview}
+              disabled={previewing}
+              className="rounded-xl border-[1.5px] border-[#00c2a8] bg-transparent px-6 py-3.5 text-sm font-semibold text-[#00c2a8] transition-colors hover:bg-[#00c2a8]/5 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+            >
+              {previewing ? "Generando…" : "Vista previa PDF"}
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="flex-1 rounded-xl bg-[#00c2a8] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_4px_16px_rgba(0,194,168,0.3)] transition-opacity hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {submitting ? "Procesando…" : isEdit ? "Guardar cambios" : "Firmar y enviar consentimiento"}
+            </button>
+          </div>
+        </form>
+      )}
 
       {missing.length > 0 && <MissingFieldsModal fields={missing} onClose={() => setMissing([])} />}
 
@@ -211,7 +267,7 @@ export default function ConsentForm({ tipo, onBack }: Props) {
         <SuccessModal
           emailStatus={emailStatus}
           emailError={emailError}
-          onNewRegistration={handleNew}
+          onNewRegistration={isEdit ? onBack ?? handleNew : handleNew}
           onClose={onBack}
         />
       )}

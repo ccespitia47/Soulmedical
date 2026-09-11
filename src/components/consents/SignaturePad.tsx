@@ -5,10 +5,17 @@ type SignaturePadProps = {
   onChange: (dataUrl: string) => void;
   /** Fuerza limpiar el canvas cuando cambia (p. ej. al reiniciar el formulario). */
   resetKey?: number;
+  /**
+   * Firma ya existente a dibujar al montar (modo edición, Task 6). Solo se
+   * pinta una vez al montar el componente (igual que el resto del pad, es
+   * "no controlado" después de eso): el usuario puede seguir dibujando o
+   * limpiar con normalidad.
+   */
+  initialDataUrl?: string;
 };
 
 // Pad de firma con mouse y touch. Aislado y reutilizable (Atomic Design).
-export default function SignaturePad({ onChange, resetKey = 0 }: SignaturePadProps) {
+export default function SignaturePad({ onChange, resetKey = 0, initialDataUrl }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
 
@@ -70,7 +77,10 @@ export default function SignaturePad({ onChange, resetKey = 0 }: SignaturePadPro
     onChange("");
   }, [onChange]);
 
-  // Ajustar la resolución del canvas a su tamaño en pantalla.
+  // Ajustar la resolución del canvas a su tamaño en pantalla y, si viene una
+  // firma inicial (modo edición), dibujarla. Deps vacías a propósito: solo
+  // importa al montar, igual que `resetKey` — un remount (`key` distinta en
+  // el padre) es la forma establecida de refrescar el contenido inicial.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -78,10 +88,18 @@ export default function SignaturePad({ onChange, resetKey = 0 }: SignaturePadPro
       const rect = canvas.getBoundingClientRect();
       canvas.width = rect.width;
       canvas.height = rect.height;
+      if (initialDataUrl) {
+        const img = new Image();
+        img.onload = () => {
+          canvas.getContext("2d")?.drawImage(img, 0, 0, canvas.width, canvas.height);
+        };
+        img.src = initialDataUrl;
+      }
     };
     resize();
     window.addEventListener("resize", resize);
     return () => window.removeEventListener("resize", resize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Limpiar cuando el padre cambia resetKey.

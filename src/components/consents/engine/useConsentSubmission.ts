@@ -6,7 +6,7 @@
 // de una `EntityConfig` fija por entidad.
 
 import { useState } from "react";
-import { createConsentApi } from "../../../services/api";
+import { createConsentApi, updateConsentApi } from "../../../services/api";
 import { useAuthStore } from "../../../store/useAuthStore";
 import { sendFormEmail, type EmailAttachment } from "../../../services/emailService";
 import { htmlToPdfBase64 } from "../../../utils/pdfExporter";
@@ -70,7 +70,18 @@ function buildEmailFormData(def: ConsentDefinition, flat: Record<string, string>
   return out;
 }
 
-export function useConsentSubmission(def: ConsentDefinition) {
+export type UseConsentSubmissionOptions = {
+  /**
+   * Id del registro a actualizar (Task 6, modo edición). Si se pasa, el paso
+   * 1 llama `updateConsentApi` en vez de `createConsentApi` y se omite el
+   * reenvío del correo de firma (evita notificar al paciente en cada
+   * corrección administrativa). Sin esta opción el comportamiento de
+   * creación queda intacto.
+   */
+  editId?: string;
+};
+
+export function useConsentSubmission(def: ConsentDefinition, options?: UseConsentSubmissionOptions) {
   const currentUser = useAuthStore((s) => s.currentUser);
 
   const [submitting, setSubmitting] = useState(false);
@@ -90,15 +101,26 @@ export function useConsentSubmission(def: ConsentDefinition) {
     setEmailError(null);
     setSubmitError(null);
 
-    // 1. Persistir el consentimiento en `consent_records` vía la API dedicada.
+    // 1. Persistir el consentimiento en `consent_records` vía la API dedicada
+    //    (crear, o actualizar si `options.editId` viene de la vista de registros).
     const payload = buildCreatePayload(def, state);
-    const res = await createConsentApi(payload);
+    const res = options?.editId
+      ? await updateConsentApi(options.editId, payload)
+      : await createConsentApi(payload);
 
     if (res.error) {
-      // El POST falló: exponemos el error de persistencia y NO enviamos correo
-      // ni marcamos `done` (nada quedó registrado, la UI debe permitir reintentar).
+      // El POST/PATCH falló: exponemos el error de persistencia y NO enviamos
+      // correo ni marcamos `done` (la UI debe permitir reintentar).
       setSubmitError(res.error);
       setSubmitting(false);
+      return;
+    }
+
+    if (options?.editId) {
+      // Edición: solo se persisten los cambios, sin reenviar el correo de
+      // firma (ver nota en `UseConsentSubmissionOptions`).
+      setSubmitting(false);
+      setDone(true);
       return;
     }
 

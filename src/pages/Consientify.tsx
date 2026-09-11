@@ -1,12 +1,14 @@
 import { useState } from "react";
 import ConsentimientosPage from "./ConsentimientosPage";
+import ConsentRecordsPage from "../components/consents/records/ConsentRecordsPage";
 import MyTwoFactorButton from "../components/auth/MyTwoFactorButton";
+import Icon from "../components/common/Icon";
 
 type ConsientifyProps = {
   onLogout: () => void;
 };
 
-type View = "home" | "consentimientos";
+type View = "home" | "consentimientos" | "registros";
 
 const FEATURE_TILES: {
   icon: string;
@@ -14,9 +16,9 @@ const FEATURE_TILES: {
   view?: View;
   disabled?: boolean;
 }[] = [
-  { icon: "📝", label: "Consentimientos", view: "consentimientos" },
-  { icon: "✅", label: "Firmas digitales", disabled: true },
-  { icon: "📊", label: "Reportes", disabled: true },
+  { icon: "clipboard", label: "Consentimientos", view: "consentimientos" },
+  { icon: "checkCircle", label: "Firmas digitales", disabled: true },
+  { icon: "table", label: "Registros", view: "registros" },
 ];
 
 export default function Consientify({ onLogout }: ConsientifyProps) {
@@ -26,15 +28,23 @@ export default function Consientify({ onLogout }: ConsientifyProps) {
     return <ConsentimientosPage onBack={() => setView("home")} />;
   }
 
+  if (view === "registros") {
+    return <ConsentRecordsPage onBack={() => setView("home")} />;
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-indigo-500 to-violet-500 font-sans">
-      <div className="text-center text-white">
-        <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-3xl bg-white/20 text-[40px] shadow-[0_8px_32px_rgba(0,0,0,0.2)] backdrop-blur-md">
-          📋
-        </div>
-        <h1 className="m-0 mb-2 text-4xl font-extrabold tracking-tight">Consientify</h1>
-        <p className="m-0 mb-2 text-base opacity-80">Gestión de consentimientos informados</p>
-        <p className="m-0 mb-10 text-[13px] opacity-60">
+    <div
+      className="flex min-h-screen items-center justify-center px-5 font-sans"
+      style={{ background: "linear-gradient(160deg,#0F1623 0%,#131f34 100%)" }}
+    >
+      <div className="animate-fade-up text-center text-white">
+        <img
+          src="/consientify-logo-dark.png"
+          alt="Consientify"
+          className="mx-auto mb-4 h-16 w-auto max-w-[300px] object-contain"
+        />
+        <p className="m-0 mb-2 text-base text-slate-300">Gestión de consentimientos informados</p>
+        <p className="m-0 mb-10 text-[13px] text-slate-500">
           Selecciona un módulo para comenzar
         </p>
         <div className="flex flex-wrap justify-center gap-3">
@@ -46,16 +56,18 @@ export default function Consientify({ onLogout }: ConsientifyProps) {
                 type="button"
                 disabled={t.disabled}
                 onClick={() => clickable && setView(t.view!)}
-                className={`min-w-[120px] rounded-xl bg-white/15 px-6 py-4 text-center backdrop-blur-md transition-all ${
+                className={`flex min-w-[128px] flex-col items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-6 py-4 text-center transition-all duration-200 ease-out ${
                   clickable
-                    ? "cursor-pointer hover:-translate-y-0.5 hover:bg-white/25"
-                    : "cursor-not-allowed opacity-60"
+                    ? "cursor-pointer hover:-translate-y-0.5 hover:border-[#38bdf8]/40 hover:bg-white/[0.09] hover:shadow-[0_14px_30px_-14px_rgba(56,189,248,0.5)]"
+                    : "cursor-not-allowed opacity-55"
                 }`}
               >
-                <div className="mb-1.5 text-2xl">{t.icon}</div>
-                <div className="text-[13px] font-semibold">{t.label}</div>
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#38bdf8]/15 text-[#7dd3fc]">
+                  <Icon name={t.icon} size={22} />
+                </span>
+                <div className="text-[13px] font-semibold text-white">{t.label}</div>
                 {t.disabled && (
-                  <div className="mt-1 text-[10px] opacity-70">Próximamente</div>
+                  <div className="text-[10px] text-slate-400">Próximamente</div>
                 )}
               </button>
             );
@@ -63,11 +75,11 @@ export default function Consientify({ onLogout }: ConsientifyProps) {
         </div>
         <div className="mt-10 flex flex-wrap justify-center gap-3">
           <MyTwoFactorButton
-            className="cursor-pointer rounded-xl border-2 border-white/40 bg-white/10 px-5 py-3 font-sans text-sm font-semibold text-white backdrop-blur-md transition-colors hover:bg-white/20"
+            className="cursor-pointer rounded-xl border border-white/20 bg-white/[0.06] px-5 py-3 font-sans text-sm font-semibold text-white transition-colors hover:bg-white/10"
           />
           <button
             onClick={onLogout}
-            className="cursor-pointer rounded-xl border-2 border-white/40 bg-white/15 px-7 py-3 font-sans text-sm font-semibold text-white backdrop-blur-md transition-colors hover:bg-white/25"
+            className="cursor-pointer rounded-xl border border-white/20 bg-white/[0.06] px-7 py-3 font-sans text-sm font-semibold text-white transition-colors hover:bg-white/10"
           >
             ← Volver al inicio
           </button>

@@ -7,6 +7,9 @@ type Props = {
   columns: VaccineTableColumn[];
   /** Emite las filas no vacías como JSON legible. */
   onChange: (json: string) => void;
+  /** Filas ya existentes (modo edición, Task 6): solo se usan como valor
+   *  inicial al montar, igual que el resto del componente es "no controlado". */
+  initialRows?: Row[];
 };
 
 const emptyRow = (columns: VaccineTableColumn[]): Row =>
@@ -14,8 +17,10 @@ const emptyRow = (columns: VaccineTableColumn[]): Row =>
 
 // El reinicio se hace desde el padre remontando el componente con una `key`
 // distinta (ver SectionC), por lo que el estado interno vuelve a su inicial.
-export default function VaccineTable({ columns, onChange }: Props) {
-  const [rows, setRows] = useState<Row[]>([emptyRow(columns)]);
+export default function VaccineTable({ columns, onChange, initialRows }: Props) {
+  const [rows, setRows] = useState<Row[]>(() =>
+    initialRows && initialRows.length ? initialRows : [emptyRow(columns)],
+  );
 
   const emit = (next: Row[]) => {
     const filled = next.filter((r) => Object.values(r).some((v) => v.trim() !== ""));

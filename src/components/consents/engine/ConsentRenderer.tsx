@@ -63,13 +63,30 @@ export default function ConsentRenderer({ definition, state, onChange }: Props) 
               </section>
             );
 
-          case "vaccineTable":
+          case "vaccineTable": {
+            // Modo edición: `state.values[section.id]` ya trae el JSON de filas
+            // guardado (mismo formato que emite `onChange`); se usa solo como
+            // valor inicial (ver `VaccineTable`, no controlado después de montar).
+            let initialRows: Record<string, string>[] | undefined;
+            const raw = state.values[section.id];
+            if (raw) {
+              try {
+                initialRows = JSON.parse(raw);
+              } catch {
+                initialRows = undefined;
+              }
+            }
             return (
               <section key={section.id} className={cardCls}>
                 {section.title && <h2 className={sectionTitleCls}>{section.title}</h2>}
-                <VaccineTable columns={section.columns} onChange={(json) => setValue(section.id, json)} />
+                <VaccineTable
+                  columns={section.columns}
+                  onChange={(json) => setValue(section.id, json)}
+                  initialRows={initialRows}
+                />
               </section>
             );
+          }
 
           case "legal":
             // LegalBlock ya envuelve su propio texto en `cardCls`; la casilla
@@ -105,7 +122,7 @@ export default function ConsentRenderer({ definition, state, onChange }: Props) 
                       {section.firmaPaciente.label}
                       <span className="ml-0.5 text-red-500">*</span>
                     </label>
-                    <SignaturePad onChange={(v) => onChange({ firma: v })} />
+                    <SignaturePad onChange={(v) => onChange({ firma: v })} initialDataUrl={state.firma || undefined} />
                   </div>
                   {section.firmaResponsable && (
                     <div>
@@ -113,7 +130,10 @@ export default function ConsentRenderer({ definition, state, onChange }: Props) 
                         {section.firmaResponsable.label}
                         <span className="ml-0.5 text-red-500">*</span>
                       </label>
-                      <SignaturePad onChange={(v) => onChange({ firmaResp: v })} />
+                      <SignaturePad
+                        onChange={(v) => onChange({ firmaResp: v })}
+                        initialDataUrl={state.firmaResp || undefined}
+                      />
                     </div>
                   )}
                 </div>

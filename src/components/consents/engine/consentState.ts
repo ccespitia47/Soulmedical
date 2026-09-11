@@ -2,7 +2,7 @@
 // validación de requeridos (`collectMissing`), aplanado de respuestas
 // (`flattenConsent`) y construcción del payload de creación (`buildCreatePayload`).
 
-import type { CreateConsentPayload } from "../../../services/api";
+import type { ConsentRecordDto, CreateConsentPayload } from "../../../services/api";
 import type { ConsentDefinition, ConsentState } from "./consentDefinition";
 
 /** Ids de identidad: se mapean a columnas propias del payload, no a `respuestas`. */
@@ -105,5 +105,48 @@ export function buildCreatePayload(def: ConsentDefinition, state: ConsentState):
     firmaPaciente: state.firma,
     firmaResponsable: state.firmaResp || undefined,
     foto: state.foto || undefined,
+  };
+}
+
+/**
+ * Reconstruye el `ConsentState` de un registro guardado, para reabrirlo en
+ * `ConsentForm` en modo edición (Task 6). `respuestas` usa exactamente los
+ * mismos ids que `state.values` (ver `buildCreatePayload`: solo excluye
+ * identidad/firmas/foto), así que basta con fusionarlas con la identidad.
+ * Las firmas/foto llegan aparte como data URLs (vienen de GridFS vía
+ * `GET /consents/:id/pdf`, no del registro mismo).
+ */
+export function buildEditState(
+  def: ConsentDefinition,
+  record: ConsentRecordDto,
+  dataUrls: {
+    firmaPacienteDataUrl: string | null;
+    firmaResponsableDataUrl: string | null;
+    fotoDataUrl: string | null;
+  },
+): ConsentState {
+  const values: Record<string, string> = {
+    nombres: record.nombres ?? "",
+    apellidos: record.apellidos ?? "",
+    tipoDoc: record.tipoDoc ?? "",
+    numDoc: record.numDoc ?? "",
+    ciudad: record.ciudad ?? "",
+    profesional: record.profesional ?? "",
+  };
+  for (const [id, value] of Object.entries(record.respuestas ?? {})) {
+    values[id] = typeof value === "string" ? value : JSON.stringify(value);
+  }
+
+  let accepted = false;
+  for (const section of def.sections) {
+    if (section.kind === "legal") accepted = values[section.acceptId] === "Sí";
+  }
+
+  return {
+    values,
+    firma: dataUrls.firmaPacienteDataUrl ?? "",
+    firmaResp: dataUrls.firmaResponsableDataUrl ?? "",
+    foto: dataUrls.fotoDataUrl ?? "",
+    accepted,
   };
 }

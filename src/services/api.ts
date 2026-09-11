@@ -911,3 +911,12 @@ export function anularConsentApi(id: string) {
 export function verifyConsentApi(id: string) {
   return request<{ valido: boolean; hash: string }>(`/consents/${id}/verificar`);
 }
+export type ConsentPdfPayload = {
+  record: ConsentRecordDto;
+  firmaPacienteDataUrl: string | null;
+  firmaResponsableDataUrl: string | null;
+  fotoDataUrl: string | null;
+};
+export function getConsentPdfPayloadApi(id: string) {
+  return request<ConsentPdfPayload>(`/consents/${id}/pdf`);
+}
