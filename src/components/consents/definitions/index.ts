@@ -1,0 +1,58 @@
+// Registro de tipos de consentimiento del módulo Consientify.
+//
+// Ruling del controlador (Plan 3, Task 2): las definiciones de tuberculina,
+// venopunción, vih e infectología se implementan en Tasks 3-5 y tienen
+// dependencia circular con este registro. Por ahora `getDefinition` solo
+// resuelve `vacunacion` (vía la definición de Plan 2); el resto lanza un
+// error explícito hasta que cada task añada su definición real.
+
+import { vacunacionDefinition } from "./vacunacion";
+import type { ConsentDefinition } from "../engine/consentDefinition";
+import type { EntityKey } from "../config";
+
+export type ConsentTipo =
+  | "vacunacion"
+  | "vacunacion_b"
+  | "tuberculina"
+  | "venopuncion"
+  | "vih"
+  | "infectologia";
+
+export type ConsentTypeMeta = {
+  tipo: ConsentTipo;
+  label: string;
+  icon: string;
+  /** true si el tipo distingue entre entidad SOUL/SAI (muestra el selector). */
+  multiEntidad: boolean;
+};
+
+/** Orden de aparición en el selector de tarjetas. */
+export const CONSENT_TYPES: ConsentTypeMeta[] = [
+  { tipo: "vacunacion", label: "Vacunación", icon: "health", multiEntidad: true },
+  { tipo: "vacunacion_b", label: "Vacunación (Esquema B)", icon: "checkSquare", multiEntidad: true },
+  { tipo: "tuberculina", label: "Tuberculina", icon: "target", multiEntidad: false },
+  { tipo: "venopuncion", label: "Venopunción", icon: "tag", multiEntidad: false },
+  { tipo: "vih", label: "VIH", icon: "award", multiEntidad: false },
+  { tipo: "infectologia", label: "Infectología", icon: "alert", multiEntidad: false },
+];
+
+/**
+ * Resuelve la `ConsentDefinition` de un tipo. `entity` solo aplica a los
+ * tipos multi-entidad (vacunación); el resto la ignora.
+ */
+export function getDefinition(tipo: ConsentTipo, entity: EntityKey = "soul"): ConsentDefinition {
+  switch (tipo) {
+    case "vacunacion":
+      return vacunacionDefinition(entity);
+    case "vacunacion_b":
+    case "tuberculina":
+    case "venopuncion":
+    case "vih":
+    case "infectologia":
+      throw new Error("Consentimiento no implementado: " + tipo);
+    default: {
+      const _exhaustive: never = tipo;
+      throw new Error("Consentimiento no implementado: " + String(_exhaustive));
+    }
+  }
+}

@@ -1,6 +1,12 @@
+// Shell genérico de formulario de consentimiento: header (logo/título/código
+// desde `def.meta`), selector de entidad SOUL/SAI para los tipos
+// multi-entidad, `ConsentRenderer`, vista previa PDF, envío y modales.
+// Generaliza el antiguo formulario dedicado de vacunación para que cualquier
+// `ConsentTipo` del registro (`definitions/index.ts`) use el mismo shell.
+
 import { useMemo, useState } from "react";
 import { ENTITY_ORDER, ENTITIES, type EntityKey } from "./config";
-import { vacunacionDefinition } from "./definitions/vacunacion";
+import { getDefinition, type ConsentTipo } from "./definitions";
 import ConsentRenderer from "./engine/ConsentRenderer";
 import { useConsentSubmission } from "./engine/useConsentSubmission";
 import { collectMissing, flattenConsent } from "./engine/consentState";
@@ -12,9 +18,14 @@ import SuccessModal from "../form/SuccessModal";
 import ConfirmModal from "../common/ConfirmModal";
 
 type Props = {
-  /** Vuelve al inicio de Consientify. */
+  /** Tipo de consentimiento a renderizar (ver `CONSENT_TYPES`). */
+  tipo: ConsentTipo;
+  /** Vuelve al selector de Consientify. */
   onBack?: () => void;
 };
+
+/** Tipos que distinguen entidad SOUL/SAI y muestran el selector del header. */
+const MULTI_ENTIDAD_TIPOS: ConsentTipo[] = ["vacunacion", "vacunacion_b"];
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -26,9 +37,10 @@ const initialState = (): ConsentState => ({
   accepted: false,
 });
 
-export default function VaccinationConsentForm({ onBack }: Props) {
+export default function ConsentForm({ tipo, onBack }: Props) {
+  const isMultiEntidad = MULTI_ENTIDAD_TIPOS.includes(tipo);
   const [entityKey, setEntityKey] = useState<EntityKey>("soul");
-  const def = useMemo(() => vacunacionDefinition(entityKey), [entityKey]);
+  const def = useMemo(() => getDefinition(tipo, entityKey), [tipo, entityKey]);
 
   const { submitConsent, submitting, emailStatus, emailError, submitError, done, reset } =
     useConsentSubmission(def);
@@ -125,26 +137,28 @@ export default function VaccinationConsentForm({ onBack }: Props) {
           <img src={def.meta.logo} alt={def.meta.displayName} className="h-9 w-auto" />
           <div className="mr-auto">
             <h1 className="m-0 text-base font-bold text-slate-900 dark:text-slate-100">
-              Consentimiento de Vacunación
+              {def.meta.titulo}
             </h1>
             <p className="m-0 text-xs text-slate-500 dark:text-slate-400">
               {def.meta.entidadNombre} · {def.meta.codigo} v{def.meta.version}
             </p>
           </div>
-          <label className="flex items-center gap-2 text-[13px] font-medium text-slate-600 dark:text-slate-300">
-            Entidad:
-            <select
-              value={entityKey}
-              onChange={(e) => requestEntityChange(e.target.value as EntityKey)}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-[#00c2a8] dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-            >
-              {ENTITY_ORDER.map((k) => (
-                <option key={k} value={k}>
-                  {ENTITIES[k].meta.displayName}
-                </option>
-              ))}
-            </select>
-          </label>
+          {isMultiEntidad && (
+            <label className="flex items-center gap-2 text-[13px] font-medium text-slate-600 dark:text-slate-300">
+              Entidad:
+              <select
+                value={entityKey}
+                onChange={(e) => requestEntityChange(e.target.value as EntityKey)}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-[#00c2a8] dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              >
+                {ENTITY_ORDER.map((k) => (
+                  <option key={k} value={k}>
+                    {ENTITIES[k].meta.displayName}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
       </div>
 
