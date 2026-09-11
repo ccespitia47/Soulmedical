@@ -1,12 +1,14 @@
 // Registro de tipos de consentimiento del módulo Consientify.
 //
-// Ruling del controlador (Plan 3, Task 2): las definiciones de tuberculina,
-// venopunción, vih e infectología se implementan en Tasks 3-5 y tienen
-// dependencia circular con este registro. Por ahora `getDefinition` solo
-// resuelve `vacunacion` (vía la definición de Plan 2); el resto lanza un
-// error explícito hasta que cada task añada su definición real.
+// Ruling del controlador (Plan 3, Task 2): las definiciones de tuberculina y
+// venopunción se implementan en Tasks 4-5 y tienen dependencia circular con
+// este registro; `getDefinition` lanza un error explícito para ellas hasta
+// que cada task añada su definición real. `vih` e `infectologia` ya están
+// resueltas (Task 3).
 
 import { vacunacionDefinition } from "./vacunacion";
+import { vihDefinition } from "./vih";
+import { infectologiaDefinition } from "./infectologia";
 import type { ConsentDefinition } from "../engine/consentDefinition";
 import type { EntityKey } from "../config";
 
@@ -44,11 +46,13 @@ export function getDefinition(tipo: ConsentTipo, entity: EntityKey = "soul"): Co
   switch (tipo) {
     case "vacunacion":
       return vacunacionDefinition(entity);
+    case "vih":
+      return vihDefinition;
+    case "infectologia":
+      return infectologiaDefinition;
     case "vacunacion_b":
     case "tuberculina":
     case "venopuncion":
-    case "vih":
-    case "infectologia":
       throw new Error("Consentimiento no implementado: " + tipo);
     default: {
       const _exhaustive: never = tipo;
