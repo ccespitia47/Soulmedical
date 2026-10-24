@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CATALOGO, addIntervalo, calcularProxima, findEntry, siguienteDosisLabel } from "./vaccineSchedule";
+import { CATALOGO, addIntervalo, calcularProxima, findEntry, nombreVacuna, siguienteDosisLabel } from "./vaccineSchedule";
 
 describe("calcularProxima", () => {
   it("cuenta desde la dosis 1: Antirrábica POS da 0-3-7", () => {
@@ -156,5 +156,24 @@ describe("CATALOGO fijado contra la tabla del spec", () => {
       expect(e.intervalo).toBeNull();
       expect(e.esUltima).toBe(true);
     }
+  });
+});
+
+describe("nombreVacuna", () => {
+  it("quita el sufijo de dosis del esquema", () => {
+    expect(nombreVacuna("HEPATITIS B D1")).toBe("HEPATITIS B");
+    expect(nombreVacuna("TETANO D12")).toBe("TETANO");
+    expect(nombreVacuna("DPT-a + POLIO D2")).toBe("DPT-a + POLIO");
+  });
+  it("quita el sufijo de dosis única", () => {
+    expect(nombreVacuna("INFLUENZA · dosis única")).toBe("INFLUENZA");
+  });
+  it("deja intacto el texto libre o ya normalizado", () => {
+    expect(nombreVacuna("Hepatitis B")).toBe("Hepatitis B");
+    expect(nombreVacuna("")).toBe("");
+    expect(nombreVacuna("MENINGOCOCO AYW 135")).toBe("MENINGOCOCO AYW 135");
+  });
+  it("devuelve el nombre de vacuna de cada entrada del catálogo", () => {
+    for (const e of CATALOGO) expect(nombreVacuna(e.label)).toBe(e.vacuna);
   });
 });

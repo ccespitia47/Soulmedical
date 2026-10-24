@@ -121,3 +121,8 @@ export function siguienteDosisLabel(vacuna: string, dosisRegistradas: string[]):
   if (siguiente > max) return null;
   return `${vacuna} D${siguiente}`;
 }
+
+/** Normaliza una etiqueta del catálogo ("HEPATITIS B D1", "INFLUENZA · dosis única") a su nombre de vacuna. */
+export function nombreVacuna(label: string): string {
+  return label.replace(/ · dosis única$/, "").replace(/ D\d+$/, "").trim();
+}

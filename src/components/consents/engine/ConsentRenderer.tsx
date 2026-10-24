@@ -95,6 +95,8 @@ export default function ConsentRenderer({ definition, state, onChange, prefill =
                     columns={section.columns}
                     onChange={(json) => setValue(section.id, json)}
                     initialRows={initialRows}
+                    historial={historial}
+                    fechaConsentimiento={state.values.fecha}
                   />
                 </section>
               </div>
