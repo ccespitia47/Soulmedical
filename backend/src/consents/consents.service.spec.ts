@@ -213,6 +213,7 @@ describe('ConsentsService.lookupPaciente', () => {
     deps.model.find = jest.fn((q: any) => {
       const data = rows
         .filter((r) => r.numDoc === q.numDoc && r.entidad === q.entidad && r.estado !== 'anulado')
+        .filter((r) => !q._id || r._id !== q._id.$ne)
         .sort((x, y) => y.createdAt.getTime() - x.createdAt.getTime());
       const chain: any = { sort: () => chain, lean: () => Promise.resolve(data) };
       return chain;
@@ -258,6 +259,18 @@ describe('ConsentsService.lookupPaciente', () => {
     const r = await service.lookupPaciente('2000', null);
     expect(r.ultimo?.id).toBe('f');
     expect(r.vacunas).toEqual([]);
+  });
+  it('excludeId deja fuera el propio registro (ultimo y vacunas)', async () => {
+    const { service, model } = setup();
+    const r = await service.lookupPaciente('1009', 'SOUL', 'b');
+    expect(model.find.mock.calls[0][0]._id).toEqual({ $ne: 'b' });
+    expect(r.ultimo?.id).toBe('a');
+    expect(r.vacunas).toEqual([{ vacuna: 'Hepatitis B', dosis: '1', aplicada: '2026-03-02', proxima: '2026-04-02' }]);
+  });
+  it('sin excludeId no filtra por _id', async () => {
+    const { service, model } = setup();
+    await service.lookupPaciente('1009', 'SOUL');
+    expect(model.find.mock.calls[0][0]).not.toHaveProperty('_id');
   });
   it('devuelve ultimo: null cuando no hay registros', async () => {
     const { service } = setup();

@@ -125,12 +125,14 @@ export class ConsentsService {
 
   /** Último consentimiento no anulado de una persona (numDoc exacto) y las
    *  vacunas previas aplanadas desde la Sección C de todos sus registros. */
-  async lookupPaciente(numDoc: string, entidad: string | null): Promise<PacienteLookupDto> {
+  async lookupPaciente(numDoc: string, entidad: string | null, excludeId?: string): Promise<PacienteLookupDto> {
     const query: Record<string, unknown> = {
       numDoc: String(numDoc ?? '').trim(),
       entidad: entidad ?? null,
       estado: { $ne: 'anulado' },
     };
+    // En edición, el propio registro no es "historial": se excluye (si no, su D1 sería la base del cálculo).
+    if (excludeId) query._id = { $ne: excludeId };
     const docs = (await this.model
       .find(query)
       .sort({ createdAt: -1 })

@@ -49,6 +49,8 @@ export class ConsentsController {
     @Query('numDoc') numDoc: unknown,
     @Query('entidad') entidad: unknown,
     @Request() req: AuthRequest,
+    // Id del registro que se está editando: se excluye para que el historial no incluya al propio registro.
+    @Query('excludeId') excludeIdRaw?: unknown,
   ) {
     if (typeof numDoc !== 'string' || !numDoc.trim()) {
       throw new BadRequestException('numDoc es obligatorio y debe ser texto');
@@ -62,7 +64,14 @@ export class ConsentsController {
       }
       ent = entidad;
     }
-    const result = await this.service.lookupPaciente(doc, ent);
+    let excludeId: string | undefined;
+    if (excludeIdRaw !== undefined && excludeIdRaw !== '') {
+      if (typeof excludeIdRaw !== 'string' || !/^[0-9a-fA-F]{24}$/.test(excludeIdRaw)) {
+        throw new BadRequestException('excludeId debe ser un id de consentimiento válido');
+      }
+      excludeId = excludeIdRaw;
+    }
+    const result = await this.service.lookupPaciente(doc, ent, excludeId);
     await this.audit.log({
       actor: {
         id: Number(req.user?.id),

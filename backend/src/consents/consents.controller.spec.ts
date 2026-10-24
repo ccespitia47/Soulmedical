@@ -20,7 +20,7 @@ describe('ConsentsController', () => {
   it('GET /consents/paciente consulta, normaliza entidad y audita', async () => {
     service.lookupPaciente.mockResolvedValue({ ultimo: { id: 'r1' }, vacunas: [] });
     const r = await ctrl.paciente(' 1009 ', 'SOUL', { user: { id: '9', name: 'Sara', role: 'admin' } } as any);
-    expect(service.lookupPaciente).toHaveBeenCalledWith('1009', 'SOUL');
+    expect(service.lookupPaciente).toHaveBeenCalledWith('1009', 'SOUL', undefined);
     expect(r.ultimo).toEqual({ id: 'r1' });
     expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
       actor: { id: 9, name: 'Sara', role: 'admin' },
@@ -37,7 +37,7 @@ describe('ConsentsController', () => {
   it('GET /consents/paciente entidad vacia se trata como omitida (null)', async () => {
     service.lookupPaciente.mockResolvedValue({ ultimo: null, vacunas: [] });
     await ctrl.paciente('1', '', req);
-    expect(service.lookupPaciente).toHaveBeenCalledWith('1', null);
+    expect(service.lookupPaciente).toHaveBeenCalledWith('1', null, undefined);
   });
   it.each([undefined, '', '   '])('GET /consents/paciente numDoc vacio %p -> 400', async (n) => {
     await expect(ctrl.paciente(n as any, 'SOUL', req)).rejects.toBeInstanceOf(BadRequestException);
@@ -55,7 +55,24 @@ describe('ConsentsController', () => {
   it('GET /consents/paciente sin entidad usa null', async () => {
     service.lookupPaciente.mockResolvedValue({ ultimo: null, vacunas: [] });
     await ctrl.paciente('1', undefined, { user: { id: '9' } } as any);
-    expect(service.lookupPaciente).toHaveBeenCalledWith('1', null);
+    expect(service.lookupPaciente).toHaveBeenCalledWith('1', null, undefined);
+  });
+
+  const OID = '507f1f77bcf86cd799439011';
+  it('GET /consents/paciente pasa excludeId al servicio', async () => {
+    service.lookupPaciente.mockResolvedValue({ ultimo: null, vacunas: [] });
+    await ctrl.paciente('1009', 'SOUL', req, OID);
+    expect(service.lookupPaciente).toHaveBeenCalledWith('1009', 'SOUL', OID);
+  });
+  it.each(['abc', '123', ['a', 'b'], { $ne: 1 }, 5])('GET /consents/paciente excludeId invalido %j -> 400 sin consultar', async (x) => {
+    await expect(ctrl.paciente('1009', 'SOUL', req, x as any)).rejects.toBeInstanceOf(BadRequestException);
+    expect(service.lookupPaciente).not.toHaveBeenCalled();
+    expect(audit.log).not.toHaveBeenCalled();
+  });
+  it('GET /consents/paciente excludeId vacio se trata como omitido', async () => {
+    service.lookupPaciente.mockResolvedValue({ ultimo: null, vacunas: [] });
+    await ctrl.paciente('1009', 'SOUL', req, '');
+    expect(service.lookupPaciente).toHaveBeenCalledWith('1009', 'SOUL', undefined);
   });
 
   it('GET /consents parsea page/limit y filtros', async () => {
