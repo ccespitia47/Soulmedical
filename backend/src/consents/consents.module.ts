@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { FormsModule } from '../forms/forms.module';
 import { UsersModule } from '../users/users.module';
 import { FilesModule } from '../files/files.module';
+import { AdminAuditModule } from '../admin-audit/admin-audit.module';
 import { ConsentsSeeder } from './consents.seeder';
 import { ConsentsService } from './consents.service';
 import { ConsentValidationService } from './consent-validation.service';
@@ -14,6 +15,7 @@ import { ConsentRecord, ConsentRecordSchema } from './consent-record.schema';
     FormsModule,
     UsersModule,
     FilesModule,
+    AdminAuditModule,
     MongooseModule.forFeature([
       { name: ConsentRecord.name, schema: ConsentRecordSchema },
     ]),

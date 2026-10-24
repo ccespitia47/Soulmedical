@@ -3,9 +3,10 @@ import { ConsentsController } from './consents.controller';
 describe('ConsentsController', () => {
   const service: any = {
     create: jest.fn(), list: jest.fn(), findOne: jest.fn(),
-    update: jest.fn(), anular: jest.fn(), verificar: jest.fn(), pdfPayload: jest.fn(),
+    update: jest.fn(), lookupPaciente: jest.fn(), anular: jest.fn(), verificar: jest.fn(), pdfPayload: jest.fn(),
   };
-  const ctrl = new ConsentsController(service);
+  const audit: any = { log: jest.fn().mockResolvedValue(undefined) };
+  const ctrl = new ConsentsController(service, audit);
 
   beforeEach(() => jest.clearAllMocks());
 
@@ -13,6 +14,23 @@ describe('ConsentsController', () => {
     service.create.mockResolvedValue({ id: 'r1' });
     await ctrl.create({ tipo: 'vih' } as any, { user: { id: '9' } } as any);
     expect(service.create).toHaveBeenCalledWith({ tipo: 'vih' }, 9);
+  });
+
+  it('GET /consents/paciente consulta, normaliza entidad y audita', async () => {
+    service.lookupPaciente.mockResolvedValue({ ultimo: { id: 'r1' }, vacunas: [] });
+    const r = await ctrl.paciente(' 1009 ', 'SOUL', { user: { id: '9', name: 'Sara', role: 'admin' } } as any);
+    expect(service.lookupPaciente).toHaveBeenCalledWith('1009', 'SOUL');
+    expect(r.ultimo).toEqual({ id: 'r1' });
+    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
+      actor: { id: 9, name: 'Sara', role: 'admin' },
+      action: 'CONSENT_PATIENT_LOOKUP', targetType: 'CONSENT_PATIENT', targetId: '1009',
+    }));
+  });
+
+  it('GET /consents/paciente sin entidad usa null', async () => {
+    service.lookupPaciente.mockResolvedValue({ ultimo: null, vacunas: [] });
+    await ctrl.paciente('1', undefined, { user: { id: '9' } } as any);
+    expect(service.lookupPaciente).toHaveBeenCalledWith('1', null);
   });
 
   it('GET /consents parsea page/limit y filtros', async () => {

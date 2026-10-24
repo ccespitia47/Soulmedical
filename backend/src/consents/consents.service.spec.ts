@@ -189,3 +189,78 @@ describe('ConsentsService.verificar', () => {
     expect(res.valido).toBe(false);
   });
 });
+
+describe('ConsentsService.lookupPaciente', () => {
+  const d = (s: string) => new Date(s);
+  const rows: any[] = [
+    { _id: 'a', numDoc: '1009', entidad: 'SOUL', estado: 'firmado', createdAt: d('2026-03-01T10:00:00Z'),
+      respuestas: { fecha: '2026-03-02', seccionC: JSON.stringify([
+        { nombre: 'Hepatitis B', dosis: '1', lote: 'L1', vencimiento: '', proxima: '2026-04-02', fabricante: 'X' },
+      ]) } },
+    { _id: 'b', numDoc: '1009', entidad: 'SOUL', estado: 'firmado', createdAt: d('2026-05-01T10:00:00Z'),
+      respuestas: { seccionC: JSON.stringify([
+        { nombre: 'Hepatitis B', dosis: '2', proxima: '2026-06-01' },
+        { nombre: 'Tétanos', dosis: '1' },
+      ]) } },
+    { _id: 'c', numDoc: '100', entidad: 'SOUL', estado: 'firmado', createdAt: d('2026-06-01T10:00:00Z'), respuestas: {} },
+    { _id: 'd', numDoc: '1009', entidad: 'SAI', estado: 'firmado', createdAt: d('2026-07-01T10:00:00Z'), respuestas: {} },
+    { _id: 'e', numDoc: '1009', entidad: 'SOUL', estado: 'anulado', createdAt: d('2026-08-01T10:00:00Z'), respuestas: {} },
+    { _id: 'f', numDoc: '2000', entidad: null, estado: 'firmado', createdAt: d('2026-01-01T10:00:00Z'),
+      respuestas: { seccionC: 'texto libre heredado' } },
+  ];
+  function setup() {
+    const deps = makeDeps();
+    deps.model.find = jest.fn((q: any) => {
+      const data = rows
+        .filter((r) => r.numDoc === q.numDoc && r.entidad === q.entidad && r.estado !== 'anulado')
+        .sort((x, y) => y.createdAt.getTime() - x.createdAt.getTime());
+      const chain: any = { sort: () => chain, lean: () => Promise.resolve(data) };
+      return chain;
+    });
+    return deps;
+  }
+
+  it('exige coincidencia exacta de numDoc', async () => {
+    const { service, model } = setup();
+    const r = await service.lookupPaciente('100', 'SOUL');
+    expect(r.ultimo?.id).toBe('c');
+    expect(model.find.mock.calls[0][0].numDoc).toBe('100');
+    expect(model.find.mock.calls[0][0].numDoc).not.toBeInstanceOf(RegExp);
+  });
+  it('recorta espacios del numDoc antes de comparar', async () => {
+    const { service } = setup();
+    expect((await service.lookupPaciente(' 1009 ', 'SOUL')).ultimo?.id).toBe('b');
+  });
+  it('no cruza entidades', async () => {
+    const { service } = setup();
+    expect((await service.lookupPaciente('1009', 'SAI')).ultimo?.id).toBe('d');
+    expect((await service.lookupPaciente('1009', null)).ultimo).toBeNull();
+  });
+  it('excluye los anulados', async () => {
+    const { service, model } = setup();
+    const r = await service.lookupPaciente('1009', 'SOUL');
+    expect(r.ultimo?.id).not.toBe('e');
+    expect(model.find.mock.calls[0][0].estado).toEqual({ $ne: 'anulado' });
+  });
+  it('aplana las filas de seccionC de todos los registros', async () => {
+    const { service } = setup();
+    const r = await service.lookupPaciente('1009', 'SOUL');
+    expect(r.vacunas).toHaveLength(3);
+    expect(r.vacunas).toContainEqual({
+      vacuna: 'Hepatitis B', dosis: '1', aplicada: '2026-03-02', proxima: '2026-04-02',
+    });
+    expect(r.vacunas).toContainEqual({
+      vacuna: 'Tétanos', dosis: '1', aplicada: '2026-05-01', proxima: '',
+    });
+  });
+  it('ignora un seccionC que no sea JSON de array', async () => {
+    const { service } = setup();
+    const r = await service.lookupPaciente('2000', null);
+    expect(r.ultimo?.id).toBe('f');
+    expect(r.vacunas).toEqual([]);
+  });
+  it('devuelve ultimo: null cuando no hay registros', async () => {
+    const { service } = setup();
+    expect(await service.lookupPaciente('9999', 'SOUL')).toEqual({ ultimo: null, vacunas: [] });
+  });
+});

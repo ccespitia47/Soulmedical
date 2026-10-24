@@ -5,17 +5,22 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/permissions.guard';
 import { RequirePermission } from '../auth/permissions.decorator';
 import { Permission } from '../auth/permissions';
+import { AdminAuditService } from '../admin-audit/admin-audit.service';
+import { AdminActionTargetType, AdminActionType } from '../admin-audit/admin-action.entity';
 import { ConsentsService } from './consents.service';
 import { CreateConsentDto } from './dto/create-consent.dto';
 import { UpdateConsentDto } from './dto/update-consent.dto';
 
-interface AuthRequest { user?: { id: string } }
+interface AuthRequest { user?: { id: string; name?: string; email?: string; role?: string } }
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @RequirePermission(Permission.CONSIENTIFY_ACCESS)
 @Controller('consents')
 export class ConsentsController {
-  constructor(private readonly service: ConsentsService) {}
+  constructor(
+    private readonly service: ConsentsService,
+    private readonly audit: AdminAuditService,
+  ) {}
 
   @Post()
   create(@Body() dto: CreateConsentDto, @Request() req: AuthRequest) {
@@ -37,6 +42,29 @@ export class ConsentsController {
     return this.service.list({
       page: pageNum, limit: limitNum, tipo, search, from, to,
     });
+  }
+
+  @Get('paciente')
+  async paciente(
+    @Query('numDoc') numDoc: string | undefined,
+    @Query('entidad') entidad: string | undefined,
+    @Request() req: AuthRequest,
+  ) {
+    const doc = (numDoc ?? '').trim();
+    const ent = entidad === 'SAI' || entidad === 'SOUL' ? entidad : null;
+    const result = await this.service.lookupPaciente(doc, ent);
+    await this.audit.log({
+      actor: {
+        id: Number(req.user?.id),
+        name: req.user?.name ?? req.user?.email ?? `user#${req.user?.id}`,
+        role: req.user?.role ?? '',
+      },
+      action: AdminActionType.CONSENT_PATIENT_LOOKUP,
+      targetType: AdminActionTargetType.CONSENT_PATIENT,
+      targetId: doc.slice(0, 64),
+      metadata: { entidad: ent, encontrado: result.ultimo != null, at: new Date().toISOString() },
+    });
+    return result;
   }
 
   @Get(':id')

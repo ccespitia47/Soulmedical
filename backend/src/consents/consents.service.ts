@@ -7,6 +7,7 @@ import { ConsentValidationService } from './consent-validation.service';
 import { consentHash } from './consent-hash';
 import { CreateConsentDto } from './dto/create-consent.dto';
 import { UpdateConsentDto } from './dto/update-consent.dto';
+import { PacienteLookupDto, VacunaPreviaDto } from './dto/paciente-lookup.dto';
 import {
   ConsentRecord,
   ConsentRecordDocument,
@@ -120,6 +121,44 @@ export class ConsentsService {
     }));
 
     return { data, total, page: opts.page, limit: opts.limit };
+  }
+
+  /** Último consentimiento no anulado de una persona (numDoc exacto) y las
+   *  vacunas previas aplanadas desde la Sección C de todos sus registros. */
+  async lookupPaciente(numDoc: string, entidad: string | null): Promise<PacienteLookupDto> {
+    const query: Record<string, unknown> = {
+      numDoc: String(numDoc ?? '').trim(),
+      entidad: entidad ?? null,
+      estado: { $ne: 'anulado' },
+    };
+    const docs = (await this.model
+      .find(query)
+      .sort({ createdAt: -1 })
+      .lean()) as any[];
+
+    const vacunas: VacunaPreviaDto[] = [];
+    for (const d of docs) {
+      const raw = d.respuestas?.seccionC;
+      let filas: unknown;
+      try {
+        filas = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      } catch {
+        continue;
+      }
+      if (!Array.isArray(filas)) continue;
+      const created = d.createdAt ? new Date(d.createdAt).toISOString().slice(0, 10) : '';
+      const aplicada = String(d.respuestas?.fecha || created);
+      for (const f of filas) {
+        if (!f || typeof f !== 'object') continue;
+        vacunas.push({
+          vacuna: String((f as any).nombre ?? ''),
+          dosis: String((f as any).dosis ?? ''),
+          aplicada,
+          proxima: String((f as any).proxima ?? ''),
+        });
+      }
+    }
+    return { ultimo: docs.length ? this.toView(docs[0]) : null, vacunas };
   }
 
   async findOne(id: string): Promise<ConsentRecord> {
