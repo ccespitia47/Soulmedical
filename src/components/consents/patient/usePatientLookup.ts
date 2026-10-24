@@ -51,6 +51,8 @@ export function usePatientLookup(
   def: ConsentDefinition,
   state: ConsentState,
   onChange: (p: Partial<ConsentState>) => void,
+  /** false (p. ej. al editar un consentimiento ya guardado): no consulta, no rellena, no avisa. */
+  enabled = true,
 ): { aviso: Aviso | null; historial: VacunaPrevia[]; deshacer: () => void } {
   // El resultado va ligado al documento que lo originó: al cambiar numDoc deja de verse sin setState en el efecto.
   const [result, setResult] = useState<{ doc: string; aviso: Aviso | null; historial: VacunaPrevia[] } | null>(null);
@@ -74,7 +76,7 @@ export function usePatientLookup(
   useEffect(() => {
     filledRef.current = {};
     previousRef.current = {};
-    if (numDoc.length < MIN_DOC_LENGTH) return;
+    if (!enabled || numDoc.length < MIN_DOC_LENGTH) return;
 
     let cancelled = false;
     const timer = setTimeout(async () => {
@@ -122,7 +124,7 @@ export function usePatientLookup(
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [numDoc, entidad]);
+  }, [numDoc, entidad, enabled]);
 
   const deshacer = useCallback(() => {
     const filled = filledRef.current;
@@ -138,6 +140,6 @@ export function usePatientLookup(
     setResult((r) => (r ? { ...r, aviso: null } : r));
   }, []);
 
-  const vigente = result && result.doc === numDoc && numDoc.length >= MIN_DOC_LENGTH ? result : null;
+  const vigente = enabled && result && result.doc === numDoc && numDoc.length >= MIN_DOC_LENGTH ? result : null;
   return { aviso: vigente?.aviso ?? null, historial: vigente?.historial ?? [], deshacer };
 }

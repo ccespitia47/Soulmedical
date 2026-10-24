@@ -19,14 +19,16 @@ type Props = {
   definition: ConsentDefinition;
   state: ConsentState;
   onChange: (patch: Partial<ConsentState>) => void;
+  /** Autorrelleno por documento. Desactivar al editar un consentimiento guardado. */
+  prefill?: boolean;
 };
 
-export default function ConsentRenderer({ definition, state, onChange }: Props) {
+export default function ConsentRenderer({ definition, state, onChange, prefill = true }: Props) {
   const setValue = (id: string, v: string) => {
     onChange({ values: { ...state.values, [id]: v } });
   };
 
-  const { aviso, deshacer } = usePatientLookup(definition, state, onChange);
+  const { aviso, deshacer } = usePatientLookup(definition, state, onChange, prefill);
 
   return (
     <>

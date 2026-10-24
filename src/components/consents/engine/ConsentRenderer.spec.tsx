@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import ConsentRenderer from "./ConsentRenderer";
 import type { ConsentDefinition, ConsentState } from "./consentDefinition";
 
@@ -34,5 +34,39 @@ describe("ConsentRenderer ciudad", () => {
   it("conserva un valor guardado fuera de la lista", () => {
     render(<ConsentRenderer definition={defCiudad} state={{ ...state, values: { ciudad: "Pueblo Raro" } }} onChange={vi.fn()} />);
     expect((screen.getByLabelText(/ciudad/i) as HTMLSelectElement).value).toBe("Pueblo Raro");
+  });
+});
+
+describe("ConsentRenderer autorrelleno (prefill)", () => {
+  const defDoc: ConsentDefinition = {
+    ...def,
+    sections: [{ id: "g", kind: "fields", title: "Datos", fields: [
+      { id: "numDoc", label: "Documento", type: "text" },
+      { id: "nombres", label: "Nombres", type: "text" },
+    ] }],
+  };
+  const conDoc: ConsentState = { ...state, values: { numDoc: "12345678" } };
+  const lookup = vi.fn();
+
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    lookup.mockReset();
+    lookup.mockResolvedValue({ data: { ultimo: null, vacunas: [] }, error: null });
+    const api = await import("../../../services/api");
+    vi.spyOn(api, "lookupPacienteApi").mockImplementation(lookup);
+  });
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+
+  it("con prefill={false} un documento válido no consulta la API", async () => {
+    render(<ConsentRenderer definition={defDoc} state={conDoc} onChange={vi.fn()} prefill={false} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(700); });
+    expect(lookup).not.toHaveBeenCalled();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("por defecto sigue consultando", async () => {
+    render(<ConsentRenderer definition={defDoc} state={conDoc} onChange={vi.fn()} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(700); });
+    expect(lookup).toHaveBeenCalledWith("12345678", undefined);
   });
 });

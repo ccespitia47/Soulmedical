@@ -218,7 +218,7 @@ export default function ConsentForm({ tipo, onBack, editRecord }: Props) {
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="mx-auto max-w-3xl px-5 py-6">
-          <ConsentRenderer key={`${entityKey}-${remountKey}`} definition={def} state={state} onChange={patch} />
+          <ConsentRenderer key={`${entityKey}-${remountKey}`} definition={def} state={state} onChange={patch} prefill={!isEdit} />
 
           {submitError && (
             <div
