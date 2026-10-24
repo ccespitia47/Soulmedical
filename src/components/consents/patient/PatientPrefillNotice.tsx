@@ -1,3 +1,5 @@
+import { cardCls, labelCls } from "../sections/sharedUi";
+
 // Aviso del autorrelleno: dice DE QUIÉN y de CUÁNDO vienen los datos y permite deshacer.
 
 type Props = {
@@ -7,14 +9,14 @@ type Props = {
 
 export default function PatientPrefillNotice({ aviso, onUndo }: Props) {
   return (
-    <div
-      role="status"
-      className="mb-5 flex flex-col gap-3 rounded-2xl border border-[#00c2a8]/40 bg-[#00c2a8]/5 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-[#2dd4bf]/30 dark:bg-[#2dd4bf]/10"
-    >
-      <p className="m-0 text-[13px] text-slate-700 dark:text-slate-200">
-        Datos completados desde el consentimiento de{" "}
-        <strong className="font-semibold">{aviso.nombre || "paciente sin nombre"}</strong> del {aviso.fecha}. Revísalos antes de continuar.
-      </p>
+    <div role="status" className={`${cardCls} flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between`}>
+      <div>
+        <span className={labelCls}>Datos completados automáticamente</span>
+        <p className="m-0 text-[13px] text-slate-600 dark:text-slate-300">
+          Tomados del consentimiento de{" "}
+          <strong className="font-semibold">{aviso.nombre || "paciente sin nombre"}</strong> del {aviso.fecha}. Revísalos antes de continuar.
+        </p>
+      </div>
       <button
         type="button"
         onClick={onUndo}

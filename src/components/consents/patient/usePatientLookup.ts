@@ -13,16 +13,29 @@ type Aviso = { fecha: string; nombre: string };
 
 const DEBOUNCE_MS = 600;
 const MIN_DOC_LENGTH = 5;
-const NEVER_FILL = new Set(["numDoc", "fecha", "profesional"]);
+// Lista BLANCA: solo identidad y contacto del PACIENTE. Todo lo demás (fecha, profesional,
+// acompañante, respuestas de cuestionario...) NO se rellena aunque esté vacío.
+// La identidad es un bloque todo-o-nada para no mezclar "nombre de A con apellido de B".
+const IDENTITY_BLOCK = ["nombres", "apellidos", "tipoDoc"] as const;
+const FILLABLE_FIELDS = [
+  "ciudad", "pacienteFechaNac", "eps", "pacienteTelefono", "pacienteEmail",
+  "rh", "direccion", "genero", "entidad",
+] as const;
 const IDENTITY_KEYS = ["tipoDoc", "nombres", "apellidos", "ciudad"] as const;
 
-function fillableIds(def: ConsentDefinition): string[] {
-  const ids: string[] = [];
+function definedIds(def: ConsentDefinition): Set<string> {
+  const ids = new Set<string>();
   for (const s of def.sections) {
-    if (s.kind !== "fields") continue;
-    for (const f of s.fields) if (!NEVER_FILL.has(f.id)) ids.push(f.id);
+    if (s.kind === "fields") for (const f of s.fields) ids.add(f.id);
   }
   return ids;
+}
+
+function fillableIds(def: ConsentDefinition, current: Record<string, string>): string[] {
+  const defined = definedIds(def);
+  const identity = IDENTITY_BLOCK.filter((id) => defined.has(id));
+  const identityFree = identity.every((id) => (current[id] ?? "").trim() === "");
+  return [...(identityFree ? identity : []), ...FILLABLE_FIELDS.filter((id) => defined.has(id))];
 }
 
 function sourceValue(rec: ConsentRecordDto, id: string): string {
@@ -45,6 +58,27 @@ function formatFecha(iso: string): string {
 function hoyIso(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+type Ref<T> = { current: T };
+
+/** Revierte lo rellenado. Solo toca lo que sigue siendo el valor rellenado: no borra ediciones posteriores. */
+function revertFill(
+  filledRef: Ref<Record<string, string>>,
+  previousRef: Ref<Record<string, string>>,
+  stateRef: Ref<ConsentState>,
+  onChangeRef: Ref<(p: Partial<ConsentState>) => void>,
+) {
+  const filled = filledRef.current;
+  const ids = Object.keys(filled);
+  if (ids.length === 0) return;
+  const values = { ...stateRef.current.values };
+  for (const id of ids) {
+    if (values[id] === filled[id]) values[id] = previousRef.current[id] ?? "";
+  }
+  filledRef.current = {};
+  previousRef.current = {};
+  onChangeRef.current({ values });
 }
 
 export function usePatientLookup(
@@ -74,8 +108,9 @@ export function usePatientLookup(
   const entidad = def.meta.entidad;
 
   useEffect(() => {
-    filledRef.current = {};
-    previousRef.current = {};
+    // Invariante: lo rellenado corresponde siempre al documento en pantalla. Si numDoc cambia,
+    // se revierte el relleno anterior (respetando lo que el profesional editó después).
+    revertFill(filledRef, previousRef, stateRef, onChangeRef);
     if (!enabled || numDoc.length < MIN_DOC_LENGTH) return;
 
     let cancelled = false;
@@ -95,7 +130,7 @@ export function usePatientLookup(
       const current = stateRef.current.values;
       const patch: Record<string, string> = {};
       const prev: Record<string, string> = {};
-      for (const id of fillableIds(defRef.current)) {
+      for (const id of fillableIds(defRef.current, current)) {
         if ((current[id] ?? "").trim() !== "") continue;
         const v = sourceValue(rec, id);
         if (v === "") continue;
@@ -127,16 +162,7 @@ export function usePatientLookup(
   }, [numDoc, entidad, enabled]);
 
   const deshacer = useCallback(() => {
-    const filled = filledRef.current;
-    const prev = previousRef.current;
-    const values = { ...stateRef.current.values };
-    // Solo se revierte lo que sigue siendo lo rellenado: no se borra lo que el profesional editó después.
-    for (const id of Object.keys(filled)) {
-      if (values[id] === filled[id]) values[id] = prev[id] ?? "";
-    }
-    filledRef.current = {};
-    previousRef.current = {};
-    onChangeRef.current({ values });
+    revertFill(filledRef, previousRef, stateRef, onChangeRef);
     setResult((r) => (r ? { ...r, aviso: null } : r));
   }, []);
 
