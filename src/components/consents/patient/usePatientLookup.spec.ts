@@ -188,11 +188,31 @@ describe("usePatientLookup", () => {
     const r = setup({}, venopuncionDefinition);
     await typeDoc(r, "12345678");
     const v = r.result.current.state.values;
-    for (const id of ["profesionalNombre", "profesionalCargo", "fecha", "profesional",
-      "acompananteNombre", "acompananteApellido", "acompananteTipoDoc", "acompananteNumDoc"]) {
-      expect(v[id], id).toBeUndefined();
-    }
-    expect(v.genero).toBe("PREVIO");
-    expect(v.nombres).toBe("Ana");
+    // Conjunto EXACTO: añadir un id a la lista blanca obliga a tocar este test a conciencia.
+    const esperado = ["apellidos", "genero", "nombres", "tipoDoc"];
+    const rellenados = Object.keys(v).filter((k) => k !== "numDoc").sort();
+    const sobran = rellenados.filter((k) => !esperado.includes(k));
+    const faltan = esperado.filter((k) => !rellenados.includes(k));
+    expect(sobran, `ids rellenados que NO deberían: ${sobran.join(", ")}`).toEqual([]);
+    expect(faltan, `ids que deberían rellenarse: ${faltan.join(", ")}`).toEqual([]);
+  });
+
+  it("un id fuera de ambas listas no se rellena nunca, aunque exista, esté vacío y venga en el registro", async () => {
+    const defExtra = {
+      ...def,
+      sections: [{ id: "datos", kind: "fields", fields: [
+        { id: "nombres", label: "Nombres", type: "text" },
+        { id: "edad", label: "Edad", type: "text" },
+        { id: "campoNuevo", label: "Nuevo", type: "text" },
+      ] }],
+    } as unknown as ConsentDefinition;
+    vi.mocked(lookupPacienteApi).mockResolvedValue({
+      data: { ultimo: { ...ultimo, respuestas: { edad: "40", campoNuevo: "X" } }, vacunas: [] }, error: null,
+    });
+    const r = setup({ edad: "", campoNuevo: "" }, defExtra);
+    await typeDoc(r, "12345678");
+    expect(r.result.current.state.values.nombres).toBe("Ana");
+    expect(r.result.current.state.values.edad).toBe("");
+    expect(r.result.current.state.values.campoNuevo).toBe("");
   });
 });
