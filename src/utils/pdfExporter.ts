@@ -37,7 +37,10 @@ function canvasToPdf(canvas: HTMLCanvasElement, opts: PdfFromCanvasOptions = {})
   // no quede pegado al borde de la hoja A4. Sin esto los bordes negros de la
   // tabla se cortan visualmente al imprimir.
   const margin = opts.margin ?? 5; // mm
-  const imgData = canvas.toDataURL("image/jpeg", 0.85);
+  // 0.92: a 0.85 el JPEG dejaba halos alrededor de los bordes de tabla y de
+  // la tipografía pequeña. El documento es casi todo blanco, así que el coste
+  // en tamaño de archivo es modesto.
+  const imgData = canvas.toDataURL("image/jpeg", 0.92);
 
   const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageW = pdf.internal.pageSize.getWidth();  // 210
@@ -123,8 +126,13 @@ function waitForImages(doc: Document, timeoutMs = 8000): Promise<void> {
 
 /** Factor de muestreo de html2canvas: 1 px de layout → `CAPTURE_SCALE` px de
  *  canvas. Los cortes de página se miden en px de layout, así que hay que
- *  escalarlos con esta misma constante antes de pasarlos a `canvasToPdf`. */
-const CAPTURE_SCALE = 1.5;
+ *  escalarlos con esta misma constante antes de pasarlos a `canvasToPdf`.
+ *
+ *  A 1.5 el texto del PDF salía blando al imprimir (el documento se rasteriza
+ *  entero, no lleva fuentes vectoriales); a 2 el muestreo coincide con la
+ *  densidad típica de impresión y los trazos finos de las tablas dejan de
+ *  emborronarse. */
+const CAPTURE_SCALE = 2;
 
 /** Selector de los elementos ante los cuales se puede abrir página. */
 const BREAK_SELECTOR = "[data-pdf-block], [data-pdf-break], tr, p, li";

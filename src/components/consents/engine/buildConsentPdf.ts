@@ -26,16 +26,25 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-// Estilos base reutilizados de vaccinationConsentPdf.ts.
+// Escala tipográfica y de espaciado del documento.
+//
+// El formato original iba a 9–10px con 4px de padding vertical: el texto
+// quedaba pegado a las líneas de la tabla y costaba leerlo impreso. Estos
+// valores dan una línea base más grande y suficiente aire dentro de cada
+// celda. Están centralizados a propósito: cambiarlos aquí reajusta todo el
+// documento de forma coherente.
+const FONT_BODY = "11px";
+const FONT_SMALL = "10px"; // cabeceras de columna y recuadro de código
+const FONT_TITLE = "12px";
+const CELL_PAD = "6px 8px";
+const LINE = "1.45";
+
 const BORDER = "1px solid #333";
-const TD = `padding:4px 6px;border:${BORDER};font-size:10px;line-height:1.35;vertical-align:top;`;
-const TH = `padding:4px 6px;border:${BORDER};font-size:9px;line-height:1.2;font-weight:700;text-align:center;background:#e9edf2;vertical-align:middle;`;
-// `font-size`/`line-height` explícitos: sin ellos la celda hereda los 16px del
-// body y html2canvas dibuja la "X" de la casilla sobre ESA línea base, es decir
-// varios píxeles por debajo del cuadro.
-const BOX_TD = `padding:4px 2px;border:${BORDER};font-size:9px;line-height:1;text-align:center;vertical-align:middle;`;
-const BAR = `padding:4px 6px;border:${BORDER};background:#5b636b;color:#fff;font-size:10px;line-height:1.3;font-weight:700;`;
-const BLOCK = `margin-bottom:10px;`;
+const TD = `padding:${CELL_PAD};border:${BORDER};font-size:${FONT_BODY};line-height:${LINE};vertical-align:top;`;
+const TH = `padding:${CELL_PAD};border:${BORDER};font-size:${FONT_SMALL};line-height:1.35;font-weight:700;text-align:center;background:#e9edf2;vertical-align:middle;`;
+const BOX_TD = `padding:6px 2px;border:${BORDER};text-align:center;vertical-align:middle;`;
+const BAR = `padding:${CELL_PAD};border:${BORDER};background:#5b636b;color:#fff;font-size:${FONT_BODY};line-height:1.35;font-weight:700;`;
+const BLOCK = `margin-bottom:12px;`;
 
 // La marca de "casilla marcada" NO se dibuja con texto.
 //
@@ -95,7 +104,7 @@ function imageBlock(dataUrl: string, label: string, maxHeight = 70): string {
   return `
     <div style="margin-top:14px;">
       ${img}
-      <div style="border-top:1px solid #333;padding-top:3px;font-size:10px;">${escapeHtml(label)}</div>
+      <div style="border-top:1px solid #333;padding-top:5px;font-size:${FONT_BODY};">${escapeHtml(label)}</div>
     </div>`;
 }
 
@@ -104,7 +113,7 @@ function fieldsSectionHtml(section: FieldsSection, flat: Record<string, string>)
   const cells = section.fields
     .map(
       (f) => `
-      <td style="padding:4px 8px;font-size:10px;line-height:1.35;width:50%;vertical-align:top;">
+      <td style="padding:${CELL_PAD};font-size:${FONT_BODY};line-height:${LINE};width:50%;vertical-align:top;">
         <strong>${escapeHtml(f.label)}:</strong>
         ${fieldValue(flat[f.id] ?? "")}
       </td>`,
@@ -125,7 +134,7 @@ function questionRow(q: TriStateQ, flat: Record<string, string>): string {
   const note = q.note ? (flat[q.note.id] ?? "").trim() : "";
   const noteHtml =
     q.note !== undefined
-      ? `<div style="margin-top:2px;color:#333;">${escapeHtml(q.note.label)} ${fieldValue(note)}</div>`
+      ? `<div style="margin-top:4px;color:#333;">${escapeHtml(q.note.label)} ${fieldValue(note)}</div>`
       : "";
   return `
     <tr>
@@ -184,14 +193,14 @@ function conditionsSectionHtml(section: Extract<ConsentSection, { kind: "conditi
   const options = section.group.options
     .map(
       (opt) =>
-        `<span style="display:inline-block;white-space:nowrap;margin:0 16px 5px 0;">${boxInline(selected.has(opt))}&nbsp;${escapeHtml(opt)}</span>`,
+        `<span style="display:inline-block;white-space:nowrap;margin:0 20px 7px 0;">${boxInline(selected.has(opt))}&nbsp;${escapeHtml(opt)}</span>`,
     )
     .join("");
   return `
     <div data-pdf-block style="${BLOCK}font-size:10px;line-height:1.4;">
       ${section.title ? barHtml(section.title) : ""}
-      <div style="border:${BORDER};padding:5px 6px;">
-        <div style="margin-bottom:4px;">${escapeHtml(section.group.label)}</div>
+      <div style="border:${BORDER};padding:${CELL_PAD};">
+        <div style="margin-bottom:7px;">${escapeHtml(section.group.label)}</div>
         <div>${options}</div>
       </div>
     </div>`;
@@ -215,7 +224,7 @@ function vaccineTableSectionHtml(section: Extract<ConsentSection, { kind: "vacci
     .map(
       (r) =>
         `<tr>${section.columns
-          .map((c) => `<td style="${TD}height:18px;">${escapeHtml(r[c.id] ?? "")}</td>`)
+          .map((c) => `<td style="${TD}height:24px;">${escapeHtml(r[c.id] ?? "")}</td>`)
           .join("")}</tr>`,
     )
     .join("");
@@ -234,12 +243,12 @@ function legalSectionHtml(section: Extract<ConsentSection, { kind: "legal" }>): 
   const toParagraphs = (text: string) =>
     text
       .split("\n\n")
-      .map((p) => `<p style="margin:0 0 8px;text-align:justify;line-height:1.45;font-size:10px;">${escapeHtml(p)}</p>`)
+      .map((p) => `<p style="margin:0 0 10px;text-align:justify;line-height:1.6;font-size:${FONT_BODY};">${escapeHtml(p)}</p>`)
       .join("");
   return `
     <div data-pdf-block style="${BLOCK}">
       ${barHtml(section.title ?? "CONSENTIMIENTO INFORMADO")}
-      <div style="padding-top:6px;">
+      <div style="padding-top:8px;">
         ${toParagraphs(section.legalText)}
         ${toParagraphs(section.habeasData)}
       </div>
@@ -281,12 +290,12 @@ function headerHtml(def: ConsentDefinition): string {
       <table style="width:100%;border-collapse:collapse;">
         <tr>
           <td style="border:${BORDER};width:24%;text-align:center;padding:6px;">${logo}</td>
-          <td style="border:${BORDER};text-align:center;padding:6px;font-size:11px;font-weight:700;line-height:1.4;">
+          <td style="border:${BORDER};text-align:center;padding:8px;font-size:${FONT_TITLE};font-weight:700;line-height:1.45;">
             ${escapeHtml(m.entidadNombre)}<br/>${escapeHtml(m.titulo)}
           </td>
-          <td style="border:${BORDER};width:26%;padding:0;font-size:9px;line-height:1.3;">
-            <div style="border-bottom:${BORDER};padding:4px 6px;">CÓDIGO: ${escapeHtml(m.codigo)}</div>
-            <div style="padding:4px 6px;">VERSIÓN: ${escapeHtml(m.version)}</div>
+          <td style="border:${BORDER};width:26%;padding:0;font-size:${FONT_SMALL};line-height:1.4;">
+            <div style="border-bottom:${BORDER};padding:5px 8px;">CÓDIGO: ${escapeHtml(m.codigo)}</div>
+            <div style="padding:5px 8px;">VERSIÓN: ${escapeHtml(m.version)}</div>
           </td>
         </tr>
       </table>
@@ -374,7 +383,7 @@ export function buildConsentPdf(def: ConsentDefinition, flat: Record<string, str
   // 16px por defecto del body del iframe y html2canvas dibuja los glifos de las
   // casillas sobre esa línea base, es decir fuera de su cuadro.
   return `
-  <div style="font-family:Arial,Helvetica,sans-serif;color:#111;font-size:10px;line-height:1.4;padding:14px 16px;">
+  <div style="font-family:Arial,Helvetica,sans-serif;color:#111;font-size:${FONT_BODY};line-height:1.5;padding:16px 18px;">
     ${headerHtml(def)}
     ${body}
   </div>`;
