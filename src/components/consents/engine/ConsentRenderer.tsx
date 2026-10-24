@@ -10,6 +10,8 @@ import LegalBlock from "../fields/LegalBlock";
 import PhotoField from "../fields/PhotoField";
 import SignaturePad from "../SignaturePad";
 import type { ConsentDefinition, ConsentState } from "./consentDefinition";
+import { CIUDADES_COLOMBIA } from "../cities/colombiaCities";
+import type { ConsentField } from "../config/entityConfig";
 
 type Props = {
   definition: ConsentDefinition;
@@ -30,7 +32,7 @@ export default function ConsentRenderer({ definition, state, onChange }: Props) 
             return (
               <section key={section.id} className={cardCls}>
                 {section.title && <h2 className={sectionTitleCls}>{section.title}</h2>}
-                <FieldGrid fields={section.fields} values={state.values} setValue={setValue} />
+                <FieldGrid fields={section.fields.map((f) => withCiudadOptions(f, state.values.ciudad))} values={state.values} setValue={setValue} />
               </section>
             );
 
@@ -158,4 +160,12 @@ export default function ConsentRenderer({ definition, state, onChange }: Props) 
       })}
     </>
   );
+}
+
+// "ciudad" se muestra como desplegable "Municipio, Departamento". Si el valor guardado no
+// está en la lista (consentimientos antiguos) se añade para no perderlo.
+function withCiudadOptions(f: ConsentField, current: string | undefined): ConsentField {
+  if (f.id !== "ciudad") return f;
+  const options = current && !CIUDADES_COLOMBIA.includes(current) ? [current, ...CIUDADES_COLOMBIA] : CIUDADES_COLOMBIA;
+  return { ...f, type: "select", options };
 }
