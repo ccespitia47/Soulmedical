@@ -14,6 +14,7 @@ import { CIUDADES_COLOMBIA } from "../cities/colombiaCities";
 import type { ConsentField } from "../config/entityConfig";
 import { usePatientLookup } from "../patient/usePatientLookup";
 import PatientPrefillNotice from "../patient/PatientPrefillNotice";
+import PatientHistoryPanel from "../patient/PatientHistoryPanel";
 
 type Props = {
   definition: ConsentDefinition;
@@ -28,7 +29,7 @@ export default function ConsentRenderer({ definition, state, onChange, prefill =
     onChange({ values: { ...state.values, [id]: v } });
   };
 
-  const { aviso, deshacer } = usePatientLookup(definition, state, onChange, prefill);
+  const { aviso, historial, deshacer } = usePatientLookup(definition, state, onChange, prefill);
 
   return (
     <>
@@ -86,14 +87,17 @@ export default function ConsentRenderer({ definition, state, onChange, prefill =
               }
             }
             return (
-              <section key={section.id} className={cardCls}>
-                {section.title && <h2 className={sectionTitleCls}>{section.title}</h2>}
-                <VaccineTable
-                  columns={section.columns}
-                  onChange={(json) => setValue(section.id, json)}
-                  initialRows={initialRows}
-                />
-              </section>
+              <div key={section.id}>
+                <PatientHistoryPanel historial={historial} />
+                <section className={cardCls}>
+                  {section.title && <h2 className={sectionTitleCls}>{section.title}</h2>}
+                  <VaccineTable
+                    columns={section.columns}
+                    onChange={(json) => setValue(section.id, json)}
+                    initialRows={initialRows}
+                  />
+                </section>
+              </div>
             );
           }
 
