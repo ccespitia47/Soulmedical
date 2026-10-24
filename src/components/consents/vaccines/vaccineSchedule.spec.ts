@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CATALOGO, calcularProxima, findEntry, siguienteDosisLabel } from "./vaccineSchedule";
+import { CATALOGO, addIntervalo, calcularProxima, findEntry, siguienteDosisLabel } from "./vaccineSchedule";
 
 describe("calcularProxima", () => {
   it("cuenta desde la dosis 1: Antirrábica POS da 0-3-7", () => {
@@ -48,5 +48,113 @@ describe("CATALOGO", () => {
   it("tiene 34 entradas de esquema y 8 de dosis única", () => {
     expect(CATALOGO.filter((e) => e.dosis !== "única")).toHaveLength(34);
     expect(CATALOGO.filter((e) => e.dosis === "única")).toHaveLength(8);
+  });
+});
+
+describe("addIntervalo", () => {
+  it("suma días", () => {
+    expect(addIntervalo("2026-01-01", { cantidad: 14, unidad: "dias" })).toBe("2026-01-15");
+  });
+  it("suma meses (TETANO D2 → +5 meses)", () => {
+    expect(addIntervalo("2026-01-01", findEntry("TETANO D2")!.intervalo!)).toBe("2026-06-01");
+  });
+  it("suma años (DPT-a → +10 años, NEUMOCOCO 23 → +5 años)", () => {
+    expect(addIntervalo("2026-01-01", findEntry("DPT-a D1")!.intervalo!)).toBe("2036-01-01");
+    expect(addIntervalo("2026-01-01", findEntry("NEUMOCOCO 23 D1")!.intervalo!)).toBe("2031-01-01");
+  });
+  it("recorta al fin de mes: 31-ene + 1 mes", () => {
+    expect(addIntervalo("2026-01-31", { cantidad: 1, unidad: "meses" })).toBe("2026-02-28");
+  });
+  it("recorta al fin de mes en año bisiesto", () => {
+    expect(addIntervalo("2024-01-31", { cantidad: 1, unidad: "meses" })).toBe("2024-02-29");
+  });
+  it("cruza de año: diciembre + 2 meses", () => {
+    expect(addIntervalo("2026-12-15", { cantidad: 2, unidad: "meses" })).toBe("2027-02-15");
+    expect(addIntervalo("2026-12-31", { cantidad: 2, unidad: "meses" })).toBe("2027-02-28");
+  });
+});
+
+describe("calcularProxima con intervalos en meses", () => {
+  it("usa la fecha de la dosis 1 como base para una dosis N>1 (TETANO D2 → +5 meses)", () => {
+    expect(calcularProxima(findEntry("TETANO D2")!, "2026-01-01")).toBe("2026-06-01");
+  });
+  it("dosis 1 en meses (HEPATITIS B D1 → +1 mes)", () => {
+    expect(calcularProxima(findEntry("HEPATITIS B D1")!, "2026-01-01")).toBe("2026-02-01");
+  });
+  it("dosis N>1 en años (TETANO D3 → +1 año desde la dosis 1)", () => {
+    expect(calcularProxima(findEntry("TETANO D3")!, "2026-01-01")).toBe("2027-01-01");
+  });
+});
+
+// Tabla clínica literal del spec §2 (vacuna, dosis, cantidad, unidad). Independiente
+// del código: cualquier transcripción alterada en el catálogo rompe una fila concreta.
+const TABLA_SPEC: Array<[string, string, number, "dias" | "meses" | "anios"]> = [
+  ["ANTIRRABICA POS", "1", 3, "dias"],
+  ["ANTIRRABICA POS", "2", 7, "dias"],
+  ["ANTIRRABICA POS", "3", 14, "dias"],
+  ["ANTIRRABICA PRE", "1", 7, "dias"],
+  ["DENGUE", "1", 3, "meses"],
+  ["DPT-a", "1", 10, "anios"],
+  ["DPT-a + POLIO", "1", 2, "meses"],
+  ["DPT-a + POLIO", "2", 6, "meses"],
+  ["HEPATITIS A", "1", 6, "meses"],
+  ["HEPATITIS A + B", "1", 1, "meses"],
+  ["HEPATITIS A + B", "2", 5, "meses"],
+  ["HEPATITIS B", "1", 1, "meses"],
+  ["HEPATITIS B", "2", 5, "meses"],
+  ["HERPES ZOSTER", "1", 2, "meses"],
+  ["HEXAVALENTE", "1", 2, "meses"],
+  ["HEXAVALENTE", "2", 4, "meses"],
+  ["MENINGOCOCO AYW 135", "1", 2, "meses"],
+  ["MENINGOCOCO B", "1", 2, "meses"],
+  ["NEUMOCOCO 13", "1", 2, "meses"],
+  ["NEUMOCOCO 13", "2", 4, "meses"],
+  ["NEUMOCOCO 15", "1", 2, "meses"],
+  ["NEUMOCOCO 15", "2", 4, "meses"],
+  ["NEUMOCOCO 23", "1", 5, "anios"],
+  ["PENTAVALENTE", "1", 2, "meses"],
+  ["PENTAVALENTE", "2", 4, "meses"],
+  ["ROTAVIRUS", "1", 2, "meses"],
+  ["ROTAVIRUS", "2", 1, "meses"],
+  ["TETANO", "1", 1, "meses"],
+  ["TETANO", "2", 5, "meses"],
+  ["TETANO", "3", 1, "anios"],
+  ["TETANO", "4", 1, "anios"],
+  ["VARICELA", "1", 2, "meses"],
+  ["VPH", "1", 2, "meses"],
+  ["VPH", "2", 4, "meses"],
+];
+
+describe("CATALOGO fijado contra la tabla del spec", () => {
+  it("la tabla de referencia tiene 34 filas", () => {
+    expect(TABLA_SPEC).toHaveLength(34);
+  });
+
+  it.each(TABLA_SPEC)("%s D%s → %i %s", (vacuna, dosis, cantidad, unidad) => {
+    const e = findEntry(`${vacuna} D${dosis}`);
+    expect(e, `falta ${vacuna} D${dosis}`).toBeDefined();
+    expect(e!.vacuna).toBe(vacuna);
+    expect(e!.dosis).toBe(dosis);
+    expect(e!.intervalo).toEqual({ cantidad, unidad });
+  });
+
+  it("esUltima solo en la dosis mayor de cada vacuna", () => {
+    const max = new Map<string, number>();
+    for (const [v, d] of TABLA_SPEC) max.set(v, Math.max(max.get(v) ?? 0, Number(d)));
+    for (const [v, d] of TABLA_SPEC) {
+      expect(findEntry(`${v} D${d}`)!.esUltima, `${v} D${d}`).toBe(Number(d) === max.get(v));
+    }
+  });
+
+  it("las 8 de dosis única son exactamente las del spec, sin intervalo y esUltima", () => {
+    const unicas = CATALOGO.filter((e) => e.dosis === "única").map((e) => e.vacuna).sort();
+    expect(unicas).toEqual(
+      ["FIEBRE AMARILLA", "FIEBRE TIFOIDEA", "HEXAVALENTE", "INFLUENZA", "MENINGOCOCO",
+       "NEUMOCOCO 13", "PENTAVALENTE", "TRIPLE VIRAL"].sort(),
+    );
+    for (const e of CATALOGO.filter((x) => x.dosis === "única")) {
+      expect(e.intervalo).toBeNull();
+      expect(e.esUltima).toBe(true);
+    }
   });
 });
