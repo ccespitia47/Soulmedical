@@ -899,6 +899,13 @@ export function listConsentsApi(params: {
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
   return request<{ data: ConsentRecordDto[]; total: number; page: number; limit: number }>(`/consents${suffix}`);
 }
+export type VacunaPreviaDto = { vacuna: string; dosis: string; aplicada: string; proxima: string };
+export type PacienteLookupDto = { ultimo: ConsentRecordDto | null; vacunas: VacunaPreviaDto[] };
+export function lookupPacienteApi(numDoc: string, entidad?: "SOUL" | "SAI") {
+  const qs = new URLSearchParams({ numDoc });
+  if (entidad) qs.set("entidad", entidad);
+  return request<PacienteLookupDto>(`/consents/paciente?${qs.toString()}`);
+}
 export function getConsentApi(id: string) {
   return request<ConsentRecordDto>(`/consents/${id}`);
 }

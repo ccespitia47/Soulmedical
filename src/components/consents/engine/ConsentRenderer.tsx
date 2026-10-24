@@ -12,6 +12,8 @@ import SignaturePad from "../SignaturePad";
 import type { ConsentDefinition, ConsentState } from "./consentDefinition";
 import { CIUDADES_COLOMBIA } from "../cities/colombiaCities";
 import type { ConsentField } from "../config/entityConfig";
+import { usePatientLookup } from "../patient/usePatientLookup";
+import PatientPrefillNotice from "../patient/PatientPrefillNotice";
 
 type Props = {
   definition: ConsentDefinition;
@@ -24,8 +26,11 @@ export default function ConsentRenderer({ definition, state, onChange }: Props) 
     onChange({ values: { ...state.values, [id]: v } });
   };
 
+  const { aviso, deshacer } = usePatientLookup(definition, state, onChange);
+
   return (
     <>
+      {aviso && <PatientPrefillNotice aviso={aviso} onUndo={deshacer} />}
       {definition.sections.map((section) => {
         switch (section.kind) {
           case "fields":
