@@ -113,7 +113,7 @@ export default function VaccineTable({ columns, onChange, initialRows, historial
             ...r,
             nombre: "",
             dosis: r.dosis === s.dosis ? "" : r.dosis,
-            proxima: derivada[i] ? "" : r.proxima,
+            proxima: "", // derivada o tecleada, sin vacuna no debe quedar una fecha suelta
           };
         });
         setRevertidas(actuales, rows);
@@ -182,6 +182,7 @@ export default function VaccineTable({ columns, onChange, initialRows, historial
     setSugerida((g) => [...g, null]);
   };
   const removeRow = (i: number) => {
+    setRevertida([]);
     setLibre((l) => (l.length > 1 ? l.filter((_, idx) => idx !== i) : [false]));
     setDerivada((d) => (d.length > 1 ? d.filter((_, idx) => idx !== i) : [false]));
     setSugerida((g) => (g.length > 1 ? g.filter((_, idx) => idx !== i) : [null]));

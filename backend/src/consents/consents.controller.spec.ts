@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { BadRequestException } from '@nestjs/common';
 import { ConsentsController } from './consents.controller';
 
@@ -58,13 +59,13 @@ describe('ConsentsController', () => {
     expect(service.lookupPaciente).toHaveBeenCalledWith('1', null, undefined);
   });
 
-  const OID = '507f1f77bcf86cd799439011';
+  const OID = randomUUID();
   it('GET /consents/paciente pasa excludeId al servicio', async () => {
     service.lookupPaciente.mockResolvedValue({ ultimo: null, vacunas: [] });
     await ctrl.paciente('1009', 'SOUL', req, OID);
     expect(service.lookupPaciente).toHaveBeenCalledWith('1009', 'SOUL', OID);
   });
-  it.each(['abc', '123', ['a', 'b'], { $ne: 1 }, 5])('GET /consents/paciente excludeId invalido %j -> 400 sin consultar', async (x) => {
+  it.each(['a b', '$ne', 'x'.repeat(65), '../x', ['a', 'b'], { $ne: 1 }, 5])('GET /consents/paciente excludeId invalido %j -> 400 sin consultar', async (x) => {
     await expect(ctrl.paciente('1009', 'SOUL', req, x as any)).rejects.toBeInstanceOf(BadRequestException);
     expect(service.lookupPaciente).not.toHaveBeenCalled();
     expect(audit.log).not.toHaveBeenCalled();

@@ -17,8 +17,8 @@ const MIN_DOC_LENGTH = 5;
 // Lista BLANCA: solo identidad y contacto del PACIENTE. Todo lo demás (fecha, profesional,
 // acompañante, respuestas de cuestionario...) NO se rellena aunque esté vacío.
 // La identidad es un bloque todo-o-nada para no mezclar "nombre de A con apellido de B".
-// `pacienteEmail` va DENTRO del bloque: el backend toma de ahí a quién se envía por correo el PDF firmado
-// (irreversible), así que nunca puede venir de un registro distinto al del nombre. `entidad` NO se rellena
+// `pacienteEmail` va DENTRO del bloque: es un dato de contacto del paciente (el de mayor consecuencia de la
+// lista) y atarlo a la identidad evita que el email de A acabe bajo el nombre y documento de B. `entidad` NO se rellena
 // (gemelo de `entidadRemite`: es propio de cada visita) y no debe entrar en IDENTITY_KEYS: su id colisiona
 // con la columna `entidad` del registro ("SOUL"/"SAI").
 const IDENTITY_BLOCK = ["nombres", "apellidos", "tipoDoc", "pacienteEmail"] as const;

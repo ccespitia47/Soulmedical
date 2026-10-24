@@ -79,7 +79,7 @@ describe("buildConsentPdf", () => {
     expect(html).toContain("Diabetes");
     expect(html).toContain("Asma");
     expect(html).toContain("Fiebre amarilla");
-    expect(html).toContain("2024-01-01");
+    expect(html).toContain("01/01/2024");
   });
 
   it("marca cada bloque y protege los encabezados para la paginación", () => {
@@ -160,5 +160,40 @@ describe("buildConsentPdf · Vacunación", () => {
     // posiciona por caja, no por línea base. Ver nota en `boxCell`.
     expect(html).toContain("background:#111");
     expect(html).not.toMatch(/>X<\/(div|span)>/);
+  });
+});
+
+describe("buildConsentPdf fechas en dd/mm/aaaa", () => {
+  const defFechas: ConsentDefinition = {
+    ...def,
+    sections: [
+      { id: "g", kind: "fields", title: "Datos", fields: [
+        { id: "fecha", label: "Fecha", type: "date" },
+        { id: "nac", label: "Nacimiento", type: "date" },
+        { id: "nombres", label: "Nombres", type: "text" },
+      ] },
+      { id: "vt", kind: "vaccineTable", columns: [
+        { id: "nombre", label: "Vacuna" }, { id: "lote", label: "Lote" },
+        { id: "vencimiento", label: "Vencimiento" }, { id: "proxima", label: "Próxima" },
+      ] },
+    ],
+  };
+  const html = buildConsentPdf(defFechas, {
+    fecha: "2026-03-01", nac: "1990-12-31", nombres: "2026-03-01",
+    vt: JSON.stringify([{ nombre: "TETANO D2", lote: "L-2026-03-01", vencimiento: "2027-01-05", proxima: "10/06/2026" }]),
+  });
+  it("los campos type=date se imprimen dd/mm/aaaa", () => {
+    expect(html).toMatch(new RegExp("Fecha:</strong> <span[^>]*>01/03/2026<"));
+    expect(html).toContain("31/12/1990");
+    expect(html).not.toContain(">1990-12-31<");
+  });
+  it("las celdas de fecha de la tabla de vacunas también; las ya en dd/mm/aaaa quedan igual", () => {
+    expect(html).toContain("05/01/2027");
+    expect(html).toContain("10/06/2026");
+    expect(html).not.toContain("2027-01-05");
+  });
+  it("no toca campos de texto ni valores que solo contienen una fecha dentro", () => {
+    expect(html).toContain("L-2026-03-01");
+    expect(html).toMatch(/Nombres:<\/strong> <span[^>]*>2026-03-01</);
   });
 });

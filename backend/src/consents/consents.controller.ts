@@ -66,8 +66,8 @@ export class ConsentsController {
     }
     let excludeId: string | undefined;
     if (excludeIdRaw !== undefined && excludeIdRaw !== '') {
-      if (typeof excludeIdRaw !== 'string' || !/^[0-9a-fA-F]{24}$/.test(excludeIdRaw)) {
-        throw new BadRequestException('excludeId debe ser un id de consentimiento válido');
+      if (typeof excludeIdRaw !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(excludeIdRaw)) {
+        throw new BadRequestException('excludeId debe ser un id de consentimiento válido (los ids son UUID)');
       }
       excludeId = excludeIdRaw;
     }

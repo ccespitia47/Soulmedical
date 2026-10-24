@@ -10,7 +10,7 @@ import { getConsentPdfPayloadApi, lookupPacienteApi, type ConsentRecordDto } fro
 import ConsentForm from "./ConsentForm";
 
 const record = {
-  id: "507f1f77bcf86cd799439011", tipo: "vih", entidad: null, tipoDoc: "CC", numDoc: "12345678",
+  id: "6d95b4fb-22d9-4cf5-922f-26a863a18843", tipo: "vih", entidad: null, tipoDoc: "CC", numDoc: "12345678",
   nombres: "Ana", apellidos: "Pérez", ciudad: "Cali, Valle del Cauca", profesional: "Dr. X", estado: "firmado",
   respuestas: { fecha: "2026-03-01" }, firmaPaciente: null, firmaResponsable: null, foto: null,
   hashVerificacion: "h", createdAt: "2026-03-01T10:00:00.000Z",

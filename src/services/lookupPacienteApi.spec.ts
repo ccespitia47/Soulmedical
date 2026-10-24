@@ -18,11 +18,11 @@ describe("lookupPacienteApi", () => {
 
   it("arma el querystring con numDoc, entidad y excludeId", async () => {
     (fetch as ReturnType<typeof vi.fn>).mockResolvedValue(json({ ultimo: null, vacunas: [] }));
-    await lookupPacienteApi("123", "SOUL", "507f1f77bcf86cd799439011");
+    await lookupPacienteApi("123", "SOUL", "6d95b4fb-22d9-4cf5-922f-26a863a18843");
     const [url] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(url).toMatch(/numDoc=123/);
     expect(url).toMatch(/entidad=SOUL/);
-    expect(url).toMatch(/excludeId=507f1f77bcf86cd799439011/);
+    expect(url).toMatch(/excludeId=6d95b4fb-22d9-4cf5-922f-26a863a18843/);
   });
 
   it("sin excludeId no lo envía", async () => {

@@ -216,3 +216,26 @@ describe("VaccineTable: próxima en el pasado queda vacía", () => {
     expect(screen.getByRole("status").textContent).toMatch(/Se quitó TETANO D2/);
   });
 });
+
+describe("VaccineTable reversión: detalles", () => {
+  const ui = (doc: string | null, h: VacunaPrevia[], onChange = vi.fn()) => (
+    <VaccineTable columns={columns} onChange={onChange} historial={h} historialDoc={doc} fechaConsentimiento="2026-03-01" />
+  );
+  it("limpia también la próxima tecleada a mano (no queda fecha sin vacuna)", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(ui("12345", [prev()], onChange));
+    fireEvent.change(selectDe(1), { target: { value: "TETANO D2" } });
+    fireEvent.change(proximaDe(1), { target: { value: "01/09/2026" } });
+    rerender(ui(null, [], onChange));
+    expect(proximaDe(1).value).toBe("");
+    expect(onChange).toHaveBeenLastCalledWith("");
+  });
+  it("el aviso desaparece al borrar la fila", () => {
+    const { rerender } = render(ui("12345", [prev()]));
+    fireEvent.change(selectDe(1), { target: { value: "TETANO D2" } });
+    rerender(ui(null, []));
+    expect(screen.getByRole("status")).toBeTruthy();
+    borrar(1);
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+});

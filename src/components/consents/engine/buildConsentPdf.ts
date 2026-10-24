@@ -70,6 +70,14 @@ function boxInline(checked: boolean): string {
   return `<span style="display:inline-block;${BOX_FRAME}vertical-align:middle;">${checked ? BOX_MARK : ""}</span>`;
 }
 
+/** Fecha ISO exacta (yyyy-mm-dd) → dd/mm/aaaa, el formato de los documentos de la IPS. Todo lo demás
+ *  (texto libre, fechas ya en dd/mm/aaaa, valores que solo contienen una fecha) queda tal cual. */
+function fechaPdf(value: string): string {
+  const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(value);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : value;
+}
+const campoPdf = (type: string, value: string) => (type === "date" ? fechaPdf(value) : value);
+
 /** Valor diligenciado, en negrita (sin subrayado, evita artefactos en html2canvas). */
 function fieldValue(value: string): string {
   return `<span style="font-weight:600;color:#111;">${escapeHtml(value)}</span>`;
@@ -114,7 +122,7 @@ function fieldsRows(section: FieldsSection, flat: Record<string, string>): strin
   const cells = section.fields
     .map(
       (f) =>
-        `<td style="${TD}"><strong>${escapeHtml(f.label)}:</strong> ${fieldValue(flat[f.id] ?? "")}</td>`,
+        `<td style="${TD}"><strong>${escapeHtml(f.label)}:</strong> ${fieldValue(campoPdf(f.type, flat[f.id] ?? ""))}</td>`,
     )
     .map((cell, i) => (i % 2 === 0 ? `<tr>${cell}` : `${cell}</tr>`))
     .join("");
@@ -146,7 +154,7 @@ function questionRow(q: TriStateQ, flat: Record<string, string>): string {
  *  preguntas sin sacarlos del recuadro. */
 function fieldsFullWidthRow(section: FieldsSection, flat: Record<string, string>, colspan: number): string {
   const inner = section.fields
-    .map((f) => `<strong>${escapeHtml(f.label)}:</strong> ${fieldValue(flat[f.id] ?? "")}`)
+    .map((f) => `<strong>${escapeHtml(f.label)}:</strong> ${fieldValue(campoPdf(f.type, flat[f.id] ?? ""))}`)
     .join("&nbsp;&nbsp;&nbsp;&nbsp;");
   return `<tr><td style="${TD}background:#f7f9fb;" colspan="${colspan}">${inner}</td></tr>`;
 }
@@ -261,7 +269,7 @@ function vaccineTableSectionHtml(section: Extract<ConsentSection, { kind: "vacci
     .map(
       (r) =>
         `<tr>${section.columns
-          .map((c) => `<td style="${TD}height:24px;">${escapeHtml(r[c.id] ?? "")}</td>`)
+          .map((c) => `<td style="${TD}height:24px;">${escapeHtml(fechaPdf(r[c.id] ?? ""))}</td>`)
           .join("")}</tr>`,
     )
     .join("");
