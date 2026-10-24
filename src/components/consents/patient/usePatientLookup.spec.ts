@@ -37,10 +37,10 @@ const ultimo: ConsentRecordDto = {
   firmaPaciente: "sig", firmaResponsable: null, foto: "foto", hashVerificacion: "h", createdAt: "2024-03-15T12:00:00.000Z",
 };
 
-function setup(initial: Record<string, string> = {}, d: ConsentDefinition = def) {
+function setup(initial: Record<string, string> = {}, d: ConsentDefinition = def, enabled = true) {
   return renderHook(() => {
     const [state, setState] = useState<ConsentState>({ ...empty, values: { ...initial } });
-    const lookup = usePatientLookup(d, state, (p) => setState((s) => ({ ...s, ...p })));
+    const lookup = usePatientLookup(d, state, (p) => setState((s) => ({ ...s, ...p })), enabled);
     return { state, setState, ...lookup };
   });
 }
@@ -111,6 +111,20 @@ describe("usePatientLookup", () => {
     await typeDoc(r, "12345678");
     expect(r.result.current.aviso).toBeNull();
     expect(r.result.current.state.values.nombres).toBeUndefined();
+  });
+
+  it("enabled=false: puebla el historial pero no toca ningún campo ni emite aviso", async () => {
+    vi.mocked(lookupPacienteApi).mockResolvedValue({
+      data: { ultimo, vacunas: [{ vacuna: "A", dosis: "1", aplicada: "2020-01-01", proxima: "2020-02-01" }] }, error: null,
+    });
+    const r = setup({}, def, false);
+    await typeDoc(r, "12345678");
+    expect(lookupPacienteApi).toHaveBeenCalledWith("12345678", "SOUL");
+    expect(r.result.current.historial).toHaveLength(1);
+    expect(r.result.current.aviso).toBeNull();
+    expect(r.result.current.state.values).toEqual({ numDoc: "12345678" });
+    await typeDoc(r, "87654321");
+    expect(r.result.current.state.values).toEqual({ numDoc: "87654321" });
   });
 
   it("marca vencida la próxima dosis ya cumplida", async () => {

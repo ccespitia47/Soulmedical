@@ -57,10 +57,13 @@ describe("ConsentRenderer autorrelleno (prefill)", () => {
   });
   afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
-  it("con prefill={false} un documento válido no consulta la API", async () => {
-    render(<ConsentRenderer definition={defDoc} state={conDoc} onChange={vi.fn()} prefill={false} />);
+  it("con prefill={false} consulta pero no muta el formulario ni avisa", async () => {
+    lookup.mockResolvedValue({ data: { ultimo: { nombres: "Ana", apellidos: "P", createdAt: "2024-03-15T12:00:00.000Z", respuestas: {} }, vacunas: [] }, error: null });
+    const onChange = vi.fn();
+    render(<ConsentRenderer definition={defDoc} state={conDoc} onChange={onChange} prefill={false} />);
     await act(async () => { await vi.advanceTimersByTimeAsync(700); });
-    expect(lookup).not.toHaveBeenCalled();
+    expect(lookup).toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
     expect(screen.queryByRole("status")).toBeNull();
   });
 

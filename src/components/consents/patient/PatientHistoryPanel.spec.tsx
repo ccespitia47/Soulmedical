@@ -31,4 +31,29 @@ describe("PatientHistoryPanel", () => {
     render(<PatientHistoryPanel historial={[fila({ proxima: "" })]} />);
     expect(screen.getByText("—")).toBeTruthy();
   });
+
+  it("muestra guion cuando no hay dosis", () => {
+    render(<PatientHistoryPanel historial={[fila({ dosis: "", proxima: "2099-01-02" })]} />);
+    expect(screen.getAllByText("—")).toHaveLength(1);
+  });
+
+  it("la vencida anuncia 'vencida' a lectores de pantalla y las cabeceras tienen scope", () => {
+    render(<PatientHistoryPanel historial={[fila({ proxima: "2024-04-15", vencida: true })]} />);
+    expect(screen.getByText(/vencida/).className).toContain("sr-only");
+    screen.getAllByRole("columnheader").forEach((th) => expect(th.getAttribute("scope")).toBe("col"));
+  });
+
+  it("usa ámbar oscuro en claro (contraste AA) y sin !important", () => {
+    render(<PatientHistoryPanel historial={[fila({ proxima: "2024-04-15", vencida: true })]} />);
+    const td = screen.getByText(/toca/i).closest("td")!;
+    expect(td.className).toContain("text-amber-700");
+    expect(td.className).not.toContain("!");
+  });
+
+  it("el panel desaparece al pasar a historial vacío", () => {
+    const { container, rerender } = render(<PatientHistoryPanel historial={[fila({})]} />);
+    expect(container.querySelector("details")).not.toBeNull();
+    rerender(<PatientHistoryPanel historial={[]} />);
+    expect(container.querySelector("details")).toBeNull();
+  });
 });

@@ -20,7 +20,7 @@ type Props = {
   definition: ConsentDefinition;
   state: ConsentState;
   onChange: (patch: Partial<ConsentState>) => void;
-  /** Autorrelleno por documento. Desactivar al editar un consentimiento guardado. */
+  /** Autorrelleno por documento. Desactivar al editar un consentimiento guardado (el historial se sigue mostrando, solo lectura). */
   prefill?: boolean;
 };
 
