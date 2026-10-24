@@ -2,6 +2,7 @@
 // sección con su primitiva correspondiente, leyendo/escribiendo contra
 // `ConsentState` vía `onChange` (merge de patch, al estilo setState parcial).
 
+import { useState } from "react";
 import { cardCls, labelCls, sectionTitleCls, FieldGrid } from "../sections/sharedUi";
 import TriStateQuestion from "../fields/TriStateQuestion";
 import CheckboxGroupField from "../fields/CheckboxGroupField";
@@ -10,11 +11,12 @@ import LegalBlock from "../fields/LegalBlock";
 import PhotoField from "../fields/PhotoField";
 import SignaturePad from "../SignaturePad";
 import type { ConsentDefinition, ConsentState } from "./consentDefinition";
-import { CIUDADES_COLOMBIA } from "../cities/colombiaCities";
+import { CIUDADES_COLOMBIA, OTRA_CIUDAD_LABEL } from "../cities/colombiaCities";
 import type { ConsentField } from "../config/entityConfig";
 import { usePatientLookup } from "../patient/usePatientLookup";
 import PatientPrefillNotice from "../patient/PatientPrefillNotice";
 import PatientHistoryPanel from "../patient/PatientHistoryPanel";
+import PatientLookupWarning from "../patient/PatientLookupWarning";
 
 type Props = {
   definition: ConsentDefinition;
@@ -22,25 +24,47 @@ type Props = {
   onChange: (patch: Partial<ConsentState>) => void;
   /** Autorrelleno por documento. Desactivar al editar un consentimiento guardado (el historial se sigue mostrando, solo lectura). */
   prefill?: boolean;
+  /** Id del consentimiento en edición: se excluye del historial del paciente (no es una vacuna "previa"). */
+  excludeId?: string;
 };
 
-export default function ConsentRenderer({ definition, state, onChange, prefill = true }: Props) {
+export default function ConsentRenderer({ definition, state, onChange, prefill = true, excludeId }: Props) {
+  // "Otra ciudad": el campo pasa a texto libre (la lista de municipios es parcial a propósito).
+  const [ciudadLibre, setCiudadLibre] = useState(false);
+
   const setValue = (id: string, v: string) => {
+    if (id === "ciudad" && v === OTRA_CIUDAD_LABEL) {
+      setCiudadLibre(true);
+      onChange({ values: { ...state.values, ciudad: "" } });
+      return;
+    }
     onChange({ values: { ...state.values, [id]: v } });
   };
 
-  const { aviso, historial, deshacer } = usePatientLookup(definition, state, onChange, prefill);
+  const { aviso, historial, historialDoc, consultaFallida, deshacer } = usePatientLookup(
+    definition, state, onChange, prefill, excludeId,
+  );
 
   return (
     <>
       {aviso && <PatientPrefillNotice aviso={aviso} onUndo={deshacer} />}
+      {consultaFallida && <PatientLookupWarning />}
       {definition.sections.map((section) => {
         switch (section.kind) {
           case "fields":
             return (
               <section key={section.id} className={cardCls}>
                 {section.title && <h2 className={sectionTitleCls}>{section.title}</h2>}
-                <FieldGrid fields={section.fields.map((f) => withCiudadOptions(f, state.values.ciudad))} values={state.values} setValue={setValue} />
+                <FieldGrid fields={section.fields.map((f) => withCiudadOptions(f, state.values.ciudad, ciudadLibre))} values={state.values} setValue={setValue} />
+                {ciudadLibre && section.fields.some((f) => f.id === "ciudad") && (
+                  <button
+                    type="button"
+                    onClick={() => setCiudadLibre(false)}
+                    className="mt-2 cursor-pointer border-0 bg-transparent p-0 text-[12px] font-medium text-[#0f766e] underline dark:text-[#2dd4bf]"
+                  >
+                    Elegir de la lista
+                  </button>
+                )}
               </section>
             );
 
@@ -96,6 +120,7 @@ export default function ConsentRenderer({ definition, state, onChange, prefill =
                     onChange={(json) => setValue(section.id, json)}
                     initialRows={initialRows}
                     historial={historial}
+                    historialDoc={historialDoc}
                     fechaConsentimiento={state.values.fecha}
                   />
                 </section>
@@ -175,10 +200,12 @@ export default function ConsentRenderer({ definition, state, onChange, prefill =
   );
 }
 
-// "ciudad" se muestra como desplegable "Municipio, Departamento". Si el valor guardado no
-// está en la lista (consentimientos antiguos) se añade para no perderlo.
-function withCiudadOptions(f: ConsentField, current: string | undefined): ConsentField {
+// "ciudad" se muestra como desplegable "Municipio, Departamento" con una salida final "Otra ciudad" que
+// pasa a texto libre (la lista es parcial: sin salida, un municipio no listado impediría firmar). Si el valor
+// guardado no está en la lista (consentimientos antiguos o escrito a mano) se añade para no perderlo.
+function withCiudadOptions(f: ConsentField, current: string | undefined, libre: boolean): ConsentField {
   if (f.id !== "ciudad") return f;
-  const options = current && !CIUDADES_COLOMBIA.includes(current) ? [current, ...CIUDADES_COLOMBIA] : CIUDADES_COLOMBIA;
-  return { ...f, type: "select", options };
+  if (libre) return { ...f, type: "text", placeholder: "Municipio, Departamento" };
+  const base = current && !CIUDADES_COLOMBIA.includes(current) ? [current, ...CIUDADES_COLOMBIA] : CIUDADES_COLOMBIA;
+  return { ...f, type: "select", options: [...base, OTRA_CIUDAD_LABEL] };
 }

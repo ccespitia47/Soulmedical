@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CATALOGO, addIntervalo, calcularProxima, findEntry, nombreVacuna, parseDosis, siguienteDosisLabel } from "./vaccineSchedule";
+import { CATALOGO, addIntervalo, calcularProxima, fechaAIso, findEntry, isoADmy, nombreVacuna, parseDosis, siguienteDosisLabel } from "./vaccineSchedule";
 
 describe("calcularProxima", () => {
   it("cuenta desde la dosis 1: Antirrábica POS da 0-3-7", () => {
@@ -218,5 +218,25 @@ describe("las vacunas parecidas no se confunden", () => {
     expect(siguienteDosisLabel("HEPATITIS A", ["1"])).toBeNull();
     expect(siguienteDosisLabel("HEPATITIS A + B", ["1"])).toBe("HEPATITIS A + B D2");
     expect(siguienteDosisLabel("NEUMOCOCO 23", ["1"])).toBeNull();
+  });
+});
+
+describe("formato de fechas dd/mm/aaaa", () => {
+  it("isoADmy convierte ISO válido y deja vacío lo demás", () => {
+    expect(isoADmy("2026-04-01")).toBe("01/04/2026");
+    expect(isoADmy("")).toBe("");
+    expect(isoADmy("ayer")).toBe("");
+    expect(isoADmy("01/04/2026")).toBe("");
+  });
+  it("fechaAIso entiende ISO y dd/mm/aaaa (y descarta fechas imposibles o texto libre)", () => {
+    expect(fechaAIso("2026-04-01")).toBe("2026-04-01");
+    expect(fechaAIso("01/04/2026")).toBe("2026-04-01");
+    expect(fechaAIso(" 1/4/2026 ")).toBe("2026-04-01");
+    expect(fechaAIso("31/02/2026")).toBe("");
+    expect(fechaAIso("pendiente")).toBe("");
+    expect(fechaAIso("")).toBe("");
+  });
+  it("ida y vuelta", () => {
+    expect(fechaAIso(isoADmy("2026-12-31"))).toBe("2026-12-31");
   });
 });

@@ -134,3 +134,27 @@ export function siguienteDosisLabel(vacuna: string, dosisRegistradas: string[]):
 export function nombreVacuna(label: string): string {
   return label.replace(/ · dosis única$/, "").replace(/ D\d+$/, "").trim();
 }
+
+/** yyyy-mm-dd → dd/mm/aaaa (formato en que se imprime). "" si no es una fecha ISO. */
+export function isoADmy(iso: string): string {
+  const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(iso);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
+}
+
+/** Lee una fecha ISO o dd/mm/aaaa (la celda "próxima" puede traer cualquiera de las dos) y devuelve ISO,
+ *  o "" si no es una fecha real. Sirve para COMPARAR fechas sin depender del formato almacenado. */
+export function fechaAIso(texto: string): string {
+  const t = texto.trim();
+  let y: number, mo: number, d: number;
+  let m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(t);
+  if (m) {
+    [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  } else {
+    m = /^([0-9]{1,2})\/([0-9]{1,2})\/([0-9]{4})$/.exec(t);
+    if (!m) return "";
+    [d, mo, y] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  }
+  const f = new Date(y, mo - 1, d);
+  if (f.getFullYear() !== y || f.getMonth() !== mo - 1 || f.getDate() !== d) return "";
+  return `${y}-${pad(mo)}-${pad(d)}`;
+}

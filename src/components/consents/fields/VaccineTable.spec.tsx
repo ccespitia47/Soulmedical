@@ -44,13 +44,13 @@ describe("VaccineTable con catálogo", () => {
   it("al elegir una vacuna fija nombre, dosis y fecha próxima", () => {
     const { select, last } = setup({ fechaConsentimiento: "2026-03-01" });
     fireEvent.change(select, { target: { value: "HEPATITIS B D1" } });
-    expect(last()).toMatchObject({ nombre: "HEPATITIS B D1", dosis: "1", proxima: "2026-04-01" });
+    expect(last()).toMatchObject({ nombre: "HEPATITIS B D1", dosis: "1", proxima: "01/04/2026" });
   });
 
   it("usa la fecha de la dosis 1 del historial para una dosis posterior", () => {
     const { select, last } = setup({ historial: [prev({})], fechaConsentimiento: "2026-03-01" });
     fireEvent.change(select, { target: { value: "TETANO D2" } });
-    expect(last()).toMatchObject({ nombre: "TETANO D2", dosis: "2", proxima: "2026-06-10" });
+    expect(last()).toMatchObject({ nombre: "TETANO D2", dosis: "2", proxima: "10/06/2026" });
   });
 
   it("deja la próxima vacía si la dosis 1 no está en el historial", () => {
@@ -95,7 +95,7 @@ describe("VaccineTable con catálogo", () => {
     const { select, last, cambiarFecha } = setup({ fechaConsentimiento: "2026-03-01" });
     fireEvent.change(select, { target: { value: "HEPATITIS B D1" } });
     cambiarFecha("2026-02-01");
-    expect(last().proxima).toBe("2026-03-01");
+    expect(last().proxima).toBe("01/03/2026");
   });
 
   it("calcula la próxima cuando la fecha del consentimiento llega después", () => {
@@ -103,7 +103,7 @@ describe("VaccineTable con catálogo", () => {
     fireEvent.change(select, { target: { value: "HEPATITIS B D1" } });
     expect(last().proxima).toBe("");
     cambiarFecha("2026-02-01");
-    expect(last().proxima).toBe("2026-03-01");
+    expect(last().proxima).toBe("01/03/2026");
   });
 
   it("no toca una próxima que el profesional editó a mano", () => {
@@ -119,7 +119,7 @@ describe("VaccineTable con catálogo", () => {
       historial: [prev({ aplicada: "2019-01-10" }), prev({ aplicada: "2026-01-10" })],
     });
     fireEvent.change(select, { target: { value: "TETANO D2" } });
-    expect(last().proxima).toBe("2026-06-10");
+    expect(last().proxima).toBe("10/06/2026");
   });
 
   it("ignora una dosis 1 del historial con fecha no ISO", () => {
@@ -137,7 +137,7 @@ describe("VaccineTable con catálogo", () => {
   it("reconoce '1ª' como dosis 1", () => {
     const { select, last } = setup({ historial: [prev({ dosis: "1ª" })] });
     fireEvent.change(select, { target: { value: "TETANO D2" } });
-    expect(last().proxima).toBe("2026-06-10");
+    expect(last().proxima).toBe("10/06/2026");
   });
 
   it("no confunde NEUMOCOCO 13 con 15 ni HEPATITIS A con A + B en el historial", () => {

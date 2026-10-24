@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { lookupPacienteApi, type ConsentRecordDto } from "../../../services/api";
+import { fechaAIso } from "../vaccines/vaccineSchedule";
 import type { ConsentDefinition, ConsentState } from "../engine/consentDefinition";
 
 export type VacunaPrevia = { vacuna: string; dosis: string; aplicada: string; proxima: string; vencida: boolean };
@@ -16,10 +17,14 @@ const MIN_DOC_LENGTH = 5;
 // Lista BLANCA: solo identidad y contacto del PACIENTE. Todo lo demás (fecha, profesional,
 // acompañante, respuestas de cuestionario...) NO se rellena aunque esté vacío.
 // La identidad es un bloque todo-o-nada para no mezclar "nombre de A con apellido de B".
-const IDENTITY_BLOCK = ["nombres", "apellidos", "tipoDoc"] as const;
+// `pacienteEmail` va DENTRO del bloque: el backend toma de ahí a quién se envía por correo el PDF firmado
+// (irreversible), así que nunca puede venir de un registro distinto al del nombre. `entidad` NO se rellena
+// (gemelo de `entidadRemite`: es propio de cada visita) y no debe entrar en IDENTITY_KEYS: su id colisiona
+// con la columna `entidad` del registro ("SOUL"/"SAI").
+const IDENTITY_BLOCK = ["nombres", "apellidos", "tipoDoc", "pacienteEmail"] as const;
 const FILLABLE_FIELDS = [
-  "ciudad", "pacienteFechaNac", "eps", "pacienteTelefono", "pacienteEmail",
-  "rh", "direccion", "genero", "entidad",
+  "ciudad", "pacienteFechaNac", "eps", "pacienteTelefono",
+  "rh", "direccion", "genero",
 ] as const;
 const IDENTITY_KEYS = ["tipoDoc", "nombres", "apellidos", "ciudad"] as const;
 
@@ -88,9 +93,21 @@ export function usePatientLookup(
   /** false (p. ej. al editar un consentimiento ya guardado): consulta y devuelve el historial (solo lectura),
    *  pero no rellena ningún campo ni emite aviso. */
   enabled = true,
-): { aviso: Aviso | null; historial: VacunaPrevia[]; deshacer: () => void } {
+  /** Id del consentimiento que se está editando: no cuenta como historial del paciente. */
+  excludeId?: string,
+): {
+  aviso: Aviso | null;
+  historial: VacunaPrevia[];
+  /** Documento al que pertenece `historial` (null si no hay uno vigente). */
+  historialDoc: string | null;
+  /** La consulta del documento en pantalla falló (red, 401, 5xx): NO equivale a "sin historial". */
+  consultaFallida: boolean;
+  deshacer: () => void;
+} {
   // El resultado va ligado al documento que lo originó: al cambiar numDoc deja de verse sin setState en el efecto.
-  const [result, setResult] = useState<{ doc: string; aviso: Aviso | null; historial: VacunaPrevia[] } | null>(null);
+  const [result, setResult] = useState<{
+    doc: string; aviso: Aviso | null; historial: VacunaPrevia[]; fallo?: boolean;
+  } | null>(null);
 
   const stateRef = useRef(state);
   const onChangeRef = useRef(onChange);
@@ -116,11 +133,20 @@ export function usePatientLookup(
 
     let cancelled = false;
     const timer = setTimeout(async () => {
-      const { data } = await lookupPacienteApi(numDoc, entidad);
-      if (cancelled || !data) return;
+      const { data, error } = await lookupPacienteApi(numDoc, entidad, excludeId);
+      if (cancelled) return;
+      if (error || !data) {
+        // Sin esto, un fallo se lee como "este paciente no tiene vacunas previas".
+        setResult({ doc: numDoc, aviso: null, historial: [], fallo: true });
+        return;
+      }
 
       const hoy = hoyIso();
-      const historial = (data.vacunas ?? []).map((v) => ({ ...v, vencida: v.proxima !== "" && v.proxima <= hoy }));
+      // `proxima` puede venir en ISO (registros antiguos) o dd/mm/aaaa: se compara siempre en ISO.
+      const historial = (data.vacunas ?? []).map((v) => {
+        const prox = fechaAIso(v.proxima);
+        return { ...v, vencida: prox !== "" && prox <= hoy };
+      });
 
       const rec = data.ultimo;
       if (!enabled || !rec) {
@@ -160,7 +186,7 @@ export function usePatientLookup(
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [numDoc, entidad, enabled]);
+  }, [numDoc, entidad, enabled, excludeId]);
 
   const deshacer = useCallback(() => {
     revertFill(filledRef, previousRef, stateRef, onChangeRef);
@@ -168,5 +194,11 @@ export function usePatientLookup(
   }, []);
 
   const vigente = result && result.doc === numDoc && numDoc.length >= MIN_DOC_LENGTH ? result : null;
-  return { aviso: enabled ? (vigente?.aviso ?? null) : null, historial: vigente?.historial ?? [], deshacer };
+  return {
+    aviso: enabled ? (vigente?.aviso ?? null) : null,
+    historial: vigente?.historial ?? [],
+    historialDoc: vigente && !vigente.fallo ? vigente.doc : null,
+    consultaFallida: !!vigente?.fallo,
+    deshacer,
+  };
 }

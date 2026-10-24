@@ -85,3 +85,6 @@ export const CIUDADES_COLOMBIA: string[] = [
   "Yumbo, Valle del Cauca",
   "Zipaquirá, Cundinamarca",
 ];
+
+/** Opción final del desplegable: habilita escribir a mano un municipio que no esté en la lista parcial. */
+export const OTRA_CIUDAD_LABEL = "Otra ciudad";
