@@ -82,10 +82,12 @@ export default function VaccineTable({ columns, onChange, initialRows, historial
   // Filas cuyo nombre/dosis se eligieron desde una entrada "· sugerida" (basada en el historial de un
   // documento): paralelo a `rows`. Guarda lo elegido para revertir solo lo que sigue siendo eso.
   const [sugerida, setSugerida] = useState<(Elegida | null)[]>(() => rows.map(() => null));
-  const [revertida, setRevertida] = useState(false);
+  const [revertida, setRevertida] = useState<string[]>([]);
   const docPrevio = useRef(historialDoc);
 
-  const proximaDe = (entry: EsquemaEntry, base: string) => isoADmy(calcularProxima(entry, base));
+  const setRevertidas = (despues: Row[], antes: Row[]) =>
+    setRevertida(antes.filter((r, i) => (r.nombre ?? "") !== "" && (despues[i].nombre ?? "") === "").map((r) => r.nombre));
+  const proximaDe = (entry: EsquemaEntry, base: string) => isoADmy(calcularProxima(entry, base, fechaConsentimiento));
 
   const baseDe = (entry: EsquemaEntry) =>
     entry.dosis === "1" ? fechaConsentimiento : fechaDosis1(historial, entry.vacuna);
@@ -114,10 +116,10 @@ export default function VaccineTable({ columns, onChange, initialRows, historial
             proxima: derivada[i] ? "" : r.proxima,
           };
         });
+        setRevertidas(actuales, rows);
         setLibre(lib);
         setDerivada(der);
         setSugerida(sugerida.map(() => null));
-        setRevertida(true);
         cambio = true;
       }
     }
@@ -148,7 +150,7 @@ export default function VaccineTable({ columns, onChange, initialRows, historial
     setLibre((l) => l.map((x, idx) => (idx === i ? value === OTRA_LABEL : x)));
     setDerivada((d) => d.map((x, idx) => (idx === i ? !!entry : x)));
     setSugerida((g) => g.map((x, idx) => (idx === i ? (entry && sug.includes(entry.label) ? { nombre: entry.label, dosis: entry.dosis } : null) : x)));
-    setRevertida(false);
+    setRevertida([]);
     // Cambiar de vacuna descarta dosis y próxima de la anterior (también al pasar a "Otra" o a vacío).
     const next = rows.map((r, idx) =>
       idx !== i
@@ -191,9 +193,9 @@ export default function VaccineTable({ columns, onChange, initialRows, historial
 
   return (
     <div>
-      {revertida && (
+      {revertida.length > 0 && (
         <p role="status" className="mb-2 rounded-md bg-amber-50 px-3 py-2 text-[12px] text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
-          Cambió el documento del paciente: se quitó la vacuna que se había elegido como sugerida. Vuelve a elegirla si corresponde.
+          Se quitó {revertida.join(", ")}: pertenecía a otro documento. Vuelve a elegirla si corresponde.
         </p>
       )}
       <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">

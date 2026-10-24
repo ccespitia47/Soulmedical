@@ -116,9 +116,14 @@ export function parseDosis(texto: string): number | null {
   return m ? parseInt(m[1], 10) : null;
 }
 
-export function calcularProxima(entry: EsquemaEntry, fechaDosis1: string): string {
+/** Próxima fecha (ISO) desde la dosis 1. Si se pasa `fechaConsentimiento` válida y la calculada es anterior o
+ *  IGUAL a ella (dosis tardía), devuelve "": una cita vencida impresa en un documento firmado hoy sería un dato
+ *  falso; vacía, el profesional escribe la cita real. */
+export function calcularProxima(entry: EsquemaEntry, fechaDosis1: string, fechaConsentimiento = ""): string {
   if (entry.esUltima || !entry.intervalo || !ES_ISO.test(fechaDosis1)) return "";
-  return addIntervalo(fechaDosis1, entry.intervalo);
+  const proxima = addIntervalo(fechaDosis1, entry.intervalo);
+  if (ES_ISO.test(fechaConsentimiento) && proxima <= fechaConsentimiento) return "";
+  return proxima;
 }
 
 export function siguienteDosisLabel(vacuna: string, dosisRegistradas: string[]): string | null {

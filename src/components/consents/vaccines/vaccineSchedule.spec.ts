@@ -240,3 +240,23 @@ describe("formato de fechas dd/mm/aaaa", () => {
     expect(fechaAIso(isoADmy("2026-12-31"))).toBe("2026-12-31");
   });
 });
+
+describe("calcularProxima con fecha de referencia (dosis tardía)", () => {
+  const hepB1 = findEntry("HEPATITIS B D1")!; // +1 mes
+  it("a tiempo: calculada posterior a la del consentimiento produce fecha", () => {
+    expect(calcularProxima(hepB1, "2026-03-01", "2026-03-15")).toBe("2026-04-01");
+  });
+  it("tardía: calculada anterior a la del consentimiento queda vacía", () => {
+    expect(calcularProxima(hepB1, "2026-03-01", "2026-06-01")).toBe("");
+  });
+  it("límite: calculada == fecha del consentimiento queda vacía", () => {
+    expect(calcularProxima(hepB1, "2026-03-01", "2026-04-01")).toBe("");
+  });
+  it("un día después del límite sí produce fecha", () => {
+    expect(calcularProxima(hepB1, "2026-03-01", "2026-03-31")).toBe("2026-04-01");
+  });
+  it("sin fecha de consentimiento válida no compara (comportamiento previo)", () => {
+    expect(calcularProxima(hepB1, "2026-03-01")).toBe("2026-04-01");
+    expect(calcularProxima(hepB1, "2026-03-01", "")).toBe("2026-04-01");
+  });
+});

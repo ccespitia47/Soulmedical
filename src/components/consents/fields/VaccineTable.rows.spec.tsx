@@ -197,3 +197,22 @@ describe("VaccineTable: una vacuna elegida desde una sugerencia no sobrevive al 
     expect(selectDe(1).value).toBe("");
   });
 });
+
+describe("VaccineTable: próxima en el pasado queda vacía", () => {
+  it("dosis tardía: la próxima calculada anterior a la fecha del consentimiento no se imprime", () => {
+    const onChange = vi.fn();
+    render(<VaccineTable columns={columns} onChange={onChange} historial={[prev({ aplicada: "2025-01-10" })]} historialDoc="123" fechaConsentimiento="2026-03-01" />);
+    fireEvent.change(selectDe(1), { target: { value: "TETANO D2" } }); // 2025-01-10 + 5m = 2025-06-10 < hoy
+    expect(proximaDe(1).value).toBe("");
+  });
+  it("el aviso de reversión nombra la vacuna quitada", () => {
+    const onChange = vi.fn();
+    const ui = (doc: string | null, h: VacunaPrevia[]) => (
+      <VaccineTable columns={columns} onChange={onChange} historial={h} historialDoc={doc} fechaConsentimiento="2026-03-01" />
+    );
+    const { rerender } = render(ui("12345", [prev()]));
+    fireEvent.change(selectDe(1), { target: { value: "TETANO D2" } });
+    rerender(ui(null, []));
+    expect(screen.getByRole("status").textContent).toMatch(/Se quitó TETANO D2/);
+  });
+});
