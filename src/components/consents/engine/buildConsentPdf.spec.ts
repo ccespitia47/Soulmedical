@@ -139,13 +139,14 @@ describe("buildConsentPdf · Vacunación", () => {
     expect(html).toMatch(/<tr><td[^>]*colspan="4"[^>]*>[\s\S]*?afirmativa/i);
   });
 
-  it("marca la casilla respondida dentro de su cuadro, no en la línea base heredada", () => {
+  it("dibuja la marca de la casilla sin texto, para que no pueda desplazarse", () => {
     const def = vacunacionDefinition("soul");
     const a = def.sections.find((s) => s.id === "seccionA-antineumococica");
     const qId = a && a.kind === "tristate" ? a.questions[0].id : "";
     const html = buildConsentPdf(def, { [qId]: "No" });
-    // La X vive en un <div> con tipografía propia (font:700 9px/10px …),
-    // no en un <span> inline que heredaría los 16px del body del iframe.
-    expect(html).toMatch(/<div style="width:12px;height:12px;[^"]*">X<\/div>/);
+    // La marca es un bloque con `background`, no un glifo: html2canvas la
+    // posiciona por caja, no por línea base. Ver nota en `boxCell`.
+    expect(html).toContain("background:#111");
+    expect(html).not.toMatch(/>X<\/(div|span)>/);
   });
 });

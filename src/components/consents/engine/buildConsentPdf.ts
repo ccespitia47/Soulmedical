@@ -37,18 +37,28 @@ const BOX_TD = `padding:4px 2px;border:${BORDER};font-size:9px;line-height:1;tex
 const BAR = `padding:4px 6px;border:${BORDER};background:#5b636b;color:#fff;font-size:10px;line-height:1.3;font-weight:700;`;
 const BLOCK = `margin-bottom:10px;`;
 
-/** Tipografía propia de la casilla: evita heredar la línea base del contenedor
- *  (ver nota en `BOX_TD`) y mantiene la X centrada en el cuadro. */
-const BOX_FONT = "font:700 9px/10px Arial,Helvetica,sans-serif;color:#111;";
+// La marca de "casilla marcada" NO se dibuja con texto.
+//
+// Antes era una "X" dentro de un cuadro de 12px. En el PDF de producción ese
+// glifo aparecía desplazado abajo y a la izquierda, colgando fuera del cuadro
+// (html2canvas calcula la posición del texto a partir de métricas de fuente y
+// de la línea base del contenedor, y ahí se desalineaba). No se reproduce en
+// Chrome headless a DPR 1, 1.25 ni 1.5, así que en vez de perseguir el caso
+// se elimina la dependencia: la marca es ahora un bloque con `background`,
+// la misma primitiva con la que se dibujan los cuadros vacíos y las barras de
+// sección — que siempre salen en su sitio — y no puede desplazarse.
+const BOX_SIZE = "width:12px;height:12px;";
+const BOX_FRAME = `${BOX_SIZE}border:${BORDER};padding:2px;`;
+const BOX_MARK = `<span style="display:block;width:100%;height:100%;background:#111;"></span>`;
 
 /** Casilla centrada en su celda (bloque: no depende de la línea base del td). */
 function boxCell(checked: boolean): string {
-  return `<div style="width:12px;height:12px;border:${BORDER};margin:0 auto;${BOX_FONT}text-align:center;">${checked ? "X" : ""}</div>`;
+  return `<div style="${BOX_FRAME}margin:0 auto;">${checked ? BOX_MARK : ""}</div>`;
 }
 
 /** Casilla en línea con su etiqueta (listas de condiciones). */
 function boxInline(checked: boolean): string {
-  return `<span style="display:inline-block;width:12px;height:12px;border:${BORDER};${BOX_FONT}text-align:center;vertical-align:middle;">${checked ? "X" : ""}</span>`;
+  return `<span style="display:inline-block;${BOX_FRAME}vertical-align:middle;">${checked ? BOX_MARK : ""}</span>`;
 }
 
 /** Valor diligenciado, en negrita (sin subrayado, evita artefactos en html2canvas). */
