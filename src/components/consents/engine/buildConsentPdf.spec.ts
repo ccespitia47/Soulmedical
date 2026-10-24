@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { buildConsentPdf } from "./buildConsentPdf";
-import type { ConsentDefinition } from "./consentDefinition";
+import { buildConsentPdf, groupSections } from "./buildConsentPdf";
+import type { ConsentDefinition, ConsentSection } from "./consentDefinition";
+import { vacunacionDefinition } from "../definitions/vacunacion";
+
+const QUESTION_HEADER = "Responda las preguntas marcando las casillas correspondientes.";
 
 const def: ConsentDefinition = {
   meta: { tipo: "vih", titulo: "Consentimiento VIH", entidadNombre: "SOULMEDICAL", displayName: "SOUL", codigo: "C1", version: "2", logo: "" },
@@ -77,5 +80,72 @@ describe("buildConsentPdf", () => {
     expect(html).toContain("Asma");
     expect(html).toContain("Fiebre amarilla");
     expect(html).toContain("2024-01-01");
+  });
+
+  it("marca cada bloque y protege los encabezados para la paginación", () => {
+    const html = buildConsentPdf(def, { nombres: "Juan" });
+    expect(html).toContain("data-pdf-block");
+    // La barra "Consentimiento informado" no puede quedar sola al pie.
+    expect(html).toMatch(/data-pdf-keep-next[^>]*>[\s\S]{0,120}CONSENTIMIENTO INFORMADO/i);
+  });
+});
+
+describe("groupSections", () => {
+  const tri = (id: string, title?: string): ConsentSection => ({
+    id,
+    kind: "tristate",
+    title,
+    questions: [{ id: `${id}q`, num: "1", text: "¿?", thirdLabel: "No está seguro" }],
+  });
+  const fields = (id: string, title?: string): ConsentSection => ({
+    id,
+    kind: "fields",
+    title,
+    fields: [{ id: `${id}f`, label: "Fecha", type: "text" }],
+  });
+
+  it("fusiona tristates consecutivos sin título y los campos intercalados", () => {
+    const groups = groupSections([tri("a"), fields("nota"), tri("b")]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].kind).toBe("tristate-group");
+  });
+
+  it("un título empieza un grupo nuevo", () => {
+    const groups = groupSections([tri("a"), tri("b", "Sección B")]);
+    expect(groups).toHaveLength(2);
+  });
+
+  it("no absorbe un `fields` que no está entre dos tristates", () => {
+    const groups = groupSections([tri("a"), fields("suelto")]);
+    expect(groups).toHaveLength(2);
+    expect(groups[1].kind).toBe("single");
+  });
+});
+
+// Regresión del formato impreso: la Sección A de Vacunación está partida en
+// varias secciones del motor (tétanos / condiciones / antineumocócica / fecha /
+// herpes). Antes cada tristate emitía su propia tabla con cabecera, así que la
+// fila "Responda las preguntas…" salía repetida entre pregunta y pregunta.
+describe("buildConsentPdf · Vacunación", () => {
+  it("emite una sola cabecera de preguntas por sección (A, B y virus vivos)", () => {
+    const def = vacunacionDefinition("soul");
+    const html = buildConsentPdf(def, {});
+    expect(html.split(QUESTION_HEADER).length - 1).toBe(3);
+  });
+
+  it("la nota «¿cuándo?» va dentro de la tabla, no en una tabla aparte", () => {
+    const def = vacunacionDefinition("soul");
+    const html = buildConsentPdf(def, {});
+    expect(html).toMatch(/<tr><td[^>]*colspan="4"[^>]*>[\s\S]*?afirmativa/i);
+  });
+
+  it("marca la casilla respondida dentro de su cuadro, no en la línea base heredada", () => {
+    const def = vacunacionDefinition("soul");
+    const a = def.sections.find((s) => s.id === "seccionA-antineumococica");
+    const qId = a && a.kind === "tristate" ? a.questions[0].id : "";
+    const html = buildConsentPdf(def, { [qId]: "No" });
+    // La X vive en un <div> con tipografía propia (font:700 9px/10px …),
+    // no en un <span> inline que heredaría los 16px del body del iframe.
+    expect(html).toMatch(/<div style="width:12px;height:12px;[^"]*">X<\/div>/);
   });
 });

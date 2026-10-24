@@ -3,7 +3,23 @@ import html2canvas from "html2canvas";
 
 type PdfFromCanvasOptions = {
   margin?: number;
+  /**
+   * Posiciones (en px del canvas, desde arriba) donde SÍ se puede cortar entre
+   * páginas: inicio de cada fila de tabla, párrafo y bloque. Sin ellas la
+   * paginación corta cada 287mm a ciegas y parte filas y títulos por la mitad.
+   */
+  breakOffsets?: number[];
 };
+
+/** Mayor corte seguro que cae dentro de (start, limit]; `null` si no hay. */
+function lastBreakWithin(breaks: number[], start: number, limit: number): number | null {
+  let found: number | null = null;
+  for (const b of breaks) {
+    if (b > limit) break; // `breaks` viene ordenado ascendentemente
+    if (b > start) found = b;
+  }
+  return found;
+}
 
 /**
  * Renderiza un canvas en un jsPDF paginado en A4 portrait.
@@ -11,6 +27,10 @@ type PdfFromCanvasOptions = {
  * El ancho del canvas se ajusta al ancho útil de la página A4 menos márgenes;
  * después el contenido se reparte en N páginas según su altura. Esto evita
  * que documentos largos se "aplasten" en una sola página o se corten.
+ *
+ * Con `breakOffsets` cada página termina en el último corte seguro que quepa,
+ * así que ninguna fila ni bloque queda partido entre dos hojas; el hueco que
+ * sobra al pie se deja en blanco.
  */
 function canvasToPdf(canvas: HTMLCanvasElement, opts: PdfFromCanvasOptions = {}): jsPDF {
   // Margen pequeño (5mm) para que el borde exterior de la tabla del template
@@ -36,15 +56,41 @@ function canvasToPdf(canvas: HTMLCanvasElement, opts: PdfFromCanvasOptions = {})
     return pdf;
   }
 
+  // Cortes seguros expresados en mm del documento ya escalado, ordenados y
+  // sin duplicados (dos elementos pueden empezar en la misma y).
+  const pxToMm = usableW / canvas.width;
+  const breaks = Array.from(
+    new Set(
+      (opts.breakOffsets ?? [])
+        .map((px) => Math.round(px * pxToMm * 100) / 100)
+        .filter((mm) => mm > 0 && mm < totalH),
+    ),
+  ).sort((a, b) => a - b);
+
   // Si el contenido excede una página, paginamos manteniendo el ratio.
-  let yOffset = 0;
-  while (yOffset < totalH) {
-    pdf.addImage(imgData, "JPEG", margin, margin - yOffset, usableW, totalH);
+  let start = 0;
+  // Tolerancia subpíxel: por debajo de ~0.2mm no queda contenido real que
+  // justifique otra página (evita una hoja final en blanco).
+  while (start < totalH - 0.2) {
+    const limit = start + usableH;
+    let end = Math.min(limit, totalH);
+    if (limit < totalH) {
+      const safe = lastBreakWithin(breaks, start, limit);
+      // Si no hay ningún corte seguro en la página, el bloque es más alto que
+      // una hoja: cortamos en el límite para no entrar en bucle infinito.
+      if (safe !== null) end = safe;
+    }
+
+    pdf.addImage(imgData, "JPEG", margin, margin - start, usableW, totalH);
+    // Tapamos en blanco lo que no pertenece a esta página: el margen superior
+    // y todo lo que quede por debajo del corte elegido.
     pdf.setFillColor(255, 255, 255);
     pdf.rect(0, 0, pageW, margin, "F");
-    pdf.rect(0, margin + usableH, pageW, pageH - (margin + usableH), "F");
-    yOffset += usableH;
-    if (yOffset < totalH) pdf.addPage();
+    const printedH = end - start;
+    pdf.rect(0, margin + printedH, pageW, pageH - (margin + printedH), "F");
+
+    start = end;
+    if (start < totalH - 0.2) pdf.addPage();
   }
   return pdf;
 }
@@ -73,6 +119,46 @@ function waitForImages(doc: Document, timeoutMs = 8000): Promise<void> {
     // el render indefinidamente.
     new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
   ]);
+}
+
+/** Factor de muestreo de html2canvas: 1 px de layout → `CAPTURE_SCALE` px de
+ *  canvas. Los cortes de página se miden en px de layout, así que hay que
+ *  escalarlos con esta misma constante antes de pasarlos a `canvasToPdf`. */
+const CAPTURE_SCALE = 1.5;
+
+/** Selector de los elementos ante los cuales se puede abrir página. */
+const BREAK_SELECTOR = "[data-pdf-block], [data-pdf-break], tr, p, li";
+
+/**
+ * Devuelve las `y` (px de layout, relativas al inicio del contenido) donde el
+ * documento se puede partir entre páginas: el borde superior de cada bloque,
+ * fila de tabla o párrafo.
+ *
+ * Se descartan los cortes que caerían justo debajo de un encabezado marcado
+ * con `data-pdf-keep-next` (barra de sección, fila de cabecera de tabla): si
+ * la página terminara ahí, el título quedaría solo al pie y su contenido
+ * empezaría en la hoja siguiente.
+ */
+function collectBreakOffsets(body: HTMLElement): number[] {
+  const bodyTop = body.getBoundingClientRect().top;
+
+  // Zonas prohibidas: desde el inicio de cada encabezado hasta un poco después
+  // de su base, para que arrastre consigo al menos la primera fila/párrafo.
+  const KEEP_WITH_NEXT_PX = 30;
+  const forbidden: Array<[number, number]> = [];
+  for (const el of Array.from(body.querySelectorAll<HTMLElement>("[data-pdf-keep-next]"))) {
+    const r = el.getBoundingClientRect();
+    forbidden.push([r.top - bodyTop + 0.5, r.bottom - bodyTop + KEEP_WITH_NEXT_PX]);
+  }
+
+  const offsets: number[] = [];
+  for (const el of Array.from(body.querySelectorAll<HTMLElement>(BREAK_SELECTOR))) {
+    const top = el.getBoundingClientRect().top - bodyTop;
+    if (top <= 0) continue;
+    if (forbidden.some(([from, to]) => top > from && top < to)) continue;
+    offsets.push(top);
+  }
+  return offsets.sort((a, b) => a - b);
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -172,13 +258,9 @@ export async function htmlToPdfBase64(html: string): Promise<string> {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     const all = body.querySelectorAll("*");
     let maxBottom = 0;
-    let bottomEl: Element | null = null;
     for (const el of Array.from(all)) {
       const r = (el as HTMLElement).getBoundingClientRect();
-      if (r.bottom > maxBottom) {
-        maxBottom = r.bottom;
-        bottomEl = el;
-      }
+      if (r.bottom > maxBottom) maxBottom = r.bottom;
     }
     // Usamos solo maxBottom (rect real de descendientes) y body.scrollHeight.
     // NO usamos doc.documentElement.scrollHeight porque puede heredar el alto
@@ -189,8 +271,13 @@ export async function htmlToPdfBase64(html: string): Promise<string> {
     const captureH = measuredH + 60;
     iframe.style.height = `${captureH}px`;
 
+    // Puntos donde se puede partir el documento sin romper nada (ver
+    // `collectBreakOffsets`). Se miden ANTES de html2canvas, sobre el layout
+    // real del iframe, y se escalan al tamaño del canvas.
+    const breakOffsetsPx = collectBreakOffsets(body);
+
     const canvas = await html2canvas(body, {
-      scale: 1.5,
+      scale: CAPTURE_SCALE,
       useCORS: true,
       allowTaint: true,
       backgroundColor: "#ffffff",
@@ -214,7 +301,9 @@ export async function htmlToPdfBase64(html: string): Promise<string> {
     });
 
 
-    const pdf = canvasToPdf(canvas);
+    const pdf = canvasToPdf(canvas, {
+      breakOffsets: breakOffsetsPx.map((px) => px * CAPTURE_SCALE),
+    });
     const arrayBuffer = pdf.output("arraybuffer");
     return arrayBufferToBase64(arrayBuffer);
   } finally {
