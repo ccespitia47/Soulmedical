@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { ConsentsController } from './consents.controller';
 
 describe('ConsentsController', () => {
@@ -25,6 +26,30 @@ describe('ConsentsController', () => {
       actor: { id: 9, name: 'Sara', role: 'admin' },
       action: 'CONSENT_PATIENT_LOOKUP', targetType: 'CONSENT_PATIENT', targetId: '1009',
     }));
+  });
+
+  const req: any = { user: { id: '9' } };
+  it.each(['FOO', 'sai', 'soul', ' SAI'])('GET /consents/paciente entidad invalida %p -> 400 sin consultar ni auditar', async (e) => {
+    await expect(ctrl.paciente('1', e, req)).rejects.toBeInstanceOf(BadRequestException);
+    expect(service.lookupPaciente).not.toHaveBeenCalled();
+    expect(audit.log).not.toHaveBeenCalled();
+  });
+  it('GET /consents/paciente entidad vacia se trata como omitida (null)', async () => {
+    service.lookupPaciente.mockResolvedValue({ ultimo: null, vacunas: [] });
+    await ctrl.paciente('1', '', req);
+    expect(service.lookupPaciente).toHaveBeenCalledWith('1', null);
+  });
+  it.each([undefined, '', '   '])('GET /consents/paciente numDoc vacio %p -> 400', async (n) => {
+    await expect(ctrl.paciente(n as any, 'SOUL', req)).rejects.toBeInstanceOf(BadRequestException);
+    expect(service.lookupPaciente).not.toHaveBeenCalled();
+    expect(audit.log).not.toHaveBeenCalled();
+  });
+  it.each([{ '$ne': 'x' }, ['1', '2'], 5])('GET /consents/paciente numDoc no-string %j -> 400', async (n) => {
+    await expect(ctrl.paciente(n as any, 'SOUL', req)).rejects.toBeInstanceOf(BadRequestException);
+    expect(service.lookupPaciente).not.toHaveBeenCalled();
+  });
+  it('entidad repetida (array) -> 400', async () => {
+    await expect(ctrl.paciente('1', ['SAI', 'SOUL'] as any, req)).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('GET /consents/paciente sin entidad usa null', async () => {

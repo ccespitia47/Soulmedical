@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards,
+  BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/permissions.guard';
@@ -46,12 +46,22 @@ export class ConsentsController {
 
   @Get('paciente')
   async paciente(
-    @Query('numDoc') numDoc: string | undefined,
-    @Query('entidad') entidad: string | undefined,
+    @Query('numDoc') numDoc: unknown,
+    @Query('entidad') entidad: unknown,
     @Request() req: AuthRequest,
   ) {
-    const doc = (numDoc ?? '').trim();
-    const ent = entidad === 'SAI' || entidad === 'SOUL' ? entidad : null;
+    if (typeof numDoc !== 'string' || !numDoc.trim()) {
+      throw new BadRequestException('numDoc es obligatorio y debe ser texto');
+    }
+    const doc = numDoc.trim();
+    // Ausente o vacío = sin entidad (null). Presente: debe ser exactamente SAI o SOUL.
+    let ent: 'SAI' | 'SOUL' | null = null;
+    if (entidad !== undefined && entidad !== '') {
+      if (entidad !== 'SAI' && entidad !== 'SOUL') {
+        throw new BadRequestException('entidad debe ser SAI o SOUL');
+      }
+      ent = entidad;
+    }
     const result = await this.service.lookupPaciente(doc, ent);
     await this.audit.log({
       actor: {
