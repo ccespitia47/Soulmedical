@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CATALOGO, addIntervalo, calcularProxima, findEntry, nombreVacuna, siguienteDosisLabel } from "./vaccineSchedule";
+import { CATALOGO, addIntervalo, calcularProxima, findEntry, nombreVacuna, parseDosis, siguienteDosisLabel } from "./vaccineSchedule";
 
 describe("calcularProxima", () => {
   it("cuenta desde la dosis 1: Antirrábica POS da 0-3-7", () => {
@@ -175,5 +175,48 @@ describe("nombreVacuna", () => {
   });
   it("devuelve el nombre de vacuna de cada entrada del catálogo", () => {
     for (const e of CATALOGO) expect(nombreVacuna(e.label)).toBe(e.vacuna);
+  });
+});
+
+describe("calcularProxima valida el formato de la base", () => {
+  it.each(["15/03/2024", "2026-1-5", "ayer", "2026-03-01T10:00"])("base %s no es ISO → vacío", (base) => {
+    expect(calcularProxima(findEntry("HEPATITIS B D1")!, base)).toBe("");
+  });
+});
+
+describe("parseDosis", () => {
+  it.each([["1", 1], ["1ª", 1], [" 2 ", 2], ["3º", 3], ["1a", 1]])("%s → %i", (txt, n) => {
+    expect(parseDosis(txt)).toBe(n);
+  });
+  it.each(["1/2", "1.5", "1 refuerzo", "única", "", "abc"])("%s no se reconoce → null", (txt) => {
+    expect(parseDosis(txt)).toBeNull();
+  });
+});
+
+describe("siguienteDosisLabel con dosis en texto", () => {
+  it("entiende 1ª y no se deja engañar por 1/2", () => {
+    expect(siguienteDosisLabel("HEPATITIS B", ["1ª"])).toBe("HEPATITIS B D2");
+    expect(siguienteDosisLabel("HEPATITIS B", ["1/2"])).toBe("HEPATITIS B D1");
+  });
+});
+
+describe("las vacunas parecidas no se confunden", () => {
+  it.each([
+    ["NEUMOCOCO 13 D1", "NEUMOCOCO 13"],
+    ["NEUMOCOCO 15 D1", "NEUMOCOCO 15"],
+    ["NEUMOCOCO 23 D1", "NEUMOCOCO 23"],
+    ["HEPATITIS A D1", "HEPATITIS A"],
+    ["HEPATITIS A + B D1", "HEPATITIS A + B"],
+    ["DPT-a D1", "DPT-a"],
+    ["DPT-a + POLIO D1", "DPT-a + POLIO"],
+    ["NEUMOCOCO 13 · dosis única", "NEUMOCOCO 13"],
+  ])("%s → %s", (label, vacuna) => {
+    expect(nombreVacuna(label)).toBe(vacuna);
+    expect(findEntry(label)!.vacuna).toBe(vacuna);
+  });
+  it("siguienteDosisLabel distingue por nombre exacto", () => {
+    expect(siguienteDosisLabel("HEPATITIS A", ["1"])).toBeNull();
+    expect(siguienteDosisLabel("HEPATITIS A + B", ["1"])).toBe("HEPATITIS A + B D2");
+    expect(siguienteDosisLabel("NEUMOCOCO 23", ["1"])).toBeNull();
   });
 });

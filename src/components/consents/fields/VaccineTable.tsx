@@ -1,11 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { VaccineTableColumn } from "../config/entityConfig";
 import {
   CATALOGO,
   OTRA_LABEL,
   calcularProxima,
   findEntry,
+  ES_ISO,
   nombreVacuna,
+  parseDosis,
   siguienteDosisLabel,
 } from "../vaccines/vaccineSchedule";
 import type { VacunaPrevia } from "../patient/usePatientLookup";
@@ -35,10 +37,11 @@ const norm = (s: string) => nombreVacuna(s).trim().toUpperCase();
 /** Fecha de la dosis 1 de esa vacuna según el historial ("" si no hay registro). */
 function fechaDosis1(historial: VacunaPrevia[], vacuna: string): string {
   const fechas = historial
-    .filter((h) => norm(h.vacuna) === vacuna.toUpperCase() && parseInt(h.dosis, 10) === 1 && h.aplicada)
+    .filter((h) => norm(h.vacuna) === vacuna.toUpperCase() && parseDosis(h.dosis) === 1 && ES_ISO.test(h.aplicada))
     .map((h) => h.aplicada)
     .sort();
-  return fechas[0] ?? "";
+  // Si el esquema se reinició, la serie vigente empieza en la dosis 1 más reciente.
+  return fechas[fechas.length - 1] ?? "";
 }
 
 /** Entradas sugeridas (siguiente dosis por cada vacuna del esquema ya registrada en el historial). */
@@ -66,6 +69,30 @@ export default function VaccineTable({ columns, onChange, initialRows, historial
     rows.map((r) => (r.nombre ?? "") !== "" && !findEntry(r.nombre)),
   );
 
+  // Filas cuya `proxima` calculó el componente (no la tecleó el profesional): se recalculan
+  // si cambia la fecha del consentimiento; una edición manual la saca de aquí.
+  const [derivada, setDerivada] = useState<boolean[]>(() => rows.map(() => false));
+
+  const baseDe = (entry: NonNullable<ReturnType<typeof findEntry>>) =>
+    entry.dosis === "1" ? fechaConsentimiento : fechaDosis1(historial, entry.vacuna);
+
+  useEffect(() => {
+    let cambio = false;
+    const next = rows.map((r, i) => {
+      const entry = derivada[i] ? findEntry(r.nombre ?? "") : undefined;
+      if (!entry) return r;
+      const proxima = calcularProxima(entry, baseDe(entry));
+      if (proxima === r.proxima) return r;
+      cambio = true;
+      return { ...r, proxima };
+    });
+    if (cambio) {
+      setRows(next);
+      emit(next);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fechaConsentimiento, historial, rows, derivada]);
+
   const opciones = useMemo(() => {
     const sug = sugeridas(historial);
     const entradas = [...sug, ...CATALOGO.map((e) => e.label).filter((l) => !sug.includes(l))];
@@ -73,20 +100,16 @@ export default function VaccineTable({ columns, onChange, initialRows, historial
   }, [historial]);
 
   const elegir = (i: number, value: string) => {
-    if (value === OTRA_LABEL) {
-      setLibre((l) => l.map((x, idx) => (idx === i ? true : x)));
-      setCell(i, "nombre", "");
-      return;
-    }
-    setLibre((l) => l.map((x, idx) => (idx === i ? false : x)));
     const entry = findEntry(value);
-    if (!entry) {
-      setCell(i, "nombre", "");
-      return;
-    }
-    const base = entry.dosis === "1" ? fechaConsentimiento : fechaDosis1(historial, entry.vacuna);
+    setLibre((l) => l.map((x, idx) => (idx === i ? value === OTRA_LABEL : x)));
+    setDerivada((d) => d.map((x, idx) => (idx === i ? !!entry : x)));
+    // Cambiar de vacuna descarta dosis y próxima de la anterior (también al pasar a "Otra" o a vacío).
     const next = rows.map((r, idx) =>
-      idx === i ? { ...r, nombre: entry.label, dosis: entry.dosis, proxima: calcularProxima(entry, base) } : r,
+      idx !== i
+        ? r
+        : entry
+          ? { ...r, nombre: entry.label, dosis: entry.dosis, proxima: calcularProxima(entry, baseDe(entry)) }
+          : { ...r, nombre: "", dosis: "", proxima: "" },
     );
     setRows(next);
     emit(next);
@@ -98,6 +121,7 @@ export default function VaccineTable({ columns, onChange, initialRows, historial
   };
 
   const setCell = (i: number, colId: string, v: string) => {
+    if (colId === "proxima") setDerivada((d) => d.map((x, idx) => (idx === i ? false : x)));
     const next = rows.map((r, idx) => (idx === i ? { ...r, [colId]: v } : r));
     setRows(next);
     emit(next);
@@ -106,9 +130,11 @@ export default function VaccineTable({ columns, onChange, initialRows, historial
   const addRow = () => {
     setRows((r) => [...r, emptyRow(columns)]);
     setLibre((l) => [...l, false]);
+    setDerivada((d) => [...d, false]);
   };
   const removeRow = (i: number) => {
     setLibre((l) => (l.length > 1 ? l.filter((_, idx) => idx !== i) : [false]));
+    setDerivada((d) => (d.length > 1 ? d.filter((_, idx) => idx !== i) : [false]));
     const next = rows.filter((_, idx) => idx !== i);
     const safe = next.length ? next : [emptyRow(columns)];
     setRows(safe);

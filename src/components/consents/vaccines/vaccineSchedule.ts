@@ -108,15 +108,23 @@ export function addIntervalo(baseIso: string, intervalo: Intervalo): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+export const ES_ISO = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
+
+/** Número de dosis de un texto ("1", "1ª", "2º"). Lo no reconocido ("1/2", "1 refuerzo", "única") da null. */
+export function parseDosis(texto: string): number | null {
+  const m = /^[ ]*([0-9]+)[ ]*[ªaº°]?[ ]*$/.exec(texto);
+  return m ? parseInt(m[1], 10) : null;
+}
+
 export function calcularProxima(entry: EsquemaEntry, fechaDosis1: string): string {
-  if (entry.esUltima || !entry.intervalo || !fechaDosis1) return "";
+  if (entry.esUltima || !entry.intervalo || !ES_ISO.test(fechaDosis1)) return "";
   return addIntervalo(fechaDosis1, entry.intervalo);
 }
 
 export function siguienteDosisLabel(vacuna: string, dosisRegistradas: string[]): string | null {
   const max = maxDosis.get(vacuna);
   if (max === undefined) return null;
-  const nums = dosisRegistradas.map((x) => parseInt(x, 10)).filter((n) => Number.isFinite(n));
+  const nums = dosisRegistradas.map(parseDosis).filter((n): n is number => n !== null);
   const siguiente = (nums.length ? Math.max(...nums) : 0) + 1;
   if (siguiente > max) return null;
   return `${vacuna} D${siguiente}`;
