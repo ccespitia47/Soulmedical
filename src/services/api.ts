@@ -5,9 +5,15 @@ type ApiResponse<T> = {
   error: string | null;
 };
 
+type RequestOptions = RequestInit & {
+  /** false: un 401 NO borra la sesión ni redirige al login; se devuelve como error normal.
+   *  Solo para consultas de fondo que no deben tirar un formulario con trabajo sin guardar. */
+  redirectOn401?: boolean;
+};
+
 async function request<T>(
   endpoint: string,
-  options: RequestInit = {},
+  { redirectOn401 = true, ...options }: RequestOptions = {},
 ): Promise<ApiResponse<T>> {
   const token = localStorage.getItem('token');
 
@@ -40,6 +46,9 @@ async function request<T>(
         endpoint.startsWith('/auth/2fa/') ||
         endpoint.startsWith('/auth/forgot-password') ||
         endpoint.startsWith('/auth/reset-password');
+      if (!isAuthFlowEndpoint && !redirectOn401) {
+        return { data: null, error: 'Sesión expirada' };
+      }
       if (!isAuthFlowEndpoint) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -901,10 +910,12 @@ export function listConsentsApi(params: {
 }
 export type VacunaPreviaDto = { vacuna: string; dosis: string; aplicada: string; proxima: string };
 export type PacienteLookupDto = { ultimo: ConsentRecordDto | null; vacunas: VacunaPreviaDto[] };
-export function lookupPacienteApi(numDoc: string, entidad?: "SOUL" | "SAI") {
+/** `excludeId`: registro en edición, que no cuenta como historial. Un 401 aquí no redirige al login. */
+export function lookupPacienteApi(numDoc: string, entidad?: "SOUL" | "SAI", excludeId?: string) {
   const qs = new URLSearchParams({ numDoc });
   if (entidad) qs.set("entidad", entidad);
-  return request<PacienteLookupDto>(`/consents/paciente?${qs.toString()}`);
+  if (excludeId) qs.set("excludeId", excludeId);
+  return request<PacienteLookupDto>(`/consents/paciente?${qs.toString()}`, { redirectOn401: false });
 }
 export function getConsentApi(id: string) {
   return request<ConsentRecordDto>(`/consents/${id}`);
