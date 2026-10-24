@@ -35,12 +35,25 @@ export default defineConfig({
       // Sin precache/SW real por ahora: solo queremos el manifest.
       // `workbox: undefined` deja los defaults de `generateSW`, que intentan
       // precachear el bundle principal y fallan si supera 2 MiB. Con
-      // globPatterns vacio no se genera manifest de precache (el SW resultante
-      // queda inerte y de todas formas no se registra, ver injectRegister).
+      // globPatterns vacio no se genera manifest de precache del bundle.
+      //
+      // OJO: el SW SI se registra (injectRegister:'auto' inyecta
+      // /registerSW.js en index.html). Por eso `navigateFallback: null` es
+      // obligatorio: con el default, generateSW emite
+      //   registerRoute(new NavigationRoute(createHandlerBoundToURL('index.html')))
+      // que intercepta TODA navegacion y la responde desde la cache de
+      // Workbox en vez de pedirsela a Caddy — el usuario se queda con el
+      // index.html (y por tanto el bundle) de un deploy anterior. Ademas
+      // index.html no esta en el manifest de precache, asi que
+      // createHandlerBoundToURL lanza al instalar y el SW nuevo ni siquiera
+      // reemplaza al viejo. Con null el SW solo precachea los iconos y nunca
+      // toca las navegaciones: cada `npm run build` se ve al instante.
+      //
       // sourcemap:false evita generar sw.js.map/workbox-*.js.map (que Caddy
       // serviria por URL directa aunque el JS no los referencie).
       workbox: {
         globPatterns: [],
+        navigateFallback: null,
         sourcemap: false,
       },
       // Necesario porque en producción soulforms.com.co corre `npm run dev`
