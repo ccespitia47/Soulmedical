@@ -104,21 +104,33 @@ describe("groupSections", () => {
     fields: [{ id: `${id}f`, label: "Fecha", type: "text" }],
   });
 
-  it("fusiona tristates consecutivos sin título y los campos intercalados", () => {
+  it("una sección sin título continúa el bloque anterior", () => {
     const groups = groupSections([tri("a"), fields("nota"), tri("b")]);
     expect(groups).toHaveLength(1);
-    expect(groups[0].kind).toBe("tristate-group");
+    expect(groups[0]).toMatchObject({ kind: "block" });
   });
 
-  it("un título empieza un grupo nuevo", () => {
+  it("un título empieza un bloque nuevo", () => {
     const groups = groupSections([tri("a"), tri("b", "Sección B")]);
     expect(groups).toHaveLength(2);
   });
 
-  it("no absorbe un `fields` que no está entre dos tristates", () => {
-    const groups = groupSections([tri("a"), fields("suelto")]);
-    expect(groups).toHaveLength(2);
-    expect(groups[1].kind).toBe("single");
+  it("también absorbe la continuación que cierra el bloque", () => {
+    // "Hace cuánto" / "Otra ¿cuál?" van después de la última pregunta, no
+    // entre dos: antes quedaban flotando fuera del recuadro.
+    const groups = groupSections([tri("a", "Antecedentes"), fields("detalle")]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({ kind: "block" });
+  });
+
+  it("las secciones no tabulares van siempre en su propio bloque", () => {
+    const signatures: ConsentSection = {
+      id: "f",
+      kind: "signatures",
+      firmaPaciente: { id: "firma_paciente", label: "Firma" },
+    };
+    const groups = groupSections([tri("a", "Preguntas"), signatures, fields("suelto")]);
+    expect(groups.map((g) => g.kind)).toEqual(["block", "standalone", "block"]);
   });
 });
 

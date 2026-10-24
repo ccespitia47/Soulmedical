@@ -108,24 +108,18 @@ function imageBlock(dataUrl: string, label: string, maxHeight = 70): string {
     </div>`;
 }
 
-/** Sección `fields`: parejas etiqueta: valor en dos columnas. */
-function fieldsSectionHtml(section: FieldsSection, flat: Record<string, string>): string {
+/** `fields` como filas de dos columnas: una pareja etiqueta: valor por celda.
+ *  Se usa en bloques sin preguntas, donde la tabla tiene 2 columnas iguales. */
+function fieldsRows(section: FieldsSection, flat: Record<string, string>): string {
   const cells = section.fields
     .map(
-      (f) => `
-      <td style="padding:${CELL_PAD};font-size:${FONT_BODY};line-height:${LINE};width:50%;vertical-align:top;">
-        <strong>${escapeHtml(f.label)}:</strong>
-        ${fieldValue(flat[f.id] ?? "")}
-      </td>`,
+      (f) =>
+        `<td style="${TD}"><strong>${escapeHtml(f.label)}:</strong> ${fieldValue(flat[f.id] ?? "")}</td>`,
     )
     .map((cell, i) => (i % 2 === 0 ? `<tr>${cell}` : `${cell}</tr>`))
     .join("");
-  const closed = section.fields.length % 2 === 1 ? `${cells}<td></td></tr>` : cells;
-  return `
-    <div data-pdf-block style="${BLOCK}">
-      ${section.title ? barHtml(section.title) : ""}
-      <table style="width:100%;border-collapse:collapse;">${closed}</table>
-    </div>`;
+  // Número impar de campos: se cierra la última fila con una celda vacía.
+  return section.fields.length % 2 === 1 ? `${cells}<td style="${TD}"></td></tr>` : cells;
 }
 
 /** Fila de pregunta tri-estado con su número, texto, nota y respuesta marcada. */
@@ -145,49 +139,24 @@ function questionRow(q: TriStateQ, flat: Record<string, string>): string {
     </tr>`;
 }
 
-/** Campos intercalados dentro de una tabla tri-estado (ej. "Si la respuesta es
- *  afirmativa, ¿cuándo?"): fila a todo el ancho, no una tabla aparte. */
-function inlineFieldsRow(section: FieldsSection, flat: Record<string, string>): string {
+/** `fields` como UNA fila a todo el ancho (ej. "Si la respuesta es afirmativa,
+ *  ¿cuándo?", "Hace cuánto / ¿Por cuánto tiempo?"). Se usa en bloques con
+ *  preguntas, donde las columnas estrechas de SI/No impiden repartir los
+ *  campos en dos mitades legibles. Fondo tenue para distinguirlos de las
+ *  preguntas sin sacarlos del recuadro. */
+function fieldsFullWidthRow(section: FieldsSection, flat: Record<string, string>, colspan: number): string {
   const inner = section.fields
     .map((f) => `<strong>${escapeHtml(f.label)}:</strong> ${fieldValue(flat[f.id] ?? "")}`)
     .join("&nbsp;&nbsp;&nbsp;&nbsp;");
-  return `<tr><td style="${TD}background:#f7f9fb;" colspan="4">${inner}</td></tr>`;
+  return `<tr><td style="${TD}background:#f7f9fb;" colspan="${colspan}">${inner}</td></tr>`;
 }
 
-/** Secciones tri-estado consecutivas renderizadas como UNA sola tabla: la
- *  cabecera ("Responda las preguntas…" / SI / No / …) se emite una única vez
- *  para todo el grupo, no entre cada par de preguntas. */
-function tristateGroupHtml(group: ConsentSection[], flat: Record<string, string>): string {
-  const title = group[0].title;
-  const firstTri = group.find((s) => s.kind === "tristate") as TristateSection;
-  const thirdLabel = firstTri.questions[0]?.thirdLabel ?? "No aplica";
-  const rows = group
-    .map((s) =>
-      s.kind === "tristate"
-        ? s.questions.map((q) => questionRow(q, flat)).join("")
-        : inlineFieldsRow(s as FieldsSection, flat),
-    )
-    .join("");
-  return `
-    <div data-pdf-block style="${BLOCK}">
-      <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
-        <colgroup><col/><col style="width:40px"/><col style="width:40px"/><col style="width:56px"/></colgroup>
-        ${title ? barRowHtml(title, 4) : ""}
-        <tr data-pdf-keep-next>
-          <th style="${TH}text-align:left;">Responda las preguntas marcando las casillas correspondientes.</th>
-          <th style="${TH}">SI</th>
-          <th style="${TH}">No</th>
-          <th style="${TH}">${escapeHtml(thirdLabel)}</th>
-        </tr>
-        ${rows}
-      </table>
-    </div>`;
-}
+type ConditionsSection = Extract<ConsentSection, { kind: "conditions" }>;
 
-/** Sección `conditions`: casillas en línea del grupo, con las opciones
- *  seleccionadas marcadas. Cada opción es indivisible (`nowrap`) para que la
- *  casilla nunca quede en una línea y su etiqueta en la siguiente. */
-function conditionsSectionHtml(section: Extract<ConsentSection, { kind: "conditions" }>, flat: Record<string, string>): string {
+/** `conditions` como fila a todo el ancho: etiqueta del grupo y casillas en
+ *  línea. Cada opción es indivisible (`nowrap`) para que la casilla nunca
+ *  quede en una línea y su etiqueta en la siguiente. */
+function conditionsRow(section: ConditionsSection, flat: Record<string, string>, colspan: number): string {
   const value = flat[section.group.id] ?? "";
   const selected = new Set(value ? value.split("; ") : []);
   const options = section.group.options
@@ -197,12 +166,80 @@ function conditionsSectionHtml(section: Extract<ConsentSection, { kind: "conditi
     )
     .join("");
   return `
-    <div data-pdf-block style="${BLOCK}font-size:10px;line-height:1.4;">
-      ${section.title ? barHtml(section.title) : ""}
-      <div style="border:${BORDER};padding:${CELL_PAD};">
+    <tr>
+      <td style="${TD}" colspan="${colspan}">
         <div style="margin-bottom:7px;">${escapeHtml(section.group.label)}</div>
-        <div>${options}</div>
-      </div>
+        <div style="margin-bottom:-7px;">${options}</div>
+      </td>
+    </tr>`;
+}
+
+/** Cabecera de las columnas de respuesta. Se emite UNA vez por bloque, justo
+ *  antes de su primera pregunta. */
+function questionHeaderRow(thirdLabel: string): string {
+  return `
+    <tr data-pdf-keep-next>
+      <th style="${TH}text-align:left;">Responda las preguntas marcando las casillas correspondientes.</th>
+      <th style="${TH}">SI</th>
+      <th style="${TH}">No</th>
+      <th style="${TH}">${escapeHtml(thirdLabel)}</th>
+    </tr>`;
+}
+
+/** Bloque CON preguntas: tabla de 4 columnas (texto + SI/No/tercera opción).
+ *  Los `fields` y `conditions` del bloque entran como filas a todo el ancho,
+ *  así que las continuaciones quedan dentro del mismo recuadro. */
+function questionBlockHtml(
+  sections: ConsentSection[],
+  title: string | undefined,
+  firstTri: TristateSection,
+  flat: Record<string, string>,
+): string {
+  const thirdLabel = firstTri.questions[0]?.thirdLabel ?? "No aplica";
+  let headerEmitted = false;
+  const rows = sections
+    .map((s) => {
+      if (s.kind === "tristate") {
+        const header = headerEmitted ? "" : questionHeaderRow(thirdLabel);
+        headerEmitted = true;
+        return header + s.questions.map((q) => questionRow(q, flat)).join("");
+      }
+      if (s.kind === "fields") return fieldsFullWidthRow(s, flat, 4);
+      if (s.kind === "conditions") return conditionsRow(s, flat, 4);
+      return "";
+    })
+    .join("");
+  return `
+    <div data-pdf-block style="${BLOCK}">
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+        <colgroup><col/><col style="width:40px"/><col style="width:40px"/><col style="width:56px"/></colgroup>
+        ${title ? barRowHtml(title, 4) : ""}
+        ${rows}
+      </table>
+    </div>`;
+}
+
+/** Bloque SIN preguntas: tabla de 2 columnas iguales. Los `fields` ocupan una
+ *  celda cada uno y los `conditions` una fila completa. */
+function plainBlockHtml(
+  sections: ConsentSection[],
+  title: string | undefined,
+  flat: Record<string, string>,
+): string {
+  const rows = sections
+    .map((s) => {
+      if (s.kind === "fields") return fieldsRows(s, flat);
+      if (s.kind === "conditions") return conditionsRow(s, flat, 2);
+      return "";
+    })
+    .join("");
+  return `
+    <div data-pdf-block style="${BLOCK}">
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+        <colgroup><col style="width:50%"/><col style="width:50%"/></colgroup>
+        ${title ? barRowHtml(title, 2) : ""}
+        ${rows}
+      </table>
     </div>`;
 }
 
@@ -302,60 +339,64 @@ function headerHtml(def: ConsentDefinition): string {
     </div>`;
 }
 
-export type SectionGroup =
-  | { kind: "tristate-group"; sections: ConsentSection[] }
-  | { kind: "single"; section: ConsentSection };
+export type SectionBlock =
+  | { kind: "block"; sections: ConsentSection[] }
+  | { kind: "standalone"; section: ConsentSection };
 
-/** Agrupa secciones consecutivas que son UNA sola tabla en el formato impreso.
+/** Secciones que siempre forman un bloque propio y nunca absorben a la
+ *  siguiente: o tienen su propia rejilla de columnas (`vaccineTable`) o no son
+ *  tabulares (`legal`, `signatures`, `photo`). Dejar las firmas fuera también
+ *  permite que la paginación las pase enteras a la página siguiente. */
+const OWN_BLOCK_KINDS: ReadonlyArray<ConsentSection["kind"]> = [
+  "vaccineTable",
+  "legal",
+  "signatures",
+  "photo",
+];
+
+/** Agrupa las secciones en los bloques que se imprimen como un solo recuadro.
  *
- *  Un `tristate` absorbe los `tristate` siguientes que no traen título propio
- *  (un título marca el inicio de otra sección) y los `fields` sin título que
- *  quedan entre dos de ellos: esos campos son notas de la tabla (ej. "Si la
- *  respuesta es afirmativa, ¿cuándo?"), no una sección aparte. Así la cabecera
- *  "Responda las preguntas…" aparece una vez por sección en vez de repetirse
- *  entre cada par de preguntas. */
-export function groupSections(sections: ConsentSection[]): SectionGroup[] {
-  const out: SectionGroup[] = [];
-  let i = 0;
-  while (i < sections.length) {
-    const section = sections[i];
-    if (section.kind !== "tristate") {
-      out.push({ kind: "single", section });
-      i += 1;
+ *  Regla general: **una sección SIN título continúa a la anterior**. Es el
+ *  contrato que siguen todas las definiciones — los ids lo dicen (`…Detalle`,
+ *  `…Otra`): un título abre una sección nueva y lo que viene sin título es su
+ *  continuación ("Otra ¿cuál?", "Hace cuánto", "Si la respuesta es afirmativa,
+ *  ¿cuándo?"). Antes esas continuaciones se emitían como tablas sueltas y
+ *  quedaban flotando fuera del recuadro al que pertenecen.
+ *
+ *  Un bloque reúne `fields`, `conditions` y `tristate`; el resto (ver
+ *  `OWN_BLOCK_KINDS`) va suelto. */
+export function groupSections(sections: ConsentSection[]): SectionBlock[] {
+  const out: SectionBlock[] = [];
+  let current: ConsentSection[] | null = null;
+  for (const section of sections) {
+    if (OWN_BLOCK_KINDS.includes(section.kind)) {
+      current = null;
+      out.push({ kind: "standalone", section });
       continue;
     }
-    const group: ConsentSection[] = [section];
-    let j = i + 1;
-    while (j < sections.length) {
-      const next = sections[j];
-      if (next.title) break;
-      if (next.kind === "tristate") {
-        group.push(next);
-        j += 1;
-        continue;
-      }
-      if (next.kind === "fields") {
-        const after = sections[j + 1];
-        if (after && after.kind === "tristate" && !after.title) {
-          group.push(next);
-          j += 1;
-          continue;
-        }
-      }
-      break;
+    if (section.title || current === null) {
+      current = [section];
+      out.push({ kind: "block", sections: current });
+    } else {
+      current.push(section);
     }
-    out.push({ kind: "tristate-group", sections: group });
-    i = j;
   }
   return out;
 }
 
-function singleSectionHtml(section: ConsentSection, flat: Record<string, string>): string {
+/** Un bloque se dibuja como tabla de 4 columnas si contiene preguntas, y de 2
+ *  columnas si no. Así las continuaciones comparten recuadro con la sección a
+ *  la que pertenecen en vez de salir sueltas. */
+function blockHtml(sections: ConsentSection[], flat: Record<string, string>): string {
+  const title = sections[0].title;
+  const firstTri = sections.find((s): s is TristateSection => s.kind === "tristate");
+  return firstTri
+    ? questionBlockHtml(sections, title, firstTri, flat)
+    : plainBlockHtml(sections, title, flat);
+}
+
+function standaloneHtml(section: ConsentSection, flat: Record<string, string>): string {
   switch (section.kind) {
-    case "fields":
-      return fieldsSectionHtml(section, flat);
-    case "conditions":
-      return conditionsSectionHtml(section, flat);
     case "vaccineTable":
       return vaccineTableSectionHtml(section, flat);
     case "legal":
@@ -364,19 +405,17 @@ function singleSectionHtml(section: ConsentSection, flat: Record<string, string>
       return signaturesSectionHtml(section, flat);
     case "photo":
       return photoSectionHtml(section, flat);
-    // `tristate` nunca llega aquí: `groupSections` lo emite siempre como grupo.
+    // El resto de `kind` llega siempre dentro de un bloque.
     default:
       return "";
   }
 }
 
 /** Construye el HTML completo del PDF de un consentimiento, agrupando primero
- *  las secciones que comparten tabla y emitiendo la primitiva de cada `kind`. */
+ *  las secciones en bloques y dibujando cada bloque como un único recuadro. */
 export function buildConsentPdf(def: ConsentDefinition, flat: Record<string, string>): string {
   const body = groupSections(def.sections)
-    .map((g) =>
-      g.kind === "tristate-group" ? tristateGroupHtml(g.sections, flat) : singleSectionHtml(g.section, flat),
-    )
+    .map((g) => (g.kind === "block" ? blockHtml(g.sections, flat) : standaloneHtml(g.section, flat)))
     .join("\n");
 
   // `font-size`/`line-height` explícitos en la raíz: sin ellos todo hereda los
