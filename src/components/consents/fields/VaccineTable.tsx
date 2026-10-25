@@ -6,12 +6,14 @@ import {
   calcularProxima,
   findEntry,
   ES_ISO,
-  isoADmy,
   nombreVacuna,
   parseDosis,
   siguienteDosisLabel,
 } from "../vaccines/vaccineSchedule";
 import type { VacunaPrevia } from "../patient/usePatientLookup";
+
+/** Columnas de la Sección C que se diligencian con el calendario del navegador. */
+const COLUMNAS_FECHA = new Set(["vencimiento", "proxima"]);
 
 type Row = Record<string, string>;
 type Elegida = { nombre: string; dosis: string };
@@ -87,7 +89,9 @@ export default function VaccineTable({ columns, onChange, initialRows, historial
 
   const setRevertidas = (despues: Row[], antes: Row[]) =>
     setRevertida(antes.filter((r, i) => (r.nombre ?? "") !== "" && (despues[i].nombre ?? "") === "").map((r) => r.nombre));
-  const proximaDe = (entry: EsquemaEntry, base: string) => isoADmy(calcularProxima(entry, base, fechaConsentimiento));
+  // La celda guarda ISO (yyyy-mm-dd), que es lo que exige `<input type="date">`.
+  // El paso a dd/mm/aaaa lo hace `fechaPdf` al imprimir, no la celda.
+  const proximaDe = (entry: EsquemaEntry, base: string) => calcularProxima(entry, base, fechaConsentimiento);
 
   const baseDe = (entry: EsquemaEntry) =>
     entry.dosis === "1" ? fechaConsentimiento : fechaDosis1(historial, entry.vacuna);
@@ -242,7 +246,9 @@ export default function VaccineTable({ columns, onChange, initialRows, historial
                       </div>
                     ) : (
                       <input
-                        type="text"
+                        // Las columnas de fecha abren el calendario nativo. Exige valor ISO,
+                        // que es justo lo que guardan: el PDF ya formatea a dd/mm/aaaa.
+                        type={COLUMNAS_FECHA.has(c.id) ? "date" : "text"}
                         aria-label={`${c.label}, fila ${i + 1}`}
                         value={row[c.id]}
                         onChange={(e) => setCell(i, c.id, e.target.value)}

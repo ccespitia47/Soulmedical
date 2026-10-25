@@ -206,7 +206,7 @@ describe("ConsentRenderer consulta del historial", () => {
     const sel = screen.getByLabelText("Nombre vacuna, fila 1") as HTMLSelectElement;
     expect(Array.from(sel.options).some((o) => /sugerida/.test(o.textContent ?? ""))).toBe(true);
     fireEvent.change(sel, { target: { value: "TETANO D2" } });
-    expect((screen.getByLabelText("Fecha próxima vacuna, fila 1") as HTMLInputElement).value).toBe("10/06/2026");
+    expect((screen.getByLabelText("Fecha próxima vacuna, fila 1") as HTMLInputElement).value).toBe("2026-06-10");
     fireEvent.change(screen.getByLabelText("Documento"), { target: { value: "12345678" } });
     expect((screen.getByLabelText("Nombre vacuna, fila 1") as HTMLSelectElement).value).toBe("");
     expect((screen.getByLabelText("N° Dosis, fila 1") as HTMLInputElement).value).toBe("");

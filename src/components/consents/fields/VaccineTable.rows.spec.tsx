@@ -21,14 +21,23 @@ const proximaDe = (n: number) => screen.getByLabelText(`Fecha próxima vacuna, f
 const agregar = () => fireEvent.click(screen.getByText("+ Agregar vacuna"));
 const borrar = (n: number) => fireEvent.click(screen.getAllByLabelText("Eliminar fila")[n - 1]);
 
-describe("VaccineTable fecha próxima en dd/mm/aaaa", () => {
-  it("escribe la fecha calculada como dd/mm/aaaa (lo que se imprime en el PDF)", () => {
+describe("VaccineTable columnas de fecha", () => {
+  // La celda guarda ISO porque es lo que exige el calendario nativo del navegador;
+  // el paso a dd/mm/aaaa lo hace `fechaPdf` al imprimir (ver buildConsentPdf.spec).
+  it("escribe la fecha calculada en ISO, que es lo que acepta el calendario", () => {
     const onChange = vi.fn();
     render(<VaccineTable columns={columns} onChange={onChange} fechaConsentimiento="2026-03-01" />);
     fireEvent.change(selectDe(1), { target: { value: "HEPATITIS B D1" } });
     const filas = JSON.parse(onChange.mock.calls[onChange.mock.calls.length - 1][0] as string);
-    expect(filas[0].proxima).toBe("01/04/2026");
-    expect(proximaDe(1).value).toBe("01/04/2026");
+    expect(filas[0].proxima).toBe("2026-04-01");
+    expect(proximaDe(1).value).toBe("2026-04-01");
+  });
+
+  it("vencimiento y próxima abren el calendario; el resto son texto", () => {
+    render(<VaccineTable columns={columns} onChange={vi.fn()} />);
+    expect(screen.getByLabelText("Vencimiento, fila 1")).toHaveAttribute("type", "date");
+    expect(screen.getByLabelText("Fecha próxima vacuna, fila 1")).toHaveAttribute("type", "date");
+    expect(screen.getByLabelText("Lote, fila 1")).toHaveAttribute("type", "text");
   });
 
   it("estable: re-renderizar con la misma fecha no vuelve a emitir", () => {
@@ -69,9 +78,9 @@ describe("VaccineTable: añadir y borrar filas mantiene los arrays alineados", (
     expect(screen.getByLabelText("Nombre de la vacuna, fila 2")).toHaveProperty("value", "Vacuna X");
     cambiarFecha("2026-02-01");
     const f = filas(onChange);
-    expect(f[0].proxima).toBe("01/03/2026");
+    expect(f[0].proxima).toBe("2026-03-01");
     expect(f[1].proxima).toBe("");
-    expect(f[2].proxima).toBe("01/04/2026");
+    expect(f[2].proxima).toBe("2026-04-01");
     expect(proximaDe(4).value).toBe("");
   });
 
@@ -84,8 +93,8 @@ describe("VaccineTable: añadir y borrar filas mantiene los arrays alineados", (
     cambiarFecha("2026-02-01");
     const f = filas(onChange);
     expect(f).toHaveLength(2);
-    expect(f[0]).toMatchObject({ nombre: "HEPATITIS B D1", proxima: "01/03/2026" });
-    expect(f[1]).toMatchObject({ nombre: "DPT-a + POLIO D1", proxima: "01/04/2026" });
+    expect(f[0]).toMatchObject({ nombre: "HEPATITIS B D1", proxima: "2026-03-01" });
+    expect(f[1]).toMatchObject({ nombre: "DPT-a + POLIO D1", proxima: "2026-04-01" });
   });
 
   it("removeRow de la primera: la fila de texto libre sigue libre y no hereda 'derivada'", () => {
@@ -96,7 +105,7 @@ describe("VaccineTable: añadir y borrar filas mantiene los arrays alineados", (
     cambiarFecha("2026-02-01");
     const f = filas(onChange);
     expect(f[0]).toMatchObject({ nombre: "Vacuna X", proxima: "" });
-    expect(f[1]).toMatchObject({ nombre: "DPT-a + POLIO D1", proxima: "01/04/2026" });
+    expect(f[1]).toMatchObject({ nombre: "DPT-a + POLIO D1", proxima: "2026-04-01" });
   });
 
   it("removeRow de la última: la anterior conserva su estado", () => {
@@ -105,16 +114,16 @@ describe("VaccineTable: añadir y borrar filas mantiene los arrays alineados", (
     cambiarFecha("2026-02-01");
     const f = filas(onChange);
     expect(f).toHaveLength(2);
-    expect(f[0]).toMatchObject({ nombre: "HEPATITIS B D1", proxima: "01/03/2026" });
+    expect(f[0]).toMatchObject({ nombre: "HEPATITIS B D1", proxima: "2026-03-01" });
     expect(f[1].nombre).toBe("Vacuna X");
   });
 
   it("una fila editada a mano deja de ser derivada y eso sobrevive a borrar otra fila", () => {
     const { onChange, cambiarFecha } = tresFilas();
-    fireEvent.change(proximaDe(3), { target: { value: "05/05/2026" } });
+    fireEvent.change(proximaDe(3), { target: { value: "2026-05-05" } });
     borrar(1);
     cambiarFecha("2026-02-01");
-    expect(filas(onChange).find((x) => x.nombre === "DPT-a + POLIO D1")?.proxima).toBe("05/05/2026");
+    expect(filas(onChange).find((x) => x.nombre === "DPT-a + POLIO D1")?.proxima).toBe("2026-05-05");
   });
 
   it("borrar la única fila deja una fila vacía y alineada", () => {
@@ -225,7 +234,7 @@ describe("VaccineTable reversión: detalles", () => {
     const onChange = vi.fn();
     const { rerender } = render(ui("12345", [prev()], onChange));
     fireEvent.change(selectDe(1), { target: { value: "TETANO D2" } });
-    fireEvent.change(proximaDe(1), { target: { value: "01/09/2026" } });
+    fireEvent.change(proximaDe(1), { target: { value: "2026-09-01" } });
     rerender(ui(null, [], onChange));
     expect(proximaDe(1).value).toBe("");
     expect(onChange).toHaveBeenLastCalledWith("");
