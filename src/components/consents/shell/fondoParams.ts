@@ -49,9 +49,12 @@ export function sistemaPideQuietud(): boolean {
 }
 
 /**
- * Si el fondo debe animarse. El ajuste del sistema manda por DEFECTO —quien
- * pide menos movimiento no se come la animación sin haberla pedido— pero una
- * elección explícita del usuario lo sobrescribe y se recuerda.
+ * Si el fondo debe animarse. Anima por DEFECTO: el fondo en movimiento es lo
+ * que se pidió para esta pantalla, y `prefers-reduced-motion` lo vetaba sin
+ * que nadie lo notara —Windows lo reporta `reduce` con Accesibilidad ›
+ * Efectos visuales › Efectos de animación apagado, que viene así en muchos
+ * equipos corporativos—. Quien quiera quietud la consigue con el interruptor
+ * del riel, y esa elección sí se recuerda y manda sobre el defecto.
  */
 export function fondoAnimadoPorDefecto(): boolean {
   try {
@@ -59,9 +62,9 @@ export function fondoAnimadoPorDefecto(): boolean {
     if (guardado === "1") return true;
     if (guardado === "0") return false;
   } catch {
-    /* sin almacenamiento: manda el sistema */
+    /* sin almacenamiento: vale el defecto */
   }
-  return !sistemaPideQuietud();
+  return true;
 }
 
 export function recordarFondoAnimado(animado: boolean): void {

@@ -41,42 +41,35 @@ describe("Interruptor del fondo animado", () => {
   beforeEach(() => localStorage.clear());
   afterEach(() => vi.unstubAllGlobals());
 
-  it("por defecto manda el sistema", () => {
+  // El fondo animado es lo que el usuario pidió expresamente para esta
+  // pantalla. El ajuste de Windows (Accesibilidad › Efectos visuales) viene
+  // activado en muchos equipos y lo vetaba en silencio: quien pide el fondo no
+  // se queda sin él por una casilla que nunca tocó. El interruptor del riel
+  // sigue siendo la salida para quien sí quiera quietud.
+  it("por defecto anima, aunque el sistema pida quietud", () => {
     sistemaPide(true);
-    expect(fondoAnimadoPorDefecto()).toBe(false);
+    expect(fondoAnimadoPorDefecto()).toBe(true);
     sistemaPide(false);
     expect(fondoAnimadoPorDefecto()).toBe(true);
   });
 
-  it("una elección guardada gana al sistema", () => {
-    sistemaPide(true);
-    localStorage.setItem(FONDO_STORAGE_KEY, "1");
-    expect(fondoAnimadoPorDefecto()).toBe(true);
-
+  it("una elección guardada apagándolo gana al defecto", () => {
     sistemaPide(false);
     localStorage.setItem(FONDO_STORAGE_KEY, "0");
     expect(fondoAnimadoPorDefecto()).toBe(false);
+
+    localStorage.setItem(FONDO_STORAGE_KEY, "1");
+    expect(fondoAnimadoPorDefecto()).toBe(true);
   });
 
-  it("con el sistema pidiendo quietud el fondo arranca parado", () => {
+  it("con el sistema pidiendo quietud el fondo arranca igual en movimiento", () => {
     sistemaPide(true);
     pintar();
-    expect(animadas()).toBe(0);
-  });
-
-  it("el interruptor del riel lo enciende y lo recuerda", () => {
-    sistemaPide(true);
-    pintar();
-    expect(animadas()).toBe(0);
-
-    fireEvent.click(screen.getByLabelText(/activar fondo animado/i));
-
     expect(animadas()).toBeGreaterThan(0);
-    expect(localStorage.getItem(FONDO_STORAGE_KEY)).toBe("1");
   });
 
-  it("y vuelve a apagarlo", () => {
-    sistemaPide(false);
+  it("el interruptor del riel lo apaga y lo recuerda", () => {
+    sistemaPide(true);
     pintar();
     expect(animadas()).toBeGreaterThan(0);
 
@@ -84,5 +77,17 @@ describe("Interruptor del fondo animado", () => {
 
     expect(animadas()).toBe(0);
     expect(localStorage.getItem(FONDO_STORAGE_KEY)).toBe("0");
+  });
+
+  it("y vuelve a encenderlo", () => {
+    sistemaPide(false);
+    localStorage.setItem(FONDO_STORAGE_KEY, "0");
+    pintar();
+    expect(animadas()).toBe(0);
+
+    fireEvent.click(screen.getByLabelText(/activar fondo animado/i));
+
+    expect(animadas()).toBeGreaterThan(0);
+    expect(localStorage.getItem(FONDO_STORAGE_KEY)).toBe("1");
   });
 });
