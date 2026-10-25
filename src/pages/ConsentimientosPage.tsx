@@ -4,15 +4,10 @@ import { CONSENT_TYPES } from "../components/consents/definitions";
 import type { ConsentTipo } from "../components/consents/definitions";
 import Icon from "../components/common/Icon";
 
-type ConsentimientosPageProps = {
-  /** Vuelve al inicio de Consientify. */
-  onBack?: () => void;
-};
-
 // Hoja "Consentimientos": punto de entrada del módulo de consentimientos.
 // Muestra un selector de tarjetas (una por tipo de `CONSENT_TYPES`) y, al
 // elegir una, renderiza el formulario genérico `ConsentForm` para ese tipo.
-export default function ConsentimientosPage({ onBack }: ConsentimientosPageProps) {
+export default function ConsentimientosPage() {
   const [tipo, setTipo] = useState<ConsentTipo | null>(null);
 
   if (tipo) {
@@ -20,17 +15,9 @@ export default function ConsentimientosPage({ onBack }: ConsentimientosPageProps
   }
 
   return (
-    <div className="min-h-screen bg-[#f0f4f8] px-5 py-8 font-sans dark:bg-slate-950 sm:py-12">
+    <div className="min-h-screen px-5 py-8 font-sans sm:py-12">
       <div className="mx-auto max-w-3xl">
         <div className="mb-6 flex items-center gap-3">
-          {onBack && (
-            <button
-              onClick={onBack}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-[13px] font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              ← Volver
-            </button>
-          )}
           <div>
             <h1 className="m-0 text-lg font-bold text-slate-900 dark:text-slate-100">
               Consentimientos

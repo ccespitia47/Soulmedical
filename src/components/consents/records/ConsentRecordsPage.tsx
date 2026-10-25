@@ -14,11 +14,6 @@ import { htmlToPdfBase64 } from "../../../utils/pdfExporter";
 import Icon from "../../common/Icon";
 import ConfirmModal from "../../common/ConfirmModal";
 
-type ConsentRecordsPageProps = {
-  /** Vuelve al inicio de Consientify. */
-  onBack?: () => void;
-};
-
 const ESTADO_BADGE: Record<string, string> = {
   firmado: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
   borrador: "bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
@@ -35,7 +30,7 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString("es-CO", { year: "numeric", month: "short", day: "numeric" });
 }
 
-export default function ConsentRecordsPage({ onBack }: ConsentRecordsPageProps) {
+export default function ConsentRecordsPage() {
   const { rows, total, page, limit, filters, setFilters, setPage, refetch, loading } = useConsentRecords();
 
   // Borrador local del filtro: solo golpea la API al enviar (botón "Filtrar"),
@@ -113,17 +108,9 @@ export default function ConsentRecordsPage({ onBack }: ConsentRecordsPageProps) 
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
   return (
-    <div className="min-h-screen bg-[#f0f4f8] px-4 py-6 font-sans dark:bg-slate-950 sm:px-6 sm:py-10">
+    <div className="min-h-screen px-4 py-6 font-sans sm:px-6 sm:py-10">
       <div className="mx-auto max-w-6xl">
         <div className="mb-6 flex items-center gap-3">
-          {onBack && (
-            <button
-              onClick={onBack}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-[13px] font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              ← Volver
-            </button>
-          )}
           <div>
             <h1 className="m-0 text-lg font-bold text-slate-900 dark:text-slate-100">Registros</h1>
             <p className="m-0 text-xs text-slate-500 dark:text-slate-400">

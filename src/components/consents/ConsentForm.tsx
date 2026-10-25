@@ -158,7 +158,7 @@ export default function ConsentForm({ tipo, onBack, editRecord }: Props) {
   };
 
   return (
-    <div className="min-h-screen bg-[#f0f4f8] font-sans dark:bg-slate-950">
+    <div className="min-h-screen font-sans">
       {/* Header */}
       <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-700 dark:bg-slate-900/90">
         <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-3 px-5 py-3.5">
