@@ -42,12 +42,6 @@ export function numeroDeFormas(areaPx2: number): number {
 /** Clave de `localStorage` donde se recuerda si el fondo debe animarse. */
 export const FONDO_STORAGE_KEY = "consientify-fondo-animado";
 
-/** ¿Pide el sistema menos movimiento? */
-export function sistemaPideQuietud(): boolean {
-  if (typeof matchMedia !== "function") return false;
-  return matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
-
 /**
  * Si el fondo debe animarse. Anima por DEFECTO: el fondo en movimiento es lo
  * que se pidió para esta pantalla, y `prefers-reduced-motion` lo vetaba sin
