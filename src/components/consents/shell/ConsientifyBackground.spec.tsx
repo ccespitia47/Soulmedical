@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { ThemeProvider } from "../../../context/ThemeContext";
 import ConsientifyBackground from "./ConsientifyBackground";
-import { PALETA, MIN_FORMAS, MAX_FORMAS, numeroDeFormas } from "./fondoParams";
+import { PALETA, MIN_FORMAS, MAX_FORMAS, ANCHO_MIN, ANCHO_MAX, RATIO, numeroDeFormas, type Tipo } from "./fondoParams";
 
 /** `matchMedia` no existe en jsdom; cada test declara si se pide menos movimiento. */
 function conMatchMedia(reduce: boolean) {
@@ -98,9 +98,30 @@ describe("ConsientifyBackground", () => {
     pintar();
     for (const f of formas()) {
       const ancho = parseFloat((f as HTMLElement).style.width);
-      expect(ancho).toBeGreaterThanOrEqual(24);
-      expect(ancho).toBeLessThanOrEqual(44);
+      expect(ancho).toBeGreaterThanOrEqual(ANCHO_MIN);
+      expect(ancho).toBeLessThanOrEqual(ANCHO_MAX);
     }
+  });
+
+  it("cada dibujo recibe la caja de SU proporción, sin deformarse", () => {
+    // Una caja 2:1 para todo achataba la jeringa (su dibujo es 48x18) y
+    // estiraba la bacteria. Un dibujo deformado deja de reconocerse: a este
+    // tamaño la silueta es lo único que se lee, y una bacteria achatada pasa
+    // por frasco. La caja tiene que seguir al viewBox de cada tipo.
+    pintar();
+    for (const f of formas()) {
+      const el = f as HTMLElement;
+      const tipo = el.getAttribute("data-bicho") as Tipo;
+      const ancho = parseFloat(el.style.width);
+      const alto = parseFloat(el.style.height);
+      expect(alto / ancho).toBeCloseTo(RATIO[tipo], 5);
+    }
+  });
+
+  it("las proporciones declaradas son las de los viewBox reales", () => {
+    expect(RATIO.virus).toBe(1);
+    expect(RATIO.bacteria).toBeCloseTo(26 / 48, 5);
+    expect(RATIO.jeringa).toBeCloseTo(18 / 48, 5);
   });
 
   it("usa la paleta del prototipo", () => {

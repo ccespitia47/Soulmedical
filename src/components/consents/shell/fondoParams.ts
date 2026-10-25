@@ -19,8 +19,12 @@ export const AREA_POR_FORMA = 42_000; // px²
 export const MIN_FORMAS = 12;
 export const MAX_FORMAS = 44;
 
-export const ANCHO_MIN = 24;
-export const ANCHO_MAX = 44;
+// A 24-44 px y 0,42 de opacidad no sobrevive ningún detalle: las tres formas
+// se reducían a manchas y la bacteria pasaba por frasco. Con más tamaño las
+// patas, la aguja y las espículas se leen, y la densidad baja sola porque la
+// superficie ocupada por forma crece.
+export const ANCHO_MIN = 34;
+export const ANCHO_MAX = 62;
 export const CICLO_MIN = 20; // segundos
 export const CICLO_MAX = 34;
 export const DESFASE_MAX = 20; // segundos, aplicado en negativo
@@ -32,6 +36,18 @@ export const VIAJE_MAX = 150;
 
 export type Tipo = "virus" | "bacteria" | "jeringa";
 export const TIPOS: Tipo[] = ["virus", "bacteria", "jeringa"];
+
+/**
+ * Alto/ancho de cada dibujo, copiado de su `viewBox`. La caja de la forma se
+ * calcula con esto: con una proporción común para todos, la jeringa salía
+ * achatada y la bacteria estirada, y un dibujo deformado a este tamaño deja
+ * de reconocerse.
+ */
+export const RATIO: Record<Tipo, number> = {
+  virus: 1, // 44 x 44
+  bacteria: 26 / 48,
+  jeringa: 18 / 48,
+};
 
 /** Cuántas formas caben en un área dada, dentro de los topes. */
 export function numeroDeFormas(areaPx2: number): number {
