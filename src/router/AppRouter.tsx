@@ -52,7 +52,9 @@ export default function AppRouter() {
 
       <Route path="/admin" element={<ProtectedRoute><AdminRoute /></ProtectedRoute>} />
       <Route path="/userapp" element={<ProtectedRoute><UserAppRoute /></ProtectedRoute>} />
-      <Route path="/consientify" element={<ProtectedRoute><ConsientifyRoute /></ProtectedRoute>} />
+      {/* `:vista` opcional: la vista activa vive en la URL para que Atrás y
+          recargar funcionen, ahora que el riel sustituye al "← Volver". */}
+      <Route path="/consientify/:vista?" element={<ProtectedRoute><ConsientifyRoute /></ProtectedRoute>} />
       <Route path="/builder/:folderId/:formId" element={<ProtectedRoute><BuilderRoute /></ProtectedRoute>} />
       <Route path="/form/:folderId/:formId" element={<ProtectedRoute><FormRoute /></ProtectedRoute>} />
 

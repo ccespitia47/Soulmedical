@@ -41,5 +41,5 @@ export default function ConsientifyRoute() {
     );
   }
 
-  return <Consientify onLogout={handleLogout} />;
+  return <Consientify onLogout={handleLogout} usuario={user} />;
 }
