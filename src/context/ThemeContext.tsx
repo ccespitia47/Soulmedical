@@ -80,9 +80,35 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
+/** Clave de `localStorage` donde vive el tema elegido. */
+export const THEME_STORAGE_KEY = "soulforms-theme";
+
+/** Tema guardado, o `"light"` si no hay ninguno o el valor no es uno de los nuestros.
+ *  `localStorage` puede lanzar (modo privado, cookies bloqueadas), así que se protege. */
+function temaGuardado(): Theme {
+  try {
+    const guardado = localStorage.getItem(THEME_STORAGE_KEY);
+    if (guardado && guardado in THEMES) return guardado as Theme;
+  } catch {
+    /* sin almacenamiento: se usa el tema por defecto */
+  }
+  return "light";
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("light");
+  const [theme, setThemeState] = useState<Theme>(temaGuardado);
   const [density, setDensity] = useState<Density>("regular");
+
+  // El tema se recuerda entre sesiones: sin esto el conmutador se olvidaría
+  // en cada recarga y se leería como que está roto.
+  const setTheme = (t: Theme) => {
+    setThemeState(t);
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, t);
+    } catch {
+      /* sin almacenamiento: el tema vale solo para esta sesión */
+    }
+  };
 
   return (
     <ThemeContext.Provider

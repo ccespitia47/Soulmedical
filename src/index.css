@@ -25,8 +25,17 @@ body {
   to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 @utility animate-modal-in {
   animation: modal-in 0.2s ease;
+}
+
+@utility animate-fade-up {
+  animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 
 @utility animate-spin-slow {
@@ -38,6 +47,19 @@ body {
   color: #9ca3af;
   pointer-events: none;
 }
+
+/* ── Variante `dark:` de Tailwind ─────────────────────────────────────────────
+   Por defecto, Tailwind v4 resuelve `dark:` con `prefers-color-scheme`, es decir
+   el ajuste del SISTEMA OPERATIVO. El resto de la aplicación se pinta con los
+   tokens de `data-theme`, así que eran dos mecanismos distintos conviviendo: el
+   conmutador de tema no afectaba a los componentes escritos con clases `dark:`.
+
+   Se engancha la variante a `data-theme`. Incluye `midnight` además de `dark`:
+   el tema es global y `midnight` se elige desde HomeSidebar; mapear solo `dark`
+   dejaría a ese usuario con formularios claros sobre un fondo casi negro.
+   El selector apunta al div que renderiza `ThemeProvider`, no a `html`: el
+   atributo `data-theme` no está en el elemento raíz. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, [data-theme="midnight"], [data-theme="midnight"] *));
 
 /* ── Tokens de tema (ThemeContext aplica data-theme) ──────────────────────── */
 :root,
