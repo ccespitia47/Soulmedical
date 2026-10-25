@@ -3,7 +3,7 @@
 // (ver, descargar PDF, editar, anular). Reutiliza un único componente de
 // tabla para los 6 tipos de `CONSENT_TYPES`.
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useConsentRecords } from "./useConsentRecords";
 import { buildRecordPdfHtml, triggerPdfDownload } from "./consentRecordPdf";
 import ConsentRecordViewModal from "./ConsentRecordViewModal";
@@ -30,8 +30,22 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString("es-CO", { year: "numeric", month: "short", day: "numeric" });
 }
 
-export default function ConsentRecordsPage() {
+type ConsentRecordsPageProps = {
+  /** El marco mantiene esta vista montada aunque esté oculta; al volver a ser
+   *  visible hay que recargar, o un consentimiento recién guardado no saldría. */
+  activa?: boolean;
+};
+
+export default function ConsentRecordsPage({ activa = true }: ConsentRecordsPageProps) {
   const { rows, total, page, limit, filters, setFilters, setPage, refetch, loading } = useConsentRecords();
+
+  // Recarga al pasar de oculta a visible. El hook ya pide al montar, pero con
+  // el marco esta página se monta UNA vez y vive toda la sesión.
+  const eraActiva = useRef(activa);
+  useEffect(() => {
+    if (activa && !eraActiva.current) refetch();
+    eraActiva.current = activa;
+  }, [activa, refetch]);
 
   // Borrador local del filtro: solo golpea la API al enviar (botón "Filtrar"),
   // no en cada tecla.

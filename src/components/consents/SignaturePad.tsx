@@ -86,6 +86,11 @@ export default function SignaturePad({ onChange, resetKey = 0, initialDataUrl }:
     if (!canvas) return;
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
+      // El marco de Consientify oculta la vista inactiva con `display:none`, así
+      // que su rect es 0x0. Redimensionar a 0 borra el bitmap de la firma y deja
+      // una superficie donde los trazos siguientes no pintan nada: se perdería
+      // la firma y no se podría volver a firmar.
+      if (rect.width === 0 || rect.height === 0) return;
       canvas.width = rect.width;
       canvas.height = rect.height;
       if (initialDataUrl) {

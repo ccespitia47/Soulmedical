@@ -44,7 +44,7 @@ export default function ConsientifyShell({ usuario, onLogout }: Props) {
           <ConsentimientosPage />
         </div>
         <div data-testid="vista-registros" hidden={vista !== "registros"}>
-          <ConsentRecordsPage />
+          <ConsentRecordsPage activa={vista === "registros"} />
         </div>
       </main>
     </div>

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { reset2FAApi } from "../../services/api";
 
 type MyTwoFactorModalProps = {
@@ -48,7 +49,11 @@ export default function MyTwoFactorModal({ onClose }: MyTwoFactorModalProps) {
     setConfirming(false);
   };
 
-  return (
+  // Portal a <body>: montado dentro de un ancestro con `backdrop-filter` o
+  // `transform` (el riel de Consientify, el AdminSidebar), ese ancestro crea
+  // bloque contenedor y `fixed inset-0` se resolvería contra su caja — un
+  // overlay de 60px — además de quedar atrapado en su contexto de apilamiento.
+  return createPortal(
     <div
       className="fixed inset-0 z-[400] flex items-center justify-center bg-black/55 p-5"
       onClick={(e) => {
@@ -167,6 +172,7 @@ export default function MyTwoFactorModal({ onClose }: MyTwoFactorModalProps) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

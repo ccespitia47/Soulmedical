@@ -1,3 +1,4 @@
+import { useId } from "react";
 import type { TriStateQ } from "../config/entityConfig";
 
 type Props = {
@@ -10,6 +11,13 @@ type Props = {
 
 export default function TriStateQuestion({ q, value, note, onChange, onNoteChange }: Props) {
   const options = ["Sí", "No", q.thirdLabel];
+  // El marco de Consientify puede tener dos formularios montados a la vez: uno
+  // a medias en Consentimientos y otro abierto en edición desde Registros. Con
+  // `name={q.id}` el navegador los trataría como UN solo grupo de radios, así
+  // que marcar en uno desmarcaría en el DOM el del otro; al ser inputs
+  // controlados, React no restaura el `checked`. Se vería una pregunta en
+  // blanco y se firmaría como respondida.
+  const grupo = `${useId()}-${q.id}`;
   return (
     <div className="border-b border-slate-100 py-3 last:border-0 dark:border-slate-700">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
@@ -23,7 +31,7 @@ export default function TriStateQuestion({ q, value, note, onChange, onNoteChang
             <label key={opt} className="flex items-center gap-1 text-[12px] text-slate-600 dark:text-slate-300">
               <input
                 type="radio"
-                name={q.id}
+                name={grupo}
                 checked={value === opt}
                 onChange={() => onChange(opt)}
                 className="h-3.5 w-3.5 accent-[#00c2a8]"
