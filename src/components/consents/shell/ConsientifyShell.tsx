@@ -31,6 +31,8 @@ export default function ConsientifyShell({ usuario, onLogout }: Props) {
   return (
     <div className="relative flex min-h-screen font-sans">
       <ConsientifyBackground />
+      {/* `sticky` y no `fixed`: el riel sigue ocupando su columna en el flex,
+          así que el contenido no queda debajo, pero no se va con el scroll. */}
       <ConsientifyRail
         vista={vista}
         onVista={(v) => navigate(`/consientify/${v}`)}

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { ThemeProvider } from "../../../context/ThemeContext";
 import ConsientifyBackground from "./ConsientifyBackground";
-import { PALETA, N_FORMAS } from "./fondoParams";
+import { PALETA, MIN_FORMAS, MAX_FORMAS, numeroDeFormas } from "./fondoParams";
 
 /** `matchMedia` no existe en jsdom; cada test declara si se pide menos movimiento. */
 function conMatchMedia(reduce: boolean) {
@@ -31,10 +31,32 @@ describe("ConsientifyBackground", () => {
   beforeEach(() => conMatchMedia(false));
   afterEach(() => vi.unstubAllGlobals());
 
-  it("pinta 16 formas", () => {
+  it("pinta tantas formas como pida el área de la ventana", () => {
     pintar();
-    expect(formas()).toHaveLength(16);
-    expect(N_FORMAS).toBe(16);
+    const esperadas = numeroDeFormas(window.innerWidth * window.innerHeight);
+    expect(formas()).toHaveLength(esperadas);
+    expect(esperadas).toBeGreaterThanOrEqual(MIN_FORMAS);
+    expect(esperadas).toBeLessThanOrEqual(MAX_FORMAS);
+  });
+
+  it("la densidad escala con la pantalla, con topes", () => {
+    // Un recuadro de muestra y una pantalla completa no pueden llevar lo mismo:
+    // 16 formas que lucen en 360x260 desaparecen en 1900x1000.
+    expect(numeroDeFormas(360 * 260)).toBe(MIN_FORMAS);
+    expect(numeroDeFormas(1900 * 1000)).toBe(MAX_FORMAS);
+    expect(numeroDeFormas(1280 * 720)).toBeGreaterThan(MIN_FORMAS);
+  });
+
+  it("cada forma recorre una distancia perceptible", () => {
+    // El recorrido del prototipo (18px en medio ciclo) daba 0,59 px/s en
+    // pantalla completa: animado e invisible. Se mide en píxeles visibles.
+    pintar();
+    for (const f of formas()) {
+      const el = f as HTMLElement;
+      const x = Math.abs(parseFloat(el.style.getPropertyValue("--viaje-x")));
+      const y = Math.abs(parseFloat(el.style.getPropertyValue("--viaje-y")));
+      expect(Math.hypot(x, y)).toBeGreaterThan(80);
+    }
   });
 
   it("no intercepta clics ni lo anuncia el lector de pantalla", () => {
@@ -55,7 +77,7 @@ describe("ConsientifyBackground", () => {
   it("sin esa preferencia, cada forma se anima con su propia duración", () => {
     pintar();
     const duraciones = formas().map((f) => parseFloat((f as HTMLElement).style.animationDuration));
-    expect(duraciones).toHaveLength(16);
+    expect(duraciones).toHaveLength(formas().length);
     for (const d of duraciones) {
       expect(d).toBeGreaterThanOrEqual(20);
       expect(d).toBeLessThanOrEqual(34);
@@ -70,8 +92,8 @@ describe("ConsientifyBackground", () => {
     pintar();
     for (const f of formas()) {
       const ancho = parseFloat((f as HTMLElement).style.width);
-      expect(ancho).toBeGreaterThanOrEqual(18);
-      expect(ancho).toBeLessThanOrEqual(30);
+      expect(ancho).toBeGreaterThanOrEqual(24);
+      expect(ancho).toBeLessThanOrEqual(44);
     }
   });
 

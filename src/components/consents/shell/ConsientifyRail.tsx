@@ -52,7 +52,7 @@ export default function ConsientifyRail({ vista, onVista, usuario, onLogout }: P
   return (
     <nav
       aria-label="Secciones de Consientify"
-      className="relative z-10 flex w-[60px] shrink-0 flex-col items-center gap-2 border-r border-slate-200 bg-white/70 py-4 backdrop-blur dark:border-slate-700 dark:bg-slate-900/70"
+      className="sticky top-0 z-10 flex h-screen w-[60px] shrink-0 flex-col items-center gap-2 self-start border-r border-slate-200 bg-white/70 py-4 backdrop-blur dark:border-slate-700 dark:bg-slate-900/70"
     >
       {DESTINOS.map((d) => {
         const activo = d.vista === vista;

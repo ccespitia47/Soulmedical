@@ -9,8 +9,8 @@
 import { useMemo } from "react";
 import { useTheme } from "../../../context/ThemeContext";
 import {
-  PALETA, N_FORMAS, ANCHO_MIN, ANCHO_MAX, CICLO_MIN, CICLO_MAX, DESFASE_MAX, OPACIDAD, TIPOS,
-  type Tipo,
+  PALETA, ANCHO_MIN, ANCHO_MAX, CICLO_MIN, CICLO_MAX, DESFASE_MAX, OPACIDAD, TIPOS,
+  VIAJE_MIN, VIAJE_MAX, numeroDeFormas, type Tipo,
 } from "./fondoParams";
 
 type Forma = {
@@ -21,12 +21,17 @@ type Forma = {
   arriba: number;
   ciclo: number;
   desfase: number;
+  /** Recorrido propio, para que no se desplacen todas en bloque. */
+  viajeX: number;
+  viajeY: number;
 };
 
 const entre = (min: number, max: number) => min + Math.random() * (max - min);
 
-function sortearFormas(): Forma[] {
-  return Array.from({ length: N_FORMAS }, (_, i) => ({
+const signo = () => (Math.random() < 0.5 ? -1 : 1);
+
+function sortearFormas(cuantas: number): Forma[] {
+  return Array.from({ length: cuantas }, (_, i) => ({
     tipo: TIPOS[i % TIPOS.length],
     color: PALETA[i % PALETA.length],
     ancho: entre(ANCHO_MIN, ANCHO_MAX),
@@ -34,6 +39,8 @@ function sortearFormas(): Forma[] {
     arriba: Math.random() * 88,
     ciclo: entre(CICLO_MIN, CICLO_MAX),
     desfase: -Math.random() * DESFASE_MAX,
+    viajeX: signo() * entre(VIAJE_MIN, VIAJE_MAX),
+    viajeY: signo() * entre(VIAJE_MIN, VIAJE_MAX),
   }));
 }
 
@@ -91,7 +98,12 @@ export default function ConsientifyBackground() {
   const { theme } = useTheme();
   // Se sortean una sola vez por montaje: resortear en cada render haría
   // saltar las formas de sitio.
-  const formas = useMemo(() => sortearFormas(), []);
+  // La densidad se calcula sobre el área real de la ventana: 16 formas lucen
+  // bien en un recuadro de muestra y desaparecen en una pantalla completa.
+  const formas = useMemo(() => {
+    const area = typeof window === "undefined" ? 1_700_000 : window.innerWidth * window.innerHeight;
+    return sortearFormas(numeroDeFormas(area));
+  }, []);
   const quieto = prefiereMenosMovimiento();
 
   // Sobre lienzo claro la paleta pierde contraste contra el texto gris, así que
@@ -102,7 +114,7 @@ export default function ConsientifyBackground() {
     <>
       <style>{`@keyframes consientify-flotar {
         0%   { transform: translate(0,0) rotate(0deg); }
-        50%  { transform: translate(18px,-26px) rotate(180deg); }
+        50%  { transform: translate(var(--viaje-x), var(--viaje-y)) rotate(180deg); }
         100% { transform: translate(0,0) rotate(360deg); }
       }`}</style>
       <div
@@ -136,7 +148,9 @@ export default function ConsientifyBackground() {
                 animationDelay: `${f.desfase}s`,
                 animationTimingFunction: "linear",
                 animationIterationCount: "infinite",
-              }}
+                ["--viaje-x" as string]: `${f.viajeX}px`,
+                ["--viaje-y" as string]: `${f.viajeY}px`,
+              } as React.CSSProperties}
             >
               <Dibujo color={f.color} />
             </div>
