@@ -18,6 +18,8 @@ type Props = {
   onVista: (v: Vista) => void;
   usuario: { name?: string } | null;
   onLogout: () => void;
+  fondoAnimado: boolean;
+  onFondoAnimado: (v: boolean) => void;
 };
 
 const ACENTO = "#00c2a8";
@@ -30,7 +32,14 @@ const DESTINOS: { vista: Vista; icono: string; etiqueta: string }[] = [
 const botonCls =
   "flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border-none bg-transparent transition-colors";
 
-export default function ConsientifyRail({ vista, onVista, usuario, onLogout }: Props) {
+export default function ConsientifyRail({
+  vista,
+  onVista,
+  usuario,
+  onLogout,
+  fondoAnimado,
+  onFondoAnimado,
+}: Props) {
   const { theme, setTheme } = useTheme();
   const [menuAbierto, setMenuAbierto] = useState(false);
   const cajaMenu = useRef<HTMLDivElement>(null);
@@ -77,6 +86,24 @@ export default function ConsientifyRail({ vista, onVista, usuario, onLogout }: P
       })}
 
       <div className="mt-auto flex flex-col items-center gap-2">
+        {/* El sistema puede pedir menos movimiento (Windows: Accesibilidad ›
+            Efectos visuales) y entonces el fondo arranca quieto. Este botón
+            permite encenderlo a voluntad sin quitarle la protección a quien
+            no lo pida. */}
+        <button
+          type="button"
+          aria-label={fondoAnimado ? "Desactivar fondo animado" : "Activar fondo animado"}
+          title={fondoAnimado ? "Fondo animado: encendido" : "Fondo animado: apagado"}
+          onClick={() => onFondoAnimado(!fondoAnimado)}
+          className={`${botonCls} ${
+            fondoAnimado
+              ? "text-[#0f766e] dark:text-[#2dd4bf]"
+              : "text-slate-400 dark:text-slate-500"
+          } hover:bg-slate-100 dark:hover:bg-slate-800`}
+        >
+          <Icon name="power" size={18} />
+        </button>
+
         <button
           type="button"
           aria-label={esOscuro ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}

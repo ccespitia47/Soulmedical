@@ -15,6 +15,8 @@ function pintar(opts: Opts = {}) {
         onVista={opts.onVista ?? onVista}
         usuario={opts.usuario ?? { name: "Ana Ruiz" }}
         onLogout={opts.onLogout ?? onLogout}
+        fondoAnimado={opts.fondoAnimado ?? true}
+        onFondoAnimado={opts.onFondoAnimado ?? vi.fn()}
       />
     </ThemeProvider>,
   );

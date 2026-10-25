@@ -15,7 +15,7 @@ function pintar() {
   render(
     <ThemeProvider>
       <div className="flex">
-        <ConsientifyRail vista="consentimientos" onVista={vi.fn()} usuario={{ name: "Ana" }} onLogout={vi.fn()} />
+        <ConsientifyRail vista="consentimientos" onVista={vi.fn()} usuario={{ name: "Ana" }} onLogout={vi.fn()} fondoAnimado onFondoAnimado={vi.fn()} />
         <main>contenido</main>
       </div>
     </ThemeProvider>,

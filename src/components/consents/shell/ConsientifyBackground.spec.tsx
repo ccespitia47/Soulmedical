@@ -66,11 +66,17 @@ describe("ConsientifyBackground", () => {
     expect(fondo.style.pointerEvents).toBe("none");
   });
 
-  it("con prefers-reduced-motion queda quieto", () => {
-    conMatchMedia(true);
-    pintar();
-    for (const f of formas()) {
-      expect((f as HTMLElement).style.animationName || "none").toBe("none");
+  it("con animado={false} queda quieto, no solo más lento", () => {
+    // Quien decide es el marco (ajuste del sistema + interruptor del riel).
+    render(
+      <ThemeProvider>
+        <ConsientifyBackground animado={false} />
+      </ThemeProvider>,
+    );
+    const quietas = formas();
+    expect(quietas.length).toBeGreaterThan(0);
+    for (const f of quietas) {
+      expect((f as HTMLElement).style.animationName).toBe("none");
     }
   });
 

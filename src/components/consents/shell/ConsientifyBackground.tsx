@@ -89,12 +89,13 @@ const DIBUJO: Record<Tipo, (p: { color: string }) => React.JSX.Element> = {
   jeringa: Jeringa,
 };
 
-function prefiereMenosMovimiento(): boolean {
-  if (typeof matchMedia !== "function") return false;
-  return matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
+type Props = {
+  /** Lo decide el marco: el ajuste del sistema manda por defecto y el
+   *  interruptor del riel lo puede sobrescribir (ver `fondoAnimadoPorDefecto`). */
+  animado?: boolean;
+};
 
-export default function ConsientifyBackground() {
+export default function ConsientifyBackground({ animado = true }: Props) {
   const { theme } = useTheme();
   // Se sortean una sola vez por montaje: resortear en cada render haría
   // saltar las formas de sitio.
@@ -104,7 +105,7 @@ export default function ConsientifyBackground() {
     const area = typeof window === "undefined" ? 1_700_000 : window.innerWidth * window.innerHeight;
     return sortearFormas(numeroDeFormas(area));
   }, []);
-  const quieto = prefiereMenosMovimiento();
+  const quieto = !animado;
 
   // Sobre lienzo claro la paleta pierde contraste contra el texto gris, así que
   // se oscurece y se baja la opacidad; sobre oscuro va tal cual.

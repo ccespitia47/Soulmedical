@@ -38,3 +38,36 @@ export function numeroDeFormas(areaPx2: number): number {
   const porArea = Math.round(areaPx2 / AREA_POR_FORMA);
   return Math.min(MAX_FORMAS, Math.max(MIN_FORMAS, porArea));
 }
+
+/** Clave de `localStorage` donde se recuerda si el fondo debe animarse. */
+export const FONDO_STORAGE_KEY = "consientify-fondo-animado";
+
+/** ¿Pide el sistema menos movimiento? */
+export function sistemaPideQuietud(): boolean {
+  if (typeof matchMedia !== "function") return false;
+  return matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/**
+ * Si el fondo debe animarse. El ajuste del sistema manda por DEFECTO —quien
+ * pide menos movimiento no se come la animación sin haberla pedido— pero una
+ * elección explícita del usuario lo sobrescribe y se recuerda.
+ */
+export function fondoAnimadoPorDefecto(): boolean {
+  try {
+    const guardado = localStorage.getItem(FONDO_STORAGE_KEY);
+    if (guardado === "1") return true;
+    if (guardado === "0") return false;
+  } catch {
+    /* sin almacenamiento: manda el sistema */
+  }
+  return !sistemaPideQuietud();
+}
+
+export function recordarFondoAnimado(animado: boolean): void {
+  try {
+    localStorage.setItem(FONDO_STORAGE_KEY, animado ? "1" : "0");
+  } catch {
+    /* sin almacenamiento: vale solo para esta sesión */
+  }
+}
