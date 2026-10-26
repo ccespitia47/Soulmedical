@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { SubformField, SubformRule } from "../subform.types";
+import Icon from "../../../common/Icon";
 import FieldsList from "./FieldsList";
 import FieldEditor from "./FieldEditor";
 import SubformRulesPanel from "./SubformRulesPanel";
@@ -75,9 +76,9 @@ export default function SubformBuilderModal({
         {/* Header */}
         <div className="flex flex-shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-gradient-to-br from-[#00c2a8] to-[#0891b2] text-xl">
-              🗂️
-            </div>
+            <span className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-gradient-to-br from-[#00c2a8] to-[#0891b2] text-white shadow-[0_6px_16px_-6px_rgba(0,194,168,0.6)]">
+              <Icon name="table" size={20} />
+            </span>
             <div>
               <div className="text-base font-extrabold text-gray-900">
                 Configurar Subformulario
@@ -88,18 +89,18 @@ export default function SubformBuilderModal({
               </div>
             </div>
           </div>
-          <div className="flex gap-2.5">
+          <div className="flex gap-2">
             <button
               onClick={onClose}
-              className="cursor-pointer rounded-lg border-[1.5px] border-slate-200 bg-transparent px-5 py-2 text-[13px] font-semibold text-gray-500"
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border-[1.5px] border-slate-200 bg-white px-3.5 py-2 text-[12px] font-semibold text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-700"
             >
-              Cancelar
+              <Icon name="x" size={14} /> Cancelar
             </button>
             <button
               onClick={() => onSave(localFields, localRules)}
-              className="cursor-pointer rounded-lg border-none bg-gradient-to-br from-[#00c2a8] to-[#0891b2] px-6 py-2 text-[13px] font-bold text-white shadow-[0_2px_10px_rgba(0,194,168,0.35)]"
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border-none bg-gradient-to-br from-[#00c2a8] to-[#0891b2] px-4 py-2 text-[12px] font-bold text-white shadow-[0_4px_14px_-4px_rgba(0,194,168,0.55)] transition-transform hover:-translate-y-px"
             >
-              💾 Guardar
+              <Icon name="save" size={14} /> Guardar
             </button>
           </div>
         </div>

@@ -10,9 +10,20 @@ import { Group, GroupSchema } from '../groups/group.schema';
 import { FormsService } from './forms.service';
 import { AssignmentsTreeService } from './assignments-tree.service';
 import { FormsController } from './forms.controller';
+import { FormAssetsService } from './form-assets.service';
+import { FormAssetsController } from './form-assets.controller';
+import { ExcelPreviewService } from './excel-preview.service';
+import { ExcelPreviewController } from './excel-preview.controller';
+import { PdfFillService } from './pdf-fill.service';
+import { PdfFillController } from './pdf-fill.controller';
 import { EmailModule } from '../email/email.module';
+import { FilesModule } from '../files/files.module';
 import { UsersModule } from '../users/users.module';
+import { ApiKeysModule } from '../api-keys/api-keys.module';
 import { PermissionsGuard } from '../auth/permissions.guard';
+import { ApiKeyGuard } from '../auth/api-key.guard';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtOrApiKeyGuard } from '../auth/jwt-or-api-key.guard';
 import { JWT_SECRET } from '../auth/jwt.strategy';
 import { AdminAuditModule } from '../admin-audit/admin-audit.module';
 
@@ -34,19 +45,37 @@ import { AdminAuditModule } from '../admin-audit/admin-audit.module';
       { name: Group.name, schema: GroupSchema },
     ]),
     EmailModule,
+    // FilesModule expone FilesService para descargar binarios de GridFS
+    // (firmas/fotos). Se usa en ExcelPreviewController.renderPdf para
+    // resolver los valores `gridfs:xxx` que llegan de submissions ya
+    // persistidas antes de anclarlos como imagen en la celda del Excel.
+    FilesModule,
     // Ciclo: FormsModule necesita UsersModule (FormsService/OTP) y
     // UsersModule necesita FormsModule (AssignmentsTreeService en
     // users.controller). forwardRef() en ambos lados, mismo patrón que
     // AdminAuditModule <-> UsersModule.
     forwardRef(() => UsersModule),
     AdminAuditModule,
+    // ApiKeysModule: FormsController ahora expone JwtOrApiKeyGuard en los
+    // endpoints create/read para que el MCP y Power BI operen con API key.
+    ApiKeysModule,
     // Mismo JWT_SECRET que AuthModule. Lo registramos también aquí porque el
     // FormsService firma/verifica tokens cortos de acceso a formularios
     // públicos verificados por email — son JWTs aparte del de sesión.
     JwtModule.register({ secret: JWT_SECRET }),
   ],
-  controllers: [FormsController],
-  providers: [FormsService, AssignmentsTreeService, PermissionsGuard],
-  exports: [FormsService, AssignmentsTreeService, MongooseModule],
+  controllers: [FormsController, FormAssetsController, ExcelPreviewController, PdfFillController],
+  providers: [
+    FormsService,
+    AssignmentsTreeService,
+    FormAssetsService,
+    ExcelPreviewService,
+    PdfFillService,
+    PermissionsGuard,
+    ApiKeyGuard,
+    JwtAuthGuard,
+    JwtOrApiKeyGuard,
+  ],
+  exports: [FormsService, AssignmentsTreeService, FormAssetsService, MongooseModule],
 })
 export class FormsModule {}

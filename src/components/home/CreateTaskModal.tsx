@@ -86,19 +86,6 @@ export default function CreateTaskModal({
     return map;
   }, [widgets]);
 
-  const maxSignatureStep = useMemo(() => {
-    let max = 0;
-    for (const step of signaturesByStep.keys()) max = Math.max(max, step);
-    return max;
-  }, [signaturesByStep]);
-
-  // Si el formulario tiene firmas hasta el paso N, garantizamos que el
-  // builder de tareas muestre N cajas de destinatarios.
-  useEffect(() => {
-    if (maxSignatureStep > 0) stepsCtl.ensureStepCount(maxSignatureStep);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [maxSignatureStep]);
-
   useEffect(() => {
     getUsersApi().then((r) => {
       if (r.data) {
@@ -273,9 +260,18 @@ export default function CreateTaskModal({
 
   const handleSend = async () => {
     if (!createdTaskId) return;
-    const validSteps = stepsCtl.steps.filter((s) =>
-      s.inputEmail.trim().includes("@"),
-    );
+    // Cada step aporta emails[]. Ignoramos steps totalmente vacíos (el admin
+    // puede haber agregado un segundo destinatario y luego arrepentirse).
+    const validSteps = stepsCtl.steps
+      .map((s) => {
+        const clean = s.emails
+          .map((e) => e.trim().toLowerCase())
+          .filter((e) => e && e.includes("@"));
+        const unique = Array.from(new Set(clean));
+        return { step: s, emails: unique };
+      })
+      .filter((x) => x.emails.length > 0);
+
     if (validSteps.length === 0) {
       setError("Agrega al menos un destinatario con email válido");
       return;
@@ -283,18 +279,25 @@ export default function CreateTaskModal({
     setSaving(true);
     setError("");
     try {
+      // Cada step manda recipientEmail (el primario, para compat con backend
+      // viejo) + recipientEmails (todos los paralelos). El backend nuevo
+      // usa recipientEmails y avanza el step solo cuando TODOS completan.
+      const stepsPayload = validSteps.map(({ step, emails }) => {
+        const primary = emails[0];
+        const primaryName = step.namesByEmail[primary];
+        return {
+          recipientEmail: primary,
+          recipientName: primaryName || primary,
+          recipientEmails: emails,
+        };
+      });
       const res = await fetch(`${API_URL}/api/tasks/${createdTaskId}/send`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          steps: validSteps.map((s) => ({
-            recipientEmail: s.inputEmail.trim(),
-            recipientName: s.inputName.trim() || s.inputEmail,
-          })),
-        }),
+        body: JSON.stringify({ steps: stepsPayload }),
       });
       if (!res.ok) {
         // 409 = la tarea ya fue enviada (por ejemplo, doble click o un
@@ -400,9 +403,9 @@ export default function CreateTaskModal({
               onAddStep={stepsCtl.addStep}
               onRemoveStep={stepsCtl.removeStep}
               onMoveStep={stepsCtl.moveStep}
-              onChangeStepEmail={stepsCtl.setStepExternal}
+              onSetStepEmails={stepsCtl.setStepEmails}
               onSetShowDropdown={stepsCtl.setShowDropdownFor}
-              onSelectStepUser={stepsCtl.setStepRecipient}
+              onAddUserToStep={stepsCtl.addUserToStep}
               onAddGroupMembers={stepsCtl.handleAddGroupMembers}
               shareEnabled={shareEnabled}
               onShareEnabledChange={handleToggleShareLink}

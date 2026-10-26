@@ -44,6 +44,21 @@ export class FormSubmission {
   // Nombre del archivo PDF sugerido al descargar
   @Prop({ type: String, default: null })
   pdfFilename: string | null;
+
+  // ── Soft delete ──────────────────────────────────────────────────────────
+  // Un registro "eliminado" nunca se borra físicamente: se marca con
+  // `deletedAt` + quién lo hizo + por qué. Todas las queries de la app
+  // filtran `deletedAt: null` (ver records.service, submissions.service).
+  // Se conserva por trazabilidad legal/auditoría — un DBA con acceso a
+  // Mongo puede recuperar el registro leyendo por _id.
+  @Prop({ type: Date, default: null, index: true })
+  deletedAt: Date | null;
+
+  @Prop({ type: Number, default: null })
+  deletedById: number | null;
+
+  @Prop({ type: String, default: null })
+  deletedReason: string | null;
 }
 
 export const FormSubmissionSchema = SchemaFactory.createForClass(FormSubmission);

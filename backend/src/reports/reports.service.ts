@@ -83,7 +83,10 @@ export class ReportsService {
     );
 
     const filename = `${this.sanitizeFilename(form.name)}_${this.timestamp()}.xlsx`;
-    const ttlMinutes = 2;
+    // 10 min cubre con holgura el peor caso realista: entrega SMTP + filtros
+    // antispam/antivirus corporativos + atención del usuario + ingreso TOTP.
+    // 2 min dejaba el link vencido al llegar a la bandeja.
+    const ttlMinutes = 10;
 
     // 3) Guardar el blob en Mongo con TTL
     const { token, expiresAt } = await this.secureDownloads.create({
@@ -181,7 +184,7 @@ export class ReportsService {
       user.documentNumber.trim(),
     );
     const filename = `${this.sanitizeFilename(form.name)}_tarea_${this.timestamp()}.xlsx`;
-    const ttlMinutes = 2;
+    const ttlMinutes = 10;
 
     const { token, expiresAt } = await this.secureDownloads.create({
       userId,

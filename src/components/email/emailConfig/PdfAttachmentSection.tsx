@@ -176,20 +176,22 @@ export default function PdfAttachmentSection({
               onChange={handlePdfChange}
               className="hidden"
             />
-            {uploadedPdfFile ? (
+            {(uploadedPdfFile || pdfBase64) ? (
               <div>
                 <div className="mb-3 text-5xl">✅</div>
                 <div className="mb-1 text-sm font-semibold text-gray-900">
-                  {uploadedPdfFile.name}
+                  {uploadedPdfFile?.name ?? "PDF cargado"}
                 </div>
                 <div className="mb-4 text-xs text-gray-500">
-                  {(uploadedPdfFile.size / 1024).toFixed(2)} KB
+                  {uploadedPdfFile
+                    ? `${(uploadedPdfFile.size / 1024).toFixed(2)} KB`
+                    : "Plantilla guardada · vuelve a subirla si querés cambiarla"}
                 </div>
-                <div className="flex justify-center gap-2">
+                <div className="flex flex-wrap justify-center gap-2">
                   <button
                     type="button"
                     onClick={() => pdfFileRef.current?.click()}
-                    className="cursor-pointer rounded-lg border-none bg-red-600 px-4 py-2 text-[13px] font-semibold text-white"
+                    className="cursor-pointer rounded-lg border-none bg-gray-500 px-4 py-2 text-[13px] font-semibold text-white"
                   >
                     🔄 Cambiar
                   </button>
@@ -204,6 +206,14 @@ export default function PdfAttachmentSection({
                     }}
                   >
                     📍 Mapear ({pdfMappingsCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onPreviewPdf}
+                    disabled={!pdfBase64}
+                    className="cursor-pointer rounded-lg border-none bg-violet-500 px-4 py-2 text-[13px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    👁️ Preview
                   </button>
                 </div>
               </div>

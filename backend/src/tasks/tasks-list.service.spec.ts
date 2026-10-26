@@ -81,6 +81,7 @@ function buildService(opts: {
     {} as any, // emailService — no se usa en listByForm/getDetail
     submissionsService as any,
     {} as any, // formsService — no se usa en listByForm/getDetail
+    {} as any, // usersService — no se usa en listByForm/getDetail
   );
 
   return { service, taskModel, submissionsService };

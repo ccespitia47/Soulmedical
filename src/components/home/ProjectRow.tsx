@@ -1,5 +1,6 @@
 import type { ThemeTokens, DensityTokens } from "../../context/ThemeContext";
 import Icon from "../common/Icon";
+import EntityIcon from "../common/EntityIcon";
 import PopoverMenu from "../common/PopoverMenu";
 
 type FolderLite = { id: string; name: string; icon: string; color: string; forms: unknown[] };
@@ -61,8 +62,7 @@ export default function ProjectRow({
         style={{
           gap: D.gap,
           padding: D.rowPad,
-          background: isActive ? T.bgHover : "transparent",
-          borderLeft: `3px solid ${isActive ? project.color : "transparent"}`,
+          background: isActive ? project.color + "14" : "transparent",
         }}
         onMouseOver={(e) => {
           if (!isActive) e.currentTarget.style.background = T.bgElev;
@@ -75,7 +75,7 @@ export default function ProjectRow({
           className="flex h-[22px] w-[22px] flex-shrink-0 items-center justify-center rounded-md text-xs"
           style={{ background: project.color + "28", color: project.color }}
         >
-          {project.icon}
+          <EntityIcon icon={project.icon} size={14} />
         </div>
         <div className="min-w-0 flex-1">
           <div
@@ -142,7 +142,6 @@ export default function ProjectRow({
                     gap: D.gap,
                     padding: D.nestPad,
                     background: isFolderActive ? folder.color + "15" : "transparent",
-                    borderLeft: `2px solid ${isFolderActive ? folder.color : "transparent"}`,
                   }}
                   onMouseOver={(e) => {
                     if (!isFolderActive) e.currentTarget.style.background = T.bgElev;
@@ -151,7 +150,9 @@ export default function ProjectRow({
                     if (!isFolderActive) e.currentTarget.style.background = "transparent";
                   }}
                 >
-                  <span className="text-[11px]">{folder.icon}</span>
+                  <span className="flex" style={{ color: folder.color }}>
+                    <EntityIcon icon={folder.icon} size={13} />
+                  </span>
                   <span
                     className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap"
                     style={{

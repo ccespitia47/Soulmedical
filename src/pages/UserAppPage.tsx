@@ -8,8 +8,10 @@ import MyTasksList from "../components/userapp/MyTasksList";
 import MySubmissionsList from "../components/userapp/MySubmissionsList";
 import MyDraftsList from "../components/userapp/MyDraftsList";
 import MyTwoFactorButton from "../components/auth/MyTwoFactorButton";
+import Icon from "../components/common/Icon";
+import EntityIcon from "../components/common/EntityIcon";
+import Avatar from "../components/common/Avatar";
 import type { AuthUser } from "../types/auth.types";
-import logo from "../assets/Logo_GrupoSoul.png";
 
 type AppSection = "forms" | "tasks" | "drafts" | "sent";
 
@@ -37,6 +39,8 @@ export default function UserAppPage({ user, onFillForm, onLogout, onSwitchToAdmi
     projects.length > 0 ? projects[0].id : null
   );
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  // Drawer del sidebar en móvil (en escritorio siempre visible).
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Contadores para los badges del sidebar.
   useEffect(() => {
@@ -118,54 +122,55 @@ export default function UserAppPage({ user, onFillForm, onLogout, onSwitchToAdmi
   const totalForms = visibleFolders.reduce((acc, f) => acc + f.forms.length, 0);
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "'Segoe UI', sans-serif", display: "flex" }}>
+    <div className="flex min-h-screen bg-[#f8fafc] font-['Segoe_UI',sans-serif]">
+
+      {/* Backdrop móvil/tablet */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden
+        />
+      )}
 
       {/* ── Sidebar oscuro estilo MoreApp ── */}
-      <aside style={{
-        width: 200, minHeight: "100vh", background: "#1e293b",
-        display: "flex", flexDirection: "column", flexShrink: 0,
-        position: "fixed", top: 0, bottom: 0, left: 0,
-      }}>
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex w-[212px] flex-shrink-0 flex-col bg-[#1e293b] transition-transform duration-300 ease-out lg:translate-x-0 ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
         {/* Logo */}
-        <div style={{ padding: "20px 18px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-          <img src={logo} alt="Grupo Soul" style={{ height: 28, objectFit: "contain", filter: "brightness(0) invert(1)", opacity: 0.9 }} />
+        <div className="border-b border-white/[0.08] px-5 pb-4 pt-5">
+          <span className="inline-flex items-center rounded-lg px-2 py-1.5" style={{ background: "#0F1623" }}>
+            <img src="/soulforms-logo-dark.png" alt="SoulForms" className="h-5 object-contain" />
+          </span>
         </div>
 
         {/* Nav */}
-        <nav style={{ flex: 1, padding: "12px 8px" }}>
+        <nav className="flex-1 p-2.5">
           {[
-            { id: "forms" as AppSection, icon: "📋", label: "Formularios", badge: 0 },
-            { id: "tasks" as AppSection, icon: "✅", label: "Tareas", badge: pendingCount },
-            { id: "drafts" as AppSection, icon: "📝", label: "Borradores", badge: draftsCount },
-            { id: "sent" as AppSection, icon: "📤", label: "Enviados", badge: sentCount },
+            { id: "forms" as AppSection, icon: "clipboard", label: "Formularios", badge: 0 },
+            { id: "tasks" as AppSection, icon: "checkCircle", label: "Tareas", badge: pendingCount },
+            { id: "drafts" as AppSection, icon: "edit", label: "Borradores", badge: draftsCount },
+            { id: "sent" as AppSection, icon: "send", label: "Enviados", badge: sentCount },
           ].map((item) => {
             const active = section === item.id;
             return (
               <div
                 key={item.label}
-                onClick={() => setSection(item.id)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 10,
-                  padding: "11px 14px", borderRadius: 8, marginBottom: 2,
-                  background: active ? "rgba(0,194,168,0.15)" : "transparent",
-                  borderLeft: active ? "3px solid #00c2a8" : "3px solid transparent",
-                  cursor: "pointer", transition: "all 0.15s",
-                }}
+                onClick={() => { setSection(item.id); setSidebarOpen(false); }}
+                className={`group mb-1 flex cursor-pointer items-center gap-3 rounded-lg border-l-[3px] px-3.5 py-2.5 transition-all duration-200 ease-out ${
+                  active
+                    ? "border-[#00c2a8] bg-gradient-to-br from-[#00c2a8]/25 to-[#0891b2]/15 shadow-[0_4px_14px_-6px_rgba(0,194,168,0.5)]"
+                    : "border-transparent hover:bg-white/[0.06]"
+                }`}
               >
-                <span style={{ fontSize: 17 }}>{item.icon}</span>
-                <span style={{
-                  flex: 1, fontSize: 13,
-                  fontWeight: active ? 700 : 400,
-                  color: active ? "#00c2a8" : "rgba(255,255,255,0.5)",
-                }}>
+                <Icon name={item.icon} size={18} className={active ? "text-[#2dd4bf]" : "text-white/45 transition-colors group-hover:text-white/70"} />
+                <span className={`flex-1 text-[13px] ${active ? "font-bold text-[#2dd4bf]" : "font-normal text-white/50 transition-colors group-hover:text-white/70"}`}>
                   {item.label}
                 </span>
                 {item.badge > 0 && (
-                  <span style={{
-                    background: "#ef4444", color: "#fff",
-                    borderRadius: 10, padding: "1px 7px",
-                    fontSize: 10, fontWeight: 700, minWidth: 18, textAlign: "center",
-                  }}>
+                  <span className="min-w-[18px] rounded-[10px] bg-red-500 px-1.5 py-px text-center text-[10px] font-bold text-white shadow-[0_2px_6px_-1px_rgba(239,68,68,0.5)]">
                     {item.badge}
                   </span>
                 )}
@@ -176,38 +181,27 @@ export default function UserAppPage({ user, onFillForm, onLogout, onSwitchToAdmi
           {/* Botón volver al admin (solo si es admin) */}
           {onSwitchToAdmin && (
             <>
-              <div style={{ height: 1, background: "rgba(255,255,255,0.08)", margin: "12px 8px" }} />
-              <div onClick={onSwitchToAdmin} style={{
-                display: "flex", alignItems: "center", gap: 10,
-                padding: "11px 14px", borderRadius: 8,
-                cursor: "pointer", transition: "all 0.15s",
-                borderLeft: "3px solid transparent",
-              }}
-                onMouseOver={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
-                onMouseOut={(e) => { e.currentTarget.style.background = "transparent"; }}
+              <div className="mx-2 my-3 h-px bg-white/[0.08]" />
+              <div
+                onClick={onSwitchToAdmin}
+                className="group flex cursor-pointer items-center gap-3 rounded-lg border-l-[3px] border-transparent px-3.5 py-2.5 transition-all duration-200 ease-out hover:bg-white/[0.06]"
               >
-                <span style={{ fontSize: 17 }}>⚙️</span>
-                <span style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>Panel Admin</span>
+                <Icon name="settings" size={18} className="text-white/45 transition-colors group-hover:text-white/70" />
+                <span className="text-[13px] text-white/50 transition-colors group-hover:text-white/70">Panel Admin</span>
               </div>
             </>
           )}
         </nav>
 
         {/* Footer usuario */}
-        <div style={{ padding: "14px 12px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-            <div style={{
-              width: 34, height: 34, borderRadius: "50%", flexShrink: 0,
-              background: "linear-gradient(135deg, #00c2a8, #0891b2)",
-              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
-            }}>
-              {user.avatar}
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <div className="border-t border-white/[0.08] px-3 py-3.5">
+          <div className="mb-2.5 flex items-center gap-2.5">
+            <Avatar name={user.name} size={34} />
+            <div className="min-w-0">
+              <div className="overflow-hidden text-ellipsis whitespace-nowrap text-xs font-semibold text-white">
                 {user.name}
               </div>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", textTransform: "capitalize" }}>
+              <div className="text-[10px] capitalize text-white/40">
                 {user.role.replace("_", " ")}
               </div>
             </div>
@@ -215,32 +209,31 @@ export default function UserAppPage({ user, onFillForm, onLogout, onSwitchToAdmi
           <MyTwoFactorButton
             className="mb-2 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-[7px] border border-white/15 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-white/70 transition-colors hover:bg-white/10 hover:text-white"
           />
-          <button onClick={onLogout} style={{
-            width: "100%", padding: "7px 12px",
-            background: "rgba(239,68,68,0.1)", color: "#fca5a5",
-            border: "1px solid rgba(239,68,68,0.2)", borderRadius: 7,
-            fontSize: 11, fontWeight: 600, cursor: "pointer",
-            fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-          }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(239,68,68,0.2)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(239,68,68,0.1)"; }}
+          <button
+            onClick={onLogout}
+            className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-[7px] border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-[11px] font-semibold text-red-300 transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-red-500/20 hover:shadow-[0_8px_18px_-8px_rgba(239,68,68,0.6)]"
           >
-            🚪 Cerrar sesión
+            <Icon name="logout" size={14} />
+            Cerrar sesión
           </button>
         </div>
       </aside>
 
       {/* ── Main ── */}
-      <main style={{ flex: 1, marginLeft: 200, display: "flex", flexDirection: "column" }}>
+      <main className="flex flex-1 flex-col lg:ml-[212px]">
 
         {/* Header */}
-        <header style={{
-          background: "#ffffff", borderBottom: "1px solid #e2e8f0",
-          padding: "0 24px", height: 56,
-          display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0,
-        }}>
-          <div>
-            <h1 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", margin: 0 }}>
+        <header className="flex h-14 flex-shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-2">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Abrir menú"
+              className="-ml-1 flex h-9 w-9 flex-shrink-0 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 lg:hidden"
+            >
+              <Icon name="menu" size={20} />
+            </button>
+            <div className="min-w-0">
+            <h1 className="m-0 truncate text-lg font-extrabold tracking-tight text-[#0f172a] sm:text-xl">
               {section === "forms"
                 ? "Formularios"
                 : section === "tasks"
@@ -250,33 +243,37 @@ export default function UserAppPage({ user, onFillForm, onLogout, onSwitchToAdmi
                 : "Enviados"}
             </h1>
             {section === "forms" && selectedProject && (
-              <p style={{ fontSize: 11, color: "#94a3b8", margin: 0 }}>
+              <p className="m-0 text-xs text-slate-400">
                 {selectedProject.name} · {totalForms} formulario{totalForms !== 1 ? "s" : ""}
               </p>
             )}
             {section === "tasks" && (
-              <p style={{ fontSize: 11, color: "#94a3b8", margin: 0 }}>
+              <p className="m-0 text-xs text-slate-400">
                 {pendingCount} tarea{pendingCount !== 1 ? "s" : ""} pendiente
                 {pendingCount !== 1 ? "s" : ""}
               </p>
             )}
             {section === "drafts" && (
-              <p style={{ fontSize: 11, color: "#94a3b8", margin: 0 }}>
+              <p className="m-0 text-xs text-slate-400">
                 {draftsCount} borrador{draftsCount !== 1 ? "es" : ""} guardado
                 {draftsCount !== 1 ? "s" : ""}
               </p>
             )}
             {section === "sent" && (
-              <p style={{ fontSize: 11, color: "#94a3b8", margin: 0 }}>
+              <p className="m-0 text-xs text-slate-400">
                 {sentCount} envío{sentCount !== 1 ? "s" : ""} en total
               </p>
             )}
+            </div>
           </div>
 
           {section === "forms" && projects.length > 1 && (
-            <select value={selectedProjectId ?? ""} onChange={(e) => setSelectedProjectId(e.target.value)}
-              style={{ padding: "6px 12px", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 13, color: "#374151", background: "#f8fafc", cursor: "pointer", fontFamily: "inherit", outline: "none" }}>
-              {projects.map((p) => <option key={p.id} value={p.id}>{p.icon} {p.name}</option>)}
+            <select
+              value={selectedProjectId ?? ""}
+              onChange={(e) => setSelectedProjectId(e.target.value)}
+              className="flex-shrink-0 cursor-pointer rounded-lg border-[1.5px] border-slate-200 bg-slate-50 px-3 py-1.5 font-[inherit] text-[13px] text-slate-700 outline-none transition-colors focus:border-[#00c2a8]"
+            >
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           )}
         </header>
@@ -290,84 +287,87 @@ export default function UserAppPage({ user, onFillForm, onLogout, onSwitchToAdmi
         ) : (
           <>
         {/* Buscador */}
-        <div style={{ padding: "14px 24px", background: "#fff", borderBottom: "1px solid #f1f5f9" }}>
-          <div style={{ position: "relative", maxWidth: 400 }}>
-            <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 14, color: "#94a3b8" }}>🔍</span>
-            <input type="text" placeholder="Busca carpetas y formularios..." value={search} onChange={(e) => setSearch(e.target.value)}
-              style={{
-                width: "100%", padding: "9px 12px 9px 36px", border: "1.5px solid #e2e8f0", borderRadius: 8,
-                fontSize: 13, fontFamily: "inherit", outline: "none", background: "#f8fafc", color: "#0f172a", boxSizing: "border-box",
-              }}
-              onFocus={(e) => { e.target.style.borderColor = "#00c2a8"; e.target.style.background = "#fff"; }}
-              onBlur={(e) => { e.target.style.borderColor = "#e2e8f0"; e.target.style.background = "#f8fafc"; }}
+        <div className="border-b border-slate-100 bg-white px-4 py-3.5 sm:px-6">
+          <div className="relative max-w-[400px]">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+              <Icon name="search" size={16} />
+            </span>
+            <input
+              type="text"
+              placeholder="Busca carpetas y formularios..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="box-border w-full rounded-lg border-[1.5px] border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 font-[inherit] text-[13px] text-[#0f172a] outline-none transition-colors focus:border-[#00c2a8] focus:bg-white"
             />
           </div>
         </div>
 
         {/* Lista */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "16px 24px" }}>
+        <div className="animate-fade-up flex-1 overflow-y-auto px-4 py-4 sm:px-6">
 
           {projects.length === 0 || totalForms === 0 ? (
-            <div style={{ textAlign: "center", padding: "80px 24px", color: "#94a3b8" }}>
-              <span style={{ fontSize: 48, display: "block", marginBottom: 16 }}>📋</span>
-              <p style={{ fontSize: 15, fontWeight: 600 }}>No hay formularios disponibles</p>
-              <p style={{ fontSize: 13 }}>
+            <div className="animate-fade-up px-6 py-20 text-center text-slate-400">
+              <span className="mb-4 flex justify-center text-slate-300">
+                <Icon name="inbox" size={48} />
+              </span>
+              <p className="text-[15px] font-semibold">No hay formularios disponibles</p>
+              <p className="text-[13px]">
                 {user.role === "user"
                   ? "El administrador aún no te ha asignado formularios."
                   : "Contacta al administrador para asignarte formularios."}
               </p>
             </div>
           ) : (
-            filteredFolders.map((folder) => {
+            filteredFolders.map((folder, i) => {
               const isExpanded = expandedFolders.has(folder.id);
               return (
-                <div key={folder.id} style={{ marginBottom: 8 }}>
+                <div key={folder.id} className="animate-fade-up mb-2.5" style={{ animationDelay: `${i * 40}ms` }}>
                   {/* Carpeta */}
-                  <div onClick={() => toggleFolder(folder.id)} style={{
-                    display: "flex", alignItems: "center", justifyContent: "space-between",
-                    padding: "14px 18px", background: "#ffffff",
-                    borderRadius: isExpanded ? "10px 10px 0 0" : 10,
-                    border: "1px solid #e2e8f0", cursor: "pointer", transition: "all 0.15s",
-                    borderLeft: `4px solid ${folder.color}`,
-                  }}
-                    onMouseOver={(e) => { e.currentTarget.style.background = "#f8fafc"; }}
-                    onMouseOut={(e) => { e.currentTarget.style.background = "#ffffff"; }}
+                  <div
+                    onClick={() => toggleFolder(folder.id)}
+                    className={`flex cursor-pointer items-center justify-between border border-slate-200 bg-white px-[18px] py-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:scale-[1.005] hover:shadow-[0_10px_24px_-10px_rgba(15,23,42,0.18)] ${isExpanded ? "rounded-t-xl" : "rounded-xl"}`}
                   >
-                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                      <span style={{ fontSize: 20 }}>{folder.icon}</span>
+                    <div className="flex items-center gap-3">
+                      <span
+                        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg"
+                        style={{ background: folder.color + "1f", color: folder.color }}
+                      >
+                        <EntityIcon icon={folder.icon} size={18} />
+                      </span>
                       <div>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>{folder.name}</div>
-                        <div style={{ fontSize: 11, color: "#94a3b8" }}>{folder.forms.length} formulario{folder.forms.length !== 1 ? "s" : ""}</div>
+                        <div className="text-sm font-semibold text-[#0f172a]">{folder.name}</div>
+                        <div className="text-[11px] text-slate-400">{folder.forms.length} formulario{folder.forms.length !== 1 ? "s" : ""}</div>
                       </div>
                     </div>
-                    <span style={{ fontSize: 16, color: "#94a3b8", transition: "transform 0.2s", display: "inline-block", transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)" }}>›</span>
+                    <span className="inline-block text-slate-400 transition-transform duration-200" style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)" }}>
+                      <Icon name="chevronRight" size={16} />
+                    </span>
                   </div>
 
                   {/* Formularios */}
                   {isExpanded && (
-                    <div style={{ border: "1px solid #e2e8f0", borderTop: "none", borderRadius: "0 0 10px 10px", overflow: "hidden" }}>
+                    <div className="overflow-hidden rounded-b-xl border border-t-0 border-slate-200">
                       {folder.forms.map((form, index) => (
-                        <div key={form.id} onClick={() => onFillForm(folder.id, form.id)} style={{
-                          display: "flex", alignItems: "center", justifyContent: "space-between",
-                          padding: "13px 18px", background: "#fff",
-                          borderTop: index > 0 ? "1px solid #f1f5f9" : "none",
-                          cursor: "pointer", transition: "all 0.12s",
-                        }}
-                          onMouseOver={(e) => { e.currentTarget.style.background = "#f0fdf4"; }}
-                          onMouseOut={(e) => { e.currentTarget.style.background = "#fff"; }}
+                        <div
+                          key={form.id}
+                          onClick={() => onFillForm(folder.id, form.id)}
+                          className={`group flex cursor-pointer items-center justify-between bg-white px-[18px] py-3 transition-colors duration-150 ease-out hover:bg-[#f0fdf4] ${index > 0 ? "border-t border-slate-100" : ""}`}
                         >
-                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                            <div style={{
-                              width: 32, height: 32, borderRadius: 8,
-                              background: `${folder.color}18`,
-                              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
-                            }}>📋</div>
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="flex h-8 w-8 items-center justify-center rounded-lg"
+                              style={{ background: `${folder.color}18`, color: folder.color }}
+                            >
+                              <Icon name="clipboard" size={16} />
+                            </div>
                             <div>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>{form.name}</div>
-                              <div style={{ fontSize: 11, color: "#94a3b8" }}>Editado: {form.updatedAt}</div>
+                              <div className="text-[13px] font-semibold text-[#0f172a]">{form.name}</div>
+                              <div className="text-[11px] text-slate-400">Editado: {form.updatedAt}</div>
                             </div>
                           </div>
-                          <span style={{ fontSize: 18, color: "#cbd5e1" }}>›</span>
+                          <span className="text-slate-300 transition-all duration-150 group-hover:translate-x-0.5 group-hover:text-[#00c2a8]">
+                            <Icon name="chevronRight" size={16} />
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -378,9 +378,11 @@ export default function UserAppPage({ user, onFillForm, onLogout, onSwitchToAdmi
           )}
 
           {search.trim() !== "" && filteredFolders.every((f) => f.forms.length === 0) && (
-            <div style={{ textAlign: "center", padding: "60px 24px", color: "#94a3b8" }}>
-              <span style={{ fontSize: 40 }}>🔍</span>
-              <p style={{ fontSize: 14, marginTop: 12 }}>Sin resultados para "<strong>{search}</strong>"</p>
+            <div className="animate-fade-up px-6 py-16 text-center text-slate-400">
+              <span className="flex justify-center text-slate-300">
+                <Icon name="search" size={40} />
+              </span>
+              <p className="mt-3 text-sm">Sin resultados para "<strong>{search}</strong>"</p>
             </div>
           )}
         </div>

@@ -23,13 +23,13 @@ export default function FormPopover({
   onDuplicate,
   onAssign,
   onDelete,
-  onCreateTask,
   onShare,
 }: FormPopoverProps) {
+  // "Agregar tarea" ya NO va aquí: se muestra como botón propio junto a
+  // "Config" en las tarjetas/filas de formulario (FormsView).
   const items = [
     { label: isFav ? "Quitar de favoritos" : "Agregar a favoritos", icon: "star", onClick: onToggleFav },
     { label: "Compartir", icon: "link", onClick: onShare },
-    { label: "Agregar tarea", icon: "clock", onClick: onCreateTask },
     ...(onEdit ? [{ label: "Editar", icon: "edit", onClick: onEdit }] : []),
     { label: "Duplicar", icon: "copy", onClick: onDuplicate },
     { label: "Asignar usuarios", icon: "users", onClick: onAssign },

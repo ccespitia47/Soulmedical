@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import type { EmailRecipient } from "../../../types/email-template.types";
 import { ROLE_LABELS } from "../../../types/auth.types";
 import { randomUUID } from "../../../utils/uuid";
+import ExcelEmailUploader from "../../common/ExcelEmailUploader";
 
 export type RecipientUser = {
   id: number;
@@ -11,18 +12,29 @@ export type RecipientUser = {
   active: boolean;
 };
 
+// Un widget tipo email del form actual, pasado desde EmailConfigPanel.
+// Se ofrece como destinatario "campo del formulario" — más seguro que el
+// grupo legacy "current_user" porque apunta a un widgetId exacto en vez de
+// agarrar el primer email del submission.
+export type EmailFieldOption = {
+  id: string;      // widget.id
+  label: string;   // widget.label o placeholder (fallback)
+};
+
 export const AVAILABLE_GROUPS = [
   { id: "current_user", label: "Quien diligencia", icon: "✍️", color: "#00c2a8" },
-  { id: "me", label: "Yo (usuario actual)", icon: "🙋", color: "#10b981" },
   { id: "admin", label: "Administradores", icon: "👨‍💼", color: "#7c3aed" },
   { id: "coordinator", label: "Coordinadores", icon: "👩‍⚕️", color: "#0891b2" },
   { id: "user", label: "Todos los usuarios", icon: "👤", color: "#d97706" },
 ];
 
+const FIELD_COLOR = "#f59e0b";
+
 type RecipientsInputProps = {
   label: string;
   recipients: EmailRecipient[];
   allUsers: RecipientUser[];
+  emailFields?: EmailFieldOption[];
   hasError?: boolean;
   onChange: (r: EmailRecipient[]) => void;
 };
@@ -37,12 +49,19 @@ function tagMeta(r: EmailRecipient) {
       label: r.groupLabel ?? r.group ?? "",
     };
   }
+  if (r.type === "field") {
+    return {
+      color: FIELD_COLOR,
+      bg: `${FIELD_COLOR}18`,
+      icon: "📝",
+      label: r.widgetLabel ?? r.widgetId ?? "",
+    };
+  }
   return { color: "#374151", bg: "#f3f4f6", icon: "✉️", label: r.email ?? "" };
 }
 
 function groupDescription(id: string, label: string) {
   if (id === "current_user") return "Email del campo del formulario";
-  if (id === "me") return "Email del usuario logueado en la plataforma";
   return `Todos los ${label.toLowerCase()}`;
 }
 
@@ -50,6 +69,7 @@ export default function RecipientsInput({
   label,
   recipients,
   allUsers,
+  emailFields = [],
   hasError,
   onChange,
 }: RecipientsInputProps) {
@@ -60,11 +80,17 @@ export default function RecipientsInput({
   const query = inputValue.trim().toLowerCase();
   const alreadyGroupIds = recipients.filter((r) => r.type === "group").map((r) => r.group);
   const alreadyEmails = recipients.filter((r) => r.type === "static").map((r) => r.email);
+  const alreadyFieldIds = recipients.filter((r) => r.type === "field").map((r) => r.widgetId);
 
   const groupSuggestions = AVAILABLE_GROUPS.filter(
     (g) =>
       !alreadyGroupIds.includes(g.id) &&
       (query === "" || g.label.toLowerCase().includes(query))
+  );
+  const fieldSuggestions = emailFields.filter(
+    (f) =>
+      !alreadyFieldIds.includes(f.id) &&
+      (query === "" || f.label.toLowerCase().includes(query))
   );
   const userSuggestions = allUsers.filter(
     (u) =>
@@ -74,12 +100,24 @@ export default function RecipientsInput({
       (u.email.toLowerCase().includes(query) || u.name.toLowerCase().includes(query))
   );
   const hasDropdown =
-    showDropdown && (groupSuggestions.length > 0 || userSuggestions.length > 0);
+    showDropdown &&
+    (groupSuggestions.length > 0 ||
+      fieldSuggestions.length > 0 ||
+      userSuggestions.length > 0);
 
   const addGroup = (group: (typeof AVAILABLE_GROUPS)[0]) => {
     onChange([
       ...recipients,
       { id: randomUUID(), type: "group", group: group.id, groupLabel: group.label },
+    ]);
+    setInputValue("");
+    inputRef.current?.focus();
+  };
+
+  const addField = (field: EmailFieldOption) => {
+    onChange([
+      ...recipients,
+      { id: randomUUID(), type: "field", widgetId: field.id, widgetLabel: field.label },
     ]);
     setInputValue("");
     inputRef.current?.focus();
@@ -198,13 +236,50 @@ export default function RecipientsInput({
                 ))}
               </>
             )}
-            {userSuggestions.length > 0 && (
+            {fieldSuggestions.length > 0 && (
               <>
                 <div
                   className="px-3.5 pb-1 pt-2 text-[10px] font-bold uppercase text-gray-400"
                   style={{
                     borderTop:
                       groupSuggestions.length > 0 ? "1px solid #f1f5f9" : "none",
+                  }}
+                >
+                  CAMPOS DEL FORMULARIO
+                </div>
+                {fieldSuggestions.map((f) => (
+                  <div
+                    key={f.id}
+                    onMouseDown={() => addField(f)}
+                    className="flex cursor-pointer items-center gap-2.5 border-l-[3px] px-3.5 py-2 hover:bg-slate-50"
+                    style={{ borderLeftColor: FIELD_COLOR }}
+                  >
+                    <span className="text-lg">📝</span>
+                    <div>
+                      <div className="text-[13px] font-semibold">{f.label}</div>
+                      <div className="text-[11px] text-gray-400">
+                        Correo tomado exactamente de este campo del formulario
+                      </div>
+                    </div>
+                    <span
+                      className="ml-auto rounded-[20px] px-2 py-0.5 text-[10px] font-bold"
+                      style={{ background: `${FIELD_COLOR}18`, color: FIELD_COLOR }}
+                    >
+                      CAMPO
+                    </span>
+                  </div>
+                ))}
+              </>
+            )}
+            {userSuggestions.length > 0 && (
+              <>
+                <div
+                  className="px-3.5 pb-1 pt-2 text-[10px] font-bold uppercase text-gray-400"
+                  style={{
+                    borderTop:
+                      groupSuggestions.length > 0 || fieldSuggestions.length > 0
+                        ? "1px solid #f1f5f9"
+                        : "none",
                   }}
                 >
                   USUARIOS
@@ -248,9 +323,25 @@ export default function RecipientsInput({
           </div>
         )}
       </div>
-      <div className="mt-1 text-[11px] text-gray-400">
-        Escribe un correo y presiona Enter · Busca usuarios por nombre · Selecciona grupos del
-        menú
+      <div className="mt-1 flex items-center gap-3 text-[11px] text-gray-400">
+        <span>
+          Escribe un correo y presiona Enter · Busca usuarios por nombre · Selecciona grupos del menú
+        </span>
+        <ExcelEmailUploader
+          existingEmails={recipients
+            .filter((r) => r.type === "static")
+            .map((r) => r.email ?? "")}
+          onAdd={(added) => {
+            if (added.length === 0) return;
+            const newOnes: EmailRecipient[] = added.map((email) => ({
+              id: randomUUID(),
+              type: "static",
+              email,
+            }));
+            onChange([...recipients, ...newOnes]);
+          }}
+          compact
+        />
       </div>
     </div>
   );

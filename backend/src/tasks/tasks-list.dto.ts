@@ -39,6 +39,16 @@ export type TaskSubmissionDto = {
   userName: string;
   hasPdf: boolean;
   summary: Record<string, string>;
+  /** Correo del respondent que envió esta submission (si aplica). Permite
+   * matchear submission → destinatario en la tabla de reportes. */
+  respondentEmail?: string;
+  /** Data cruda del formulario para leer valores de widgets como quiz_score. */
+  data?: Record<string, string>;
+};
+
+export type TaskScoreWidgetDto = {
+  id: string;
+  label: string;
 };
 
 export type TaskDetailDto = {
@@ -53,4 +63,7 @@ export type TaskDetailDto = {
   submissions: TaskSubmissionDto[];
   /** Cuántos externos diligenciaron la tarea vía el enlace compartible. */
   externalCount: number;
+  /** Widgets tipo "quiz_score" del formulario. Si tiene al menos uno, el
+   * frontend agrega columna Nota + tarjeta Promedio. */
+  scoreWidgets: TaskScoreWidgetDto[];
 };

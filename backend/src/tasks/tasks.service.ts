@@ -4,13 +4,14 @@ import {
   ForbiddenException,
   HttpException,
   Injectable,
+  InternalServerErrorException,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { randomBytes } from 'node:crypto';
-import { Task, TaskDocument, TaskStep } from './task.schema';
+import { Task, TaskDocument, TaskRespondent, TaskStep } from './task.schema';
 import { CreateTaskDto, SubmitTaskStepDto } from './tasks.dto';
 import { EmailService } from '../email/email.service';
 import type {
@@ -19,6 +20,7 @@ import type {
 } from '../email/email.types';
 import { SubmissionsService } from '../submissions/submissions.service';
 import { FormsService } from '../forms/forms.service';
+import { UsersService } from '../users/users.service';
 import type {
   TaskSummaryDto,
   TaskSummaryPageDto,
@@ -43,7 +45,88 @@ export class TasksService {
     private readonly emailService: EmailService,
     private readonly submissionsService: SubmissionsService,
     private readonly formsService: FormsService,
+    private readonly usersService: UsersService,
   ) {}
+
+  /**
+   * Devuelve la lista canónica de respondents de un paso. Si el paso ya vive
+   * con el modelo nuevo (`respondents.length > 0`), esa lista manda. Si es
+   * legacy (creado antes de que existiera paralelismo), sintetiza uno solo
+   * a partir de los campos viejos del step para que el resto del código
+   * pueda trabajar con una única representación.
+   */
+  private getRespondents(step: TaskStep): TaskRespondent[] {
+    if (step.respondents && step.respondents.length > 0) {
+      return step.respondents;
+    }
+    return [
+      {
+        email: step.recipientEmail,
+        name: step.recipientName,
+        token: step.token,
+        // Un step legacy no distingue entre in_progress/completed por respondent,
+        // así que reflejamos el estado del step entero.
+        status: step.status,
+        formData: step.formData ?? {},
+        completedAt: step.completedAt,
+        ipAddress: step.ipAddress,
+        lastReminderAt: step.lastReminderAt,
+      },
+    ];
+  }
+
+  /**
+   * Construye un TaskStep completo (con respondents[] + campos legacy
+   * poblados desde el primero) a partir de la lista de emails paralelos que
+   * deben responder ESTE paso. `activeNow=true` marca a todos los respondents
+   * como 'in_progress' (paso 0 al crear/enviar, o cuando el paso anterior
+   * cerró). Nunca cambia el status del paso al de un respondent individual.
+   */
+  private buildStep(
+    order: number,
+    emails: string[],
+    primaryName: string | undefined,
+    activeNow: boolean,
+  ): TaskStep {
+    const unique: string[] = [];
+    const seen = new Set<string>();
+    for (const raw of emails) {
+      const e = (raw ?? '').trim().toLowerCase();
+      if (!e || !e.includes('@') || seen.has(e)) continue;
+      seen.add(e);
+      unique.push(e);
+    }
+    if (unique.length === 0) {
+      throw new BadRequestException(
+        'Se requiere al menos un email válido por paso',
+      );
+    }
+
+    const respondents: TaskRespondent[] = unique.map((email, idx) => ({
+      email,
+      name: idx === 0 && primaryName ? primaryName : email,
+      token: crypto.randomUUID(),
+      status: activeNow ? 'in_progress' : 'pending',
+      formData: {},
+      completedAt: undefined,
+      ipAddress: undefined,
+      lastReminderAt: null,
+    }));
+
+    const first = respondents[0];
+    return {
+      order,
+      recipientEmail: first.email,
+      recipientName: first.name,
+      token: first.token,
+      status: activeNow ? 'in_progress' : 'pending',
+      formData: {},
+      completedAt: undefined,
+      ipAddress: undefined,
+      lastReminderAt: null,
+      respondents,
+    };
+  }
 
   // Un enlace compartible es un ingreso anonimo publico: para servir el form
   // debe seguir activo, marcado como isPublic, y sin verificacion de email
@@ -79,15 +162,20 @@ export class TasksService {
     // primero (solo con shareLink) y agregar destinatarios después via
     // POST /api/tasks/:id/send.
 
-    const steps: TaskStep[] = filteredSteps.map((s, i) => ({
-      order: i + 1,
-      recipientEmail: s.recipientEmail.trim().toLowerCase(),
-      recipientName: s.recipientName?.trim() || s.recipientEmail,
-      token: crypto.randomUUID(),
-      status: i === 0 ? 'in_progress' : 'pending',
-      formData: {},
-      lastReminderAt: null,
-    }));
+    const steps: TaskStep[] = filteredSteps.map((s, i) => {
+      // Emails paralelos del paso: si el cliente mandó recipientEmails (flujo
+      // nuevo), esa lista manda; si no, se usa [recipientEmail] (compat).
+      const emails =
+        Array.isArray(s.recipientEmails) && s.recipientEmails.length > 0
+          ? s.recipientEmails
+          : [s.recipientEmail];
+      return this.buildStep(
+        i + 1,
+        emails,
+        s.recipientName?.trim() || undefined,
+        i === 0, // solo el primer paso arranca activo
+      );
+    });
 
     const task = new this.taskModel({
       formId: dto.formId,
@@ -128,7 +216,11 @@ export class TasksService {
 
   async sendTask(
     taskId: string,
-    steps: Array<{ recipientEmail: string; recipientName?: string }>,
+    steps: Array<{
+      recipientEmail: string;
+      recipientName?: string;
+      recipientEmails?: string[];
+    }>,
     userId: number,
   ): Promise<{ ok: true; sentCount: number }> {
     const validSteps = steps.filter(
@@ -140,18 +232,22 @@ export class TasksService {
       );
     }
 
-    // Generar tokens únicos por step (mismo patrón que create). El primer
-    // paso arranca 'in_progress' (igual que create) para que quede claro
-    // de inmediato a quién le toca completar.
-    const newSteps: TaskStep[] = validSteps.map((s, i) => ({
-      order: i + 1,
-      recipientEmail: s.recipientEmail.trim().toLowerCase(),
-      recipientName: s.recipientName?.trim() || s.recipientEmail.trim(),
-      token: crypto.randomUUID(),
-      status: i === 0 ? 'in_progress' : 'pending',
-      formData: {},
-      lastReminderAt: null,
-    }));
+    // Cada step puede tener múltiples emails paralelos (recipientEmails). El
+    // primer paso arranca con todos sus respondents 'in_progress' (envío
+    // simultáneo); los pasos siguientes quedan 'pending' hasta que el actual
+    // se cierre (submitStep detecta "todos completaron" y avanza).
+    const newSteps: TaskStep[] = validSteps.map((s, i) => {
+      const emails =
+        Array.isArray(s.recipientEmails) && s.recipientEmails.length > 0
+          ? s.recipientEmails
+          : [s.recipientEmail];
+      return this.buildStep(
+        i + 1,
+        emails,
+        s.recipientName?.trim() || undefined,
+        i === 0,
+      );
+    });
 
     // Update atómico condicionado a que la tarea siga sin steps: evita que
     // dos llamadas concurrentes a /send (doble click, retry de red) pisen
@@ -191,13 +287,38 @@ export class TasksService {
   // ── Obtener tarea por token (público) ──────────────────────────────────────
 
   async getByToken(token: string): Promise<{ task: Task; stepIndex: number }> {
-    const task = await this.taskModel.findOne({ 'steps.token': token }).lean();
+    // Buscar por token: puede ser el token legacy del step o el token de
+    // cualquier respondent del step (flujo paralelo nuevo).
+    const task = await this.taskModel
+      .findOne({
+        $or: [
+          { 'steps.token': token },
+          { 'steps.respondents.token': token },
+        ],
+      })
+      .lean();
     if (!task) throw new NotFoundException('Tarea no encontrada o link inválido');
 
-    const stepIndex = task.steps.findIndex((s) => s.token === token);
+    // Encontrar en qué step vive este token
+    const stepIndex = task.steps.findIndex(
+      (s) =>
+        s.token === token ||
+        (s.respondents ?? []).some((r) => r.token === token),
+    );
+    if (stepIndex < 0) {
+      throw new NotFoundException('Tarea no encontrada o link inválido');
+    }
     const step = task.steps[stepIndex];
+    const respondents = this.getRespondents(step);
+    const respondent = respondents.find((r) => r.token === token);
 
-    if (step.status === 'completed') {
+    // Si el respondent específico ya diligenció, no puede volver a entrar
+    // aunque el step siga abierto porque falten otros paralelos.
+    if (respondent && respondent.status === 'completed') {
+      throw new BadRequestException('Este paso ya fue completado');
+    }
+    // Fallback legacy: step sin respondents individuales
+    if (!respondent && step.status === 'completed') {
       throw new BadRequestException('Este paso ya fue completado');
     }
 
@@ -220,77 +341,314 @@ export class TasksService {
     token: string,
     dto: SubmitTaskStepDto,
     ipAddress?: string,
-  ): Promise<{ completed: boolean; nextEmail?: string }> {
-    const task = await this.taskModel.findOne({ 'steps.token': token });
+  ): Promise<{
+    completed: boolean;
+    nextEmail?: string;
+    waitingCount?: number;
+  }> {
+    const task = await this.taskModel.findOne({
+      $or: [
+        { 'steps.token': token },
+        { 'steps.respondents.token': token },
+      ],
+    });
     if (!task) throw new NotFoundException('Tarea no encontrada');
 
-    const stepIndex = task.steps.findIndex((s) => s.token === token);
+    const stepIndex = task.steps.findIndex(
+      (s) =>
+        s.token === token ||
+        (s.respondents ?? []).some((r) => r.token === token),
+    );
     if (stepIndex < 0) throw new NotFoundException('Paso no encontrado');
 
     const step = task.steps[stepIndex];
-    if (step.status === 'completed') {
+
+    // Localizar respondent específico. En tarea legacy (sin respondents[]),
+    // el "respondent" es el step entero.
+    const respondents = step.respondents ?? [];
+    const respondentIndex = respondents.findIndex((r) => r.token === token);
+    const isLegacyLone = respondentIndex < 0;
+
+    if (isLegacyLone && step.status === 'completed') {
       throw new BadRequestException('Este paso ya fue completado');
     }
+    if (!isLegacyLone && respondents[respondentIndex].status === 'completed') {
+      throw new BadRequestException('Este destinatario ya diligenció');
+    }
 
-    // Marcar paso como completado
-    task.steps[stepIndex].status = 'completed';
-    task.steps[stepIndex].formData = dto.formData;
-    task.steps[stepIndex].completedAt = new Date();
-    if (ipAddress) task.steps[stepIndex].ipAddress = ipAddress;
+    const now = new Date();
+
+    if (isLegacyLone) {
+      // Camino legacy — el step se completa como un solo respondent.
+      task.steps[stepIndex].status = 'completed';
+      task.steps[stepIndex].formData = dto.formData;
+      task.steps[stepIndex].completedAt = now;
+      if (ipAddress) task.steps[stepIndex].ipAddress = ipAddress;
+    } else {
+      // ── Camino paralelo — dos flujos claros según cuántos steps tenga ──
+      //
+      //  Flujo 1 (task.steps.length === 1):
+      //   Un solo paso con N respondents paralelos. Cada uno llena SU propia
+      //   copia y se genera SU submission al enviar (1 PDF por persona).
+      //   Cuando TODOS completan → email de resumen al creador.
+      //
+      //  Flujo 2 (task.steps.length > 1):
+      //   Firmas secuenciales. Cada respondent del step k solo guarda su
+      //   formData (NO se crea submission todavía). Cuando TODOS del step k
+      //   completan → avanza al step k+1. Al firmar el último step, para cada
+      //   respondent del step 0 se crea SU submission consolidada (prellenado
+      //   + su formData del step 0 + formData mergeado de todos los steps
+      //   posteriores). Los del step 0 reciben aviso con enlace al PDF.
+      task.steps[stepIndex].respondents[respondentIndex].status = 'completed';
+      task.steps[stepIndex].respondents[respondentIndex].formData = dto.formData;
+      task.steps[stepIndex].respondents[respondentIndex].completedAt = now;
+      if (ipAddress) {
+        task.steps[stepIndex].respondents[respondentIndex].ipAddress = ipAddress;
+      }
+
+      const isMultiStep = task.steps.length > 1;
+
+      if (!isMultiStep) {
+        // ═════ FLUJO 1: submission independiente por respondent ══════════
+        const myFinalData: Record<string, string> = { ...task.prefilledData };
+        for (const [k, v] of Object.entries(dto.formData ?? {})) {
+          if (typeof v === 'string' && v.trim() === '') continue;
+          myFinalData[k] = v;
+        }
+
+        const stillPending = task.steps[stepIndex].respondents.filter(
+          (r) => r.status !== 'completed',
+        );
+        const isLastRespondent = stillPending.length === 0;
+        if (isLastRespondent) {
+          task.steps[stepIndex].status = 'completed';
+          task.steps[stepIndex].completedAt = now;
+          task.status = 'completed';
+          task.completedAt = now;
+        }
+        task.markModified('steps');
+        await task.save();
+
+        // Persistir submission de ESTE respondent. Si falla, propagamos:
+        // el destinatario reintenta y no enviamos email de completado con
+        // una submission fantasma.
+        try {
+          await this.submissionsService.submit(
+            task.formId,
+            {
+              data: myFinalData,
+              metadata: {
+                source: 'task-email-parallel',
+                taskId: task._id,
+                respondentEmail:
+                  task.steps[stepIndex].respondents[respondentIndex].email,
+              },
+            },
+            undefined,
+            task._id,
+          );
+        } catch (err) {
+          this.logger.error(
+            `[submitStep] FALLO submission paralela ${task._id} respondent ${respondentIndex}: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+            err instanceof Error ? err.stack : undefined,
+          );
+          throw new InternalServerErrorException(
+            'No pudimos guardar tu envío. Por favor intenta de nuevo en unos segundos.',
+          );
+        }
+
+        // ── Email al respondent SOLO si el formulario tiene formato PDF ──
+        // El cliente (TaskPage) genera el PDF y lo manda como attachment
+        // únicamente cuando el emailTemplate tiene attachPDF activo. Si
+        // llegó attachment → el formulario tiene formato → mandamos al
+        // respondent SU correo con SU PDF al instante. Si no llegó
+        // attachment → no mandamos nada al respondent.
+        //
+        // Esta rama solo corre en Flujo 1 (1 paso). El Flujo 2 (multi-step
+        // con firma de aprobación) queda cubierto más abajo — allí los
+        // firmantes reciben aviso cuando el aprobador cierra el último
+        // step, no cuando cada uno firma.
+        const meRespondent = task.steps[stepIndex].respondents[respondentIndex];
+        const hasPdfFormat = (dto.attachments?.length ?? 0) > 0;
+        if (hasPdfFormat) {
+          await this.sendRespondentPersonalEmail(
+            task,
+            meRespondent.email,
+            meRespondent.name ?? meRespondent.email,
+            dto.attachments ?? [],
+          );
+        }
+
+        // Solo cuando el ÚLTIMO respondent cierra su copia → dispara UN
+        // correo al CREADOR con el resumen. Nadie más lo recibe.
+        if (isLastRespondent) {
+          await this.sendCreatorSummaryEmail(task);
+        }
+
+        return { completed: true };
+      }
+
+      // ═════ FLUJO 2: multi-step ═══════════════════════════════════════
+      // Si aún faltan respondents en este step, esperar (no avanzar, no
+      // crear submissions todavía).
+      const stillPending = task.steps[stepIndex].respondents.filter(
+        (r) => r.status !== 'completed',
+      );
+      if (stillPending.length > 0) {
+        task.markModified('steps');
+        await task.save();
+        return { completed: false, waitingCount: stillPending.length };
+      }
+
+      // Todos los respondents del step actual completaron.
+      task.steps[stepIndex].status = 'completed';
+      task.steps[stepIndex].completedAt = now;
+    }
 
     const nextIndex = stepIndex + 1;
     const hasNext = nextIndex < task.steps.length;
 
     if (hasNext) {
-      // Activar siguiente paso
+      // Activar siguiente paso: TODOS sus respondents pasan a in_progress.
       task.steps[nextIndex].status = 'in_progress';
+      const nextRespondents = task.steps[nextIndex].respondents ?? [];
+      for (const r of nextRespondents) {
+        if (r.status === 'pending') r.status = 'in_progress';
+      }
       task.currentStepIndex = nextIndex;
       task.markModified('steps');
       await task.save();
 
-      // Enviar email al siguiente
       await this.sendStepEmail(task, nextIndex);
 
       return { completed: false, nextEmail: task.steps[nextIndex].recipientEmail };
-    } else {
-      // Todos los pasos completados → consolidar datos y cerrar
-      const finalData = this.consolidateData(task);
-      task.finalData = finalData;
-      task.status = 'completed';
-      task.completedAt = new Date();
+    }
+
+    // ═════ Último step del Flujo 2 (o tarea legacy monopaso) ══════════════
+    task.status = 'completed';
+    task.completedAt = new Date();
+
+    const isMultiStep = task.steps.length > 1;
+
+    if (isMultiStep) {
+      // Multi-step: crear una submission por cada respondent del step 0
+      // consolidando (prellenado + su formData step 0 + formData mergeado
+      // de todos los steps posteriores). Esto genera N PDFs (uno por
+      // firmante), cada uno con SU firma del step 0 + las firmas de todos
+      // los steps siguientes (aprobadores) replicadas.
+      const step0Respondents = this.getRespondents(task.steps[0]);
       task.markModified('steps');
       await task.save();
 
-      // Crear un registro (submission) ligado a la tarea, igual que el flujo de
-      // enlace compartible. Así la tarea completada por correo aparece en el
-      // reporte de Tareas con su "Ver PDF" (si el form tiene plantilla) y la
-      // descarga masiva encuentra registros. No rompemos el cierre de la tarea
-      // si esto falla — se registra y se sigue con el correo.
-      try {
-        await this.submissionsService.submit(
-          task.formId,
-          {
-            data: finalData,
-            metadata: { source: 'task-email', taskId: task._id },
-          },
-          undefined, // userId — el destinatario no tiene JWT
-          task._id, // taskId — permite listarla en GET /tasks/:id/detail
-        );
-      } catch (err) {
-        this.logger.error(
-          `[submitStep] No se pudo crear submission para tarea ${task._id}: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-          err instanceof Error ? err.stack : undefined,
-        );
+      for (const r0 of step0Respondents) {
+        const finalDataForR = this.consolidateDataForRespondent(task, r0.email);
+        try {
+          await this.submissionsService.submit(
+            task.formId,
+            {
+              data: finalDataForR,
+              metadata: {
+                source: 'task-email-multi-step',
+                taskId: task._id,
+                respondentEmail: r0.email,
+              },
+            },
+            undefined,
+            task._id,
+          );
+        } catch (err) {
+          this.logger.error(
+            `[submitStep] FALLO submission multi-step ${task._id} para ${r0.email}: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+            err instanceof Error ? err.stack : undefined,
+          );
+        }
+        // Aviso al firmante del step 0 de que su PDF está listo.
+        await this.sendStepZeroCompletedEmail(task, r0.email, r0.name ?? r0.email);
       }
 
-      // Notificar usando el template del form y los attachments (PDF)
-      // que el cliente generó al completar el último paso.
+      // Email al aprobador (último respondent que envió) con SU PDF.
       await this.sendCompletionEmail(task, dto.attachments ?? []);
+
+      // Email de resumen al creador.
+      await this.sendCreatorSummaryEmail(task);
 
       return { completed: true };
     }
+
+    // ═════ Tarea legacy monopaso (1 step, 1 respondent) ═══════════════════
+    const finalData = this.consolidateData(task);
+    task.finalData = finalData;
+    task.markModified('steps');
+    await task.save();
+
+    try {
+      await this.submissionsService.submit(
+        task.formId,
+        {
+          data: finalData,
+          metadata: { source: 'task-email', taskId: task._id },
+        },
+        undefined,
+        task._id,
+      );
+    } catch (err) {
+      this.logger.error(
+        `[submitStep] FALLO creando submission para tarea ${task._id}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+        err instanceof Error ? err.stack : undefined,
+      );
+      throw new InternalServerErrorException(
+        'No pudimos guardar tu envío. Por favor intenta de nuevo en unos segundos.',
+      );
+    }
+
+    await this.sendCompletionEmail(task, dto.attachments ?? []);
+    await this.sendCreatorSummaryEmail(task);
+
+    return { completed: true };
+  }
+
+  /**
+   * Consolida los datos para el PDF individual de un respondent del step 0
+   * en Flujo 2 (multi-step). El resultado combina:
+   *   - prellenado inicial
+   *   - formData de ESE respondent en el step 0 (su firma/campos personales)
+   *   - formData de todos los respondents de los steps 1..N (aprobadores)
+   *
+   * Los valores vacíos NO sobreescriben valores previos.
+   */
+  private consolidateDataForRespondent(
+    task: TaskDocument,
+    respondentEmail: string,
+  ): Record<string, string> {
+    const result: Record<string, string> = { ...task.prefilledData };
+
+    // Datos del respondent en el step 0
+    const step0Respondents = this.getRespondents(task.steps[0]);
+    const myR = step0Respondents.find((r) => r.email === respondentEmail);
+    if (myR) {
+      for (const [k, v] of Object.entries(myR.formData ?? {})) {
+        if (typeof v === 'string' && v.trim() === '') continue;
+        result[k] = v;
+      }
+    }
+
+    // Datos mergeados de todos los steps posteriores (aprobadores)
+    for (let i = 1; i < task.steps.length; i++) {
+      const rs = this.getRespondents(task.steps[i]);
+      for (const r of rs) {
+        for (const [k, v] of Object.entries(r.formData ?? {})) {
+          if (typeof v === 'string' && v.trim() === '') continue;
+          result[k] = v;
+        }
+      }
+    }
+    return result;
   }
 
   // ── Datos consolidados accesibles públicamente ─────────────────────────────
@@ -356,15 +714,25 @@ export class TasksService {
 
     const data: TaskSummaryDto[] = tasks.map((t) => {
       const withMeta = t as unknown as { _id: string; createdAt?: Date };
+      // Contamos personas, no pasos: un paso paralelo con 3 respondents
+      // aporta 3 al total (para que "3/5 completaron" tenga sentido en la
+      // vista de reportes cuando hay paralelos).
+      let total = 0;
+      let completed = 0;
+      for (const s of t.steps) {
+        const rs = this.getRespondents(s);
+        total += rs.length;
+        completed += rs.filter((r) => r.status === 'completed').length;
+      }
       return {
         id: withMeta._id,
         title: t.title,
         status: t.status,
         createdAt: (withMeta.createdAt ?? new Date()).toISOString(),
         createdByName: t.createdByName,
-        totalRecipients: t.steps.length,
-        completedCount: t.steps.filter((s) => s.status === 'completed').length,
-        pendingCount: t.steps.filter((s) => s.status !== 'completed').length,
+        totalRecipients: total,
+        completedCount: completed,
+        pendingCount: total - completed,
         // Solo reportar "activo" si el token existe Y enabled=true. Tras un
         // submit de link oneShot, enabled queda en false pero el token
         // persiste — sin este check, la lista muestra "Enlace activo" para
@@ -384,31 +752,64 @@ export class TasksService {
 
     const now = Date.now();
     const TEN_MIN = 10 * 60 * 1000;
-    const recipients: TaskRecipientDto[] = task.steps.map((s, i) => ({
-      stepIndex: i,
-      email: s.recipientEmail,
-      name: s.recipientName ?? s.recipientEmail,
-      status: s.status,
-      submittedAt: s.completedAt ? s.completedAt.toISOString() : null,
-      canResend:
-        s.status !== 'completed' &&
-        (!s.lastReminderAt || now - s.lastReminderAt.getTime() > TEN_MIN),
-      lastResendAt: s.lastReminderAt ? s.lastReminderAt.toISOString() : null,
-    }));
+    // Aplanamos respondents: una fila por persona. Un paso paralelo con
+    // 3 personas produce 3 filas con el mismo stepIndex — el frontend puede
+    // agruparlas o mostrarlas como lista lineal.
+    const recipients: TaskRecipientDto[] = task.steps.flatMap((s, i) => {
+      const rs = this.getRespondents(s);
+      const stepLastReminderMs = s.lastReminderAt ? s.lastReminderAt.getTime() : 0;
+      return rs.map((r) => {
+        const reminderMs = Math.max(
+          stepLastReminderMs,
+          r.lastReminderAt ? r.lastReminderAt.getTime() : 0,
+        );
+        return {
+          stepIndex: i,
+          email: r.email,
+          name: r.name ?? r.email,
+          status: r.status,
+          submittedAt: r.completedAt ? r.completedAt.toISOString() : null,
+          canResend:
+            r.status !== 'completed' &&
+            (!reminderMs || now - reminderMs > TEN_MIN),
+          lastResendAt: reminderMs ? new Date(reminderMs).toISOString() : null,
+        };
+      });
+    });
 
     // Submissions ligadas a esta tarea (flujo de enlace compartible; ver
     // submitFromShare más abajo, que persiste taskId en cada submission).
     const subs = await this.submissionsService.findByTaskId(taskId);
-    const submissions: TaskSubmissionDto[] = subs.map((s) => ({
-      id: String(s._id),
-      submittedAt: s.submittedAt.toISOString(),
-      // Las submissions de tarea llegan siempre por el link público (sin
-      // JWT), así que submittedById es null — no hay nombre real que
-      // mostrar todavía. Task 6 puede enriquecer esto si aplica.
-      userName: s.submittedById != null ? `Usuario #${s.submittedById}` : 'Anónimo',
-      hasPdf: !!s.templateSnapshot,
-      summary: {}, // ver Task 6 para poblar; MVP lo deja vacío
-    }));
+    const submissions: TaskSubmissionDto[] = subs.map((s) => {
+      const meta = (s.metadata ?? {}) as {
+        respondentEmail?: string;
+        source?: string;
+      };
+      return {
+        id: String(s._id),
+        submittedAt: s.submittedAt.toISOString(),
+        userName: s.submittedById != null ? `Usuario #${s.submittedById}` : 'Anónimo',
+        hasPdf: !!s.templateSnapshot,
+        summary: {},
+        // Correo del respondent (si aplica) para que el frontend pueda
+        // matchear submission → destinatario y mostrar su "nota" en la fila.
+        respondentEmail: meta.respondentEmail,
+        // Data cruda del formulario — el frontend lee los valores de los
+        // widgets tipo quiz_score por su id para calcular notas/promedio.
+        data: (s.data ?? {}) as Record<string, string>,
+      };
+    });
+
+    // Widgets tipo "quiz_score" (Nota final) presentes en el snapshot del
+    // formulario. El frontend usa esto para añadir columna Nota + promedio.
+    const widgets = (task.widgets ?? []) as Array<{
+      id?: string;
+      type?: string;
+      label?: string;
+    }>;
+    const scoreWidgets = widgets
+      .filter((w) => w.type === 'quiz_score' && typeof w.id === 'string')
+      .map((w) => ({ id: w.id as string, label: w.label || 'Nota' }));
 
     // Externos: personas sin cuenta que diligenciaron la tarea vía el enlace
     // compartible (metadata.source === 'task-share'). Las completadas por
@@ -435,6 +836,7 @@ export class TasksService {
       recipients,
       submissions,
       externalCount,
+      scoreWidgets,
     };
   }
 
@@ -458,12 +860,16 @@ export class TasksService {
 
     const now = new Date();
     const TEN_MIN = 10 * 60 * 1000;
-    if (
-      step.lastReminderAt &&
-      now.getTime() - step.lastReminderAt.getTime() < TEN_MIN
-    ) {
+    // Throttle a nivel step: si el envío más reciente de CUALQUIER
+    // respondent fue hace <10 min, forzamos esperar. Cubre paralelos.
+    const respondents = this.getRespondents(step);
+    const lastReminderMs = Math.max(
+      step.lastReminderAt ? step.lastReminderAt.getTime() : 0,
+      ...respondents.map((r) => (r.lastReminderAt ? r.lastReminderAt.getTime() : 0)),
+    );
+    if (lastReminderMs && now.getTime() - lastReminderMs < TEN_MIN) {
       const restante = Math.ceil(
-        (TEN_MIN - (now.getTime() - step.lastReminderAt.getTime())) / 60_000,
+        (TEN_MIN - (now.getTime() - lastReminderMs)) / 60_000,
       );
       throw new HttpException(
         `Espera ${restante} min para reenviar de nuevo`,
@@ -476,6 +882,13 @@ export class TasksService {
       throw new HttpException('No se pudo enviar el correo', 502);
     }
     step.lastReminderAt = now;
+    // Además marcar lastReminderAt de cada respondent pendiente para que el
+    // throttle paralelo se registre por-email también.
+    if (step.respondents && step.respondents.length > 0) {
+      for (const r of step.respondents) {
+        if (r.status !== 'completed') r.lastReminderAt = now;
+      }
+    }
     task.markModified('steps');
     await task.save();
     return { ok: true, sentAt: now.toISOString() };
@@ -508,7 +921,10 @@ export class TasksService {
     const tasks = await this.taskModel
       .find({
         status: { $in: ['in_progress', 'pending'] },
-        'steps.recipientEmail': lower,
+        $or: [
+          { 'steps.recipientEmail': lower },
+          { 'steps.respondents.email': lower },
+        ],
       })
       .sort({ createdAt: -1 })
       .lean();
@@ -530,17 +946,35 @@ export class TasksService {
     const result: Row[] = [];
 
     for (const task of tasks) {
-      const mySteps = task.steps.filter((s) => s.recipientEmail === lower);
+      // Un step "me contiene" si mi email está entre sus respondents
+      // (paralelo nuevo) o en su recipientEmail legacy. Además, dentro de un
+      // step paralelo mi status depende de MI respondent, no del step entero.
+      type MyStepInfo = {
+        step: (typeof task.steps)[number];
+        respondentStatus: 'pending' | 'in_progress' | 'completed';
+        myToken: string;
+      };
+      const mySteps: MyStepInfo[] = [];
+      for (const s of task.steps) {
+        const respondents = this.getRespondents(s);
+        const mine = respondents.find((r) => r.email === lower);
+        if (!mine) continue;
+        mySteps.push({
+          step: s,
+          respondentStatus: mine.status,
+          myToken: mine.token,
+        });
+      }
       if (mySteps.length === 0) continue;
 
       // Elegimos el "paso más relevante" del usuario en esta tarea:
       // primero in_progress, luego pending, y como último recurso un
       // completed (significa que ya terminó su parte y queda esperando).
-      const inProgress = mySteps.find((s) => s.status === 'in_progress');
-      const pending = mySteps.find((s) => s.status === 'pending');
-      const completed = mySteps.find((s) => s.status === 'completed');
-      const myStep = inProgress ?? pending ?? completed;
-      if (!myStep) continue;
+      const inProgress = mySteps.find((m) => m.respondentStatus === 'in_progress');
+      const pending = mySteps.find((m) => m.respondentStatus === 'pending');
+      const completed = mySteps.find((m) => m.respondentStatus === 'completed');
+      const myInfo = inProgress ?? pending ?? completed;
+      if (!myInfo) continue;
 
       const myStatus: 'in_progress' | 'pending' | 'waiting' =
         inProgress
@@ -558,12 +992,12 @@ export class TasksService {
         title: task.title,
         description: task.description,
         formName: task.formName,
-        myStepOrder: myStep.order,
+        myStepOrder: myInfo.step.order,
         totalSteps: task.steps.length,
-        currentStepOrder: currentStep?.order ?? myStep.order,
+        currentStepOrder: currentStep?.order ?? myInfo.step.order,
         myStatus,
         // Token solo si es mi turno — los demás casos no deben poder abrir el form.
-        token: myStatus === 'in_progress' ? myStep.token : '',
+        token: myStatus === 'in_progress' ? myInfo.myToken : '',
         waitingForName:
           myStatus !== 'in_progress' ? currentStep?.recipientName : undefined,
         waitingForEmail:
@@ -749,14 +1183,23 @@ export class TasksService {
     // Filtramos data a solo los widget ids del snapshot de la tarea. Sin este
     // filtro un caller anonimo podria persistir keys arbitrarias en la
     // submission (junk que no corresponde a ningun campo del form).
+    //
+    // Los campos descartados NO se pierden: quedan en `_unknownFields`
+    // dentro del mismo doc para que Sara pueda revisarlos si el snapshot
+    // quedó desfasado del form vivo (política "nada se pierde").
     const validWidgetIds = new Set(
       (task.widgets ?? [])
         .map((w) => (w as { id?: unknown }).id)
         .filter((id): id is string => typeof id === 'string'),
     );
     const filteredData: Record<string, unknown> = {};
+    const unknownFields: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(data)) {
       if (validWidgetIds.has(key)) filteredData[key] = value;
+      else unknownFields[key] = value;
+    }
+    if (Object.keys(unknownFields).length > 0) {
+      filteredData._unknownFields = unknownFields;
     }
 
     // Delega a SubmissionsService.submit(): hace offloadBinaries (firmas/fotos
@@ -812,10 +1255,23 @@ export class TasksService {
   async sendStepEmail(task: TaskDocument, stepIndex: number): Promise<boolean> {
     const step = task.steps[stepIndex];
     const isFirst = stepIndex === 0;
-    const taskUrl = this.getTaskUrl(step.token);
     const totalSteps = task.steps.length;
+    const respondents = this.getRespondents(step);
+    // Solo envíamos a los que aún no diligenciaron. Ejemplo: cron de
+    // recordatorio o /resend re-manda a los pendientes sin molestar a los
+    // que ya completaron su parte del paso paralelo.
+    const targets = respondents.filter((r) => r.status !== 'completed');
+    if (targets.length === 0) return true;
 
-    const html = `<!DOCTYPE html>
+    const parallelHint =
+      respondents.length > 1
+        ? `<p style="margin:8px 0 0;font-size:12px;color:#0891b2;">🔁 Este paso lo deben diligenciar <strong>${respondents.length} personas</strong> en paralelo. El paso solo avanza cuando todas hayan diligenciado.</p>`
+        : '';
+
+    const results = await Promise.all(
+      targets.map(async (r) => {
+        const taskUrl = this.getTaskUrl(r.token);
+        const html = `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"></head>
 <body style="font-family:Arial,sans-serif;background:#f0f4f8;padding:20px;">
   <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.08);">
@@ -823,12 +1279,13 @@ export class TasksService {
       <h1 style="margin:0;font-size:20px;">📋 Tarea pendiente de completar</h1>
     </div>
     <div style="padding:28px;color:#374151;font-size:14px;line-height:1.6;">
-      <p>Hola ${step.recipientName || step.recipientEmail},</p>
+      <p>Hola ${r.name || r.email},</p>
       <p>${isFirst ? `<strong>${task.createdByName}</strong> te ha asignado una tarea para completar el formulario:` : `El paso anterior ha sido completado. Ahora es tu turno para continuar con el formulario:`}</p>
       <div style="background:#f8fafc;border-left:4px solid #00c2a8;padding:14px;border-radius:0 8px 8px 0;margin:16px 0;">
         <strong style="color:#111827;">${task.title}</strong>
         ${task.description ? `<p style="margin:4px 0 0;color:#6b7280;font-size:13px;">${task.description}</p>` : ''}
         <p style="margin:8px 0 0;font-size:12px;color:#9ca3af;">Formulario: ${task.formName} · Paso ${stepIndex + 1} de ${totalSteps}</p>
+        ${parallelHint}
       </div>
       <p style="text-align:center;margin:28px 0;">
         <a href="${taskUrl}" style="display:inline-block;padding:14px 32px;background:#00c2a8;color:#fff;text-decoration:none;border-radius:8px;font-weight:700;font-size:15px;">
@@ -839,18 +1296,246 @@ export class TasksService {
     </div>
   </div>
 </body></html>`;
+        try {
+          await this.emailService.sendEmail({
+            subject: `📋 Tarea: ${task.title} — Paso ${stepIndex + 1} de ${totalSteps}`,
+            emailBody: html,
+            toRecipients: [{ type: 'static', email: r.email }],
+            senderName: 'SoulForms — Tareas',
+          });
+          return true;
+        } catch (err) {
+          console.error(
+            `[TasksService] Error enviando email paso ${stepIndex} a ${r.email}:`,
+            err,
+          );
+          return false;
+        }
+      }),
+    );
+    // Éxito si al menos uno se envió (el resto se cubre por recordatorios /
+    // reintento manual). Nunca fallamos el envío entero por un email caído.
+    return results.some(Boolean);
+  }
+
+  /**
+   * Email personal al respondent (Flujo 1) con SU PDF adjunto. Se dispara
+   * SOLO si el formulario tiene formato PDF configurado (el cliente ya
+   * generó el PDF y lo mandó como attachment). Va solo a este respondent
+   * — no al template global ni al creador (esos van al final de la tarea).
+   */
+  private async sendRespondentPersonalEmail(
+    task: TaskDocument,
+    email: string,
+    name: string,
+    attachments: EmailAttachment[],
+  ): Promise<void> {
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family:Arial,sans-serif;background:#f0f4f8;padding:20px;">
+  <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.08);">
+    <div style="background:linear-gradient(135deg,#10b981,#059669);padding:24px;text-align:center;color:#fff;">
+      <h1 style="margin:0;font-size:20px;">✅ Recibimos tu formulario</h1>
+    </div>
+    <div style="padding:28px;color:#374151;font-size:14px;line-height:1.6;">
+      <p>Hola ${name || email},</p>
+      <p>Tu envío del formulario <strong>${task.formName}</strong> — <strong>${task.title}</strong> quedó registrado. Adjunto encontrarás la copia en PDF de tu registro.</p>
+    </div>
+  </div>
+</body></html>`;
+    try {
+      await this.emailService.sendEmail({
+        subject: `✅ Recibido: ${task.title}`,
+        emailBody: html,
+        toRecipients: [{ type: 'static', email }],
+        senderName: 'SoulForms — Tareas',
+        attachments,
+      });
+    } catch (err) {
+      this.logger.error(
+        `[sendRespondentPersonalEmail] Error a ${email}: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
+
+  /**
+   * Aviso a un firmante del step 0 (Flujo 2) de que su PDF individual ya
+   * fue generado y está disponible para descarga desde el reporte de la
+   * tarea. No attach el PDF: el backend no lo re-renderiza aquí; el
+   * respondent lo descarga cuando el creador lo comparte o desde el
+   * enlace del panel de reportes.
+   */
+  private async sendStepZeroCompletedEmail(
+    task: TaskDocument,
+    email: string,
+    name: string,
+  ): Promise<void> {
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family:Arial,sans-serif;background:#f0f4f8;padding:20px;">
+  <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.08);">
+    <div style="background:linear-gradient(135deg,#10b981,#059669);padding:24px;text-align:center;color:#fff;">
+      <h1 style="margin:0;font-size:20px;">✅ Tu documento fue firmado y aprobado</h1>
+    </div>
+    <div style="padding:28px;color:#374151;font-size:14px;line-height:1.6;">
+      <p>Hola ${name || email},</p>
+      <p>El aprobador ha firmado la tarea <strong>${task.title}</strong> del formulario <strong>${task.formName}</strong>. Tu documento ya está listo con todas las firmas.</p>
+      <p style="font-size:12px;color:#9ca3af;">Si necesitas una copia del PDF, contacta al creador de la tarea (${task.createdByName}).</p>
+    </div>
+  </div>
+</body></html>`;
+    try {
+      await this.emailService.sendEmail({
+        subject: `✅ Aprobado: ${task.title}`,
+        emailBody: html,
+        toRecipients: [{ type: 'static', email }],
+        senderName: 'SoulForms — Tareas',
+      });
+    } catch (err) {
+      this.logger.error(
+        `[sendStepZeroCompletedEmail] Error avisando a ${email}: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
+
+  /**
+   * Email de resumen al CREADOR de la tarea cuando ésta se completa
+   * (todos los respondents del último step terminaron). Incluye la lista
+   * de destinatarios con su estado, y si el formulario tiene widgets
+   * "quiz_score" (Nota final), incluye la nota de cada respondent + el
+   * promedio general.
+   */
+  private async sendCreatorSummaryEmail(task: TaskDocument): Promise<void> {
+    // Resolver email del creador. Si el usuario ya no existe (soft-deleted),
+    // no mandamos nada — no vale la pena fallar por eso.
+    const creator = await this.usersService.findById(task.createdById);
+    if (!creator?.email) return;
+
+    // Detectar widgets tipo "quiz_score" en el snapshot del formulario.
+    const widgets = (task.widgets ?? []) as Array<{
+      id?: string;
+      type?: string;
+      label?: string;
+    }>;
+    const scoreWidgets = widgets
+      .filter((w) => w.type === 'quiz_score' && typeof w.id === 'string')
+      .map((w) => ({ id: w.id as string, label: w.label || 'Nota' }));
+
+    // Buscar submissions ligadas a la tarea (una por respondent en flujos
+    // paralelos). Para leer la "nota" de cada uno, usamos submission.data.
+    const submissions = await this.submissionsService.findByTaskId(task._id);
+    const submissionByEmail = new Map<string, { data: Record<string, unknown> }>();
+    for (const s of submissions) {
+      const email = (s.metadata as { respondentEmail?: string } | null | undefined)
+        ?.respondentEmail;
+      if (email) {
+        submissionByEmail.set(email, { data: (s.data ?? {}) as Record<string, unknown> });
+      }
+    }
+
+    // Construir filas para la tabla de resumen (una por respondent del step 0
+    // en Flujo 2 o del step único en Flujo 1).
+    const relevantStepIndex = task.steps.length > 1 ? 0 : 0;
+    const respondents = this.getRespondents(task.steps[relevantStepIndex]);
+
+    type Row = { name: string; email: string; scores: (string | null)[] };
+    const rows: Row[] = respondents.map((r) => {
+      const sub = submissionByEmail.get(r.email);
+      const scores = scoreWidgets.map((w) => {
+        const raw = sub?.data?.[w.id];
+        return raw == null || raw === '' ? null : String(raw);
+      });
+      return { name: r.name || r.email, email: r.email, scores };
+    });
+
+    // Promedio por widget de nota (ignora filas sin valor numérico)
+    const averages = scoreWidgets.map((_, idx) => {
+      const nums: number[] = [];
+      for (const row of rows) {
+        const raw = row.scores[idx];
+        if (raw == null) continue;
+        const n = parseFloat(raw);
+        if (!Number.isNaN(n)) nums.push(n);
+      }
+      if (nums.length === 0) return null;
+      const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+      return avg.toFixed(2);
+    });
+
+    const scoreCols = scoreWidgets
+      .map((w) => `<th style="text-align:right;padding:6px 10px;">${w.label}</th>`)
+      .join('');
+    const rowsHtml = rows
+      .map(
+        (r) => `<tr>
+          <td style="padding:6px 10px;">${r.name}</td>
+          <td style="padding:6px 10px;color:#6b7280;">${r.email}</td>
+          ${r.scores
+            .map(
+              (s) =>
+                `<td style="text-align:right;padding:6px 10px;font-weight:600;">${
+                  s == null ? '—' : s
+                }</td>`,
+            )
+            .join('')}
+        </tr>`,
+      )
+      .join('');
+
+    const avgRow =
+      scoreWidgets.length > 0
+        ? `<tr style="border-top:2px solid #e5e7eb;background:#f9fafb;">
+             <td colspan="2" style="padding:8px 10px;font-weight:700;">Promedio</td>
+             ${averages
+               .map(
+                 (a) =>
+                   `<td style="text-align:right;padding:8px 10px;font-weight:700;color:#0891b2;">${
+                     a ?? '—'
+                   }</td>`,
+               )
+               .join('')}
+           </tr>`
+        : '';
+
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family:Arial,sans-serif;background:#f0f4f8;padding:20px;">
+  <div style="max-width:640px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.08);">
+    <div style="background:linear-gradient(135deg,#10b981,#059669);padding:24px;text-align:center;color:#fff;">
+      <h1 style="margin:0;font-size:20px;">✅ Tu tarea fue completada</h1>
+    </div>
+    <div style="padding:28px;color:#374151;font-size:14px;line-height:1.6;">
+      <p>Hola ${creator.name || creator.email},</p>
+      <p>La tarea <strong>${task.title}</strong> del formulario <strong>${task.formName}</strong> fue completada por <strong>${respondents.length}</strong> persona${respondents.length === 1 ? '' : 's'}.</p>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:16px;">
+        <thead>
+          <tr style="background:#f1f5f9;color:#374151;">
+            <th style="text-align:left;padding:8px 10px;">Nombre</th>
+            <th style="text-align:left;padding:8px 10px;">Correo</th>
+            ${scoreCols}
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+          ${avgRow}
+        </tbody>
+      </table>
+      <p style="margin-top:16px;font-size:12px;color:#9ca3af;">Puedes ver el detalle completo en la pestaña Reportes de la tarea.</p>
+    </div>
+  </div>
+</body></html>`;
 
     try {
       await this.emailService.sendEmail({
-        subject: `📋 Tarea: ${task.title} — Paso ${stepIndex + 1} de ${totalSteps}`,
+        subject: `✅ Tarea completada: ${task.title}`,
         emailBody: html,
-        toRecipients: [{ type: 'static', email: step.recipientEmail }],
+        toRecipients: [{ type: 'static', email: creator.email }],
         senderName: 'SoulForms — Tareas',
       });
-      return true;
     } catch (err) {
-      console.error(`[TasksService] Error enviando email paso ${stepIndex}:`, err);
-      return false;
+      this.logger.error(
+        `[sendCreatorSummaryEmail] Error avisando al creador ${creator.email}: ${err instanceof Error ? err.message : err}`,
+      );
     }
   }
 
@@ -907,8 +1592,11 @@ export class TasksService {
       return;
     }
 
-    // Fallback: notificación simple a todos los participantes.
-    const allEmails = task.steps.map((s) => s.recipientEmail);
+    // Fallback: notificación simple a todos los participantes (incluye a
+    // todos los respondents paralelos de cada paso, no solo al primero).
+    const allEmails = task.steps.flatMap((s) =>
+      this.getRespondents(s).map((r) => r.email),
+    );
     const unique = [...new Set(allEmails)];
 
     const html = `<!DOCTYPE html>
@@ -941,6 +1629,12 @@ export class TasksService {
   // El cliente reemplaza ${campo} en cuerpo/asunto usando el label
   // normalizado del widget. Replicamos esa misma normalización aquí para
   // que el render del backend coincida con lo que ve el admin en el editor.
+  //
+  // Desambiguación por sufijo: si dos widgets tienen el mismo label (ej. dos
+  // "Cargo") la primera aparición queda como `cargo` y las siguientes como
+  // `cargo1`, `cargo2`, etc. Debe espejar EXACTAMENTE la lógica de
+  // src/utils/placeholders.ts del frontend (`uniqueBaseKey`) para que el
+  // mapper del PDF y este backend produzcan las mismas keys.
   private buildLabeledData(
     task: Task,
     finalData: Record<string, string>,
@@ -949,12 +1643,21 @@ export class TasksService {
     const widgets = (task.widgets ?? []) as Array<{
       id: string;
       label: string;
+      placeholder?: string;
     }>;
+    const normalize = (s: string) =>
+      (s || '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/gi, '');
+    const used = new Map<string, number>();
     for (const w of widgets) {
-      const key = (w.label || '')
-        .toLowerCase()
-        .replace(/\s+/g, '')
-        .replace(/[^a-z0-9]/gi, '');
+      // Si el admin definió un placeholder manual en el widget, lo usamos;
+      // si no, caemos a normalize(label) con sufijo numérico para evitar
+      // colisiones entre widgets con el mismo label.
+      const manual = (w.placeholder ?? '').trim();
+      const rawKey = manual ? normalize(manual) : normalize(w.label);
+      if (!rawKey) continue;
+      const current = used.get(rawKey) ?? 0;
+      used.set(rawKey, current + 1);
+      const key = current === 0 ? rawKey : `${rawKey}${current}`;
       out[key] = finalData[w.id] ?? '';
     }
     return out;

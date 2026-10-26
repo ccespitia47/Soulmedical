@@ -6,11 +6,52 @@ export type TaskDocument = Task & Document;
 export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
 export type StepStatus = 'pending' | 'in_progress' | 'completed';
 
+/**
+ * Un "respondent" es UNA persona dentro de un paso. Un paso puede tener
+ * varios respondents en PARALELO (todos reciben el formulario a la vez, cada
+ * uno con su propio token, y el paso solo avanza al siguiente cuando TODOS
+ * lo han diligenciado). En tareas viejas (previas a este cambio) `respondents`
+ * puede estar vacío; en ese caso se sintetiza uno a partir de los campos
+ * legacy del step (recipientEmail/token/formData) al momento de la lectura.
+ */
+@Schema({ _id: false })
+export class TaskRespondent {
+  @Prop({ required: true })
+  email: string;
+
+  @Prop()
+  name?: string;
+
+  @Prop({ required: true })
+  token: string;
+
+  @Prop({ default: 'pending' })
+  status: StepStatus;
+
+  @Prop({ type: Object, default: {} })
+  formData: Record<string, string>;
+
+  @Prop()
+  completedAt?: Date;
+
+  @Prop()
+  ipAddress?: string;
+
+  @Prop({ type: Date, default: null })
+  lastReminderAt: Date | null;
+}
+
+export const TaskRespondentSchema = SchemaFactory.createForClass(TaskRespondent);
+
 @Schema({ _id: false })
 export class TaskStep {
   @Prop({ required: true })
   order: number;
 
+  // Campos LEGACY: se mantienen poblados con los datos del PRIMER respondent
+  // para no romper reads viejos (findMyPending, reportes de tareas creadas
+  // antes del cambio, etc.). Los flujos nuevos usan `respondents` como fuente
+  // de verdad.
   @Prop({ required: true })
   recipientEmail: string;
 
@@ -34,6 +75,11 @@ export class TaskStep {
 
   @Prop({ type: Date, default: null })
   lastReminderAt: Date | null;
+
+  // Nuevo modelo: N respondents paralelos por paso. Si vacío ⇒ tarea legacy
+  // y se sintetiza uno a partir de los campos de arriba.
+  @Prop({ type: [TaskRespondentSchema], default: [] })
+  respondents: TaskRespondent[];
 }
 
 export const TaskStepSchema = SchemaFactory.createForClass(TaskStep);

@@ -1,6 +1,11 @@
 export type EmailRecipient =
   | { type: 'static'; email: string }
-  | { type: 'group'; group: string; groupLabel?: string };
+  | { type: 'group'; group: string; groupLabel?: string }
+  // 'field' apunta a un widget específico del formulario (su valor es el correo
+  // del destinatario). Reemplaza al grupo heurístico 'current_user', que tomaba
+  // el PRIMER valor del submission con forma de email y podía mandar el PDF al
+  // correo del médico/cuidador si venía antes que el del paciente.
+  | { type: 'field'; widgetId: string; widgetLabel?: string };
 
 export type EmailUserRef = {
   id: number;

@@ -1,13 +1,14 @@
 import type { WidgetRenderProps } from "../../../types/widget.types";
 
 export default function NumberRender({ widget }: WidgetRenderProps) {
-  const min = (widget.config.min as number) ?? 0;
-  const max = (widget.config.max as number) ?? 999999;
-  const step = (widget.config.allowDecimals as boolean)
-    ? (widget.config.step as number) ?? 0.01
-    : (widget.config.step as number) ?? 1;
+  const config = widget.config ?? {};
+  const min = (config.min as number) ?? 0;
+  const max = (config.max as number) ?? 999999;
+  const step = (config.allowDecimals as boolean)
+    ? (config.step as number) ?? 0.01
+    : (config.step as number) ?? 1;
 
-  const rawDefault = widget.config.defaultValue;
+  const rawDefault = config.defaultValue;
   const defaultValue =
     rawDefault === undefined || rawDefault === null || rawDefault === ""
       ? ""
@@ -23,7 +24,7 @@ export default function NumberRender({ widget }: WidgetRenderProps) {
         type="number"
         name={widget.id}
         required={widget.required}
-        placeholder={(widget.config.placeholder as string) || ""}
+        placeholder={(config.placeholder as string) || ""}
         min={min}
         max={max}
         step={step}

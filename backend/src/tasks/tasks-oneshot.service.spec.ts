@@ -48,6 +48,7 @@ function buildService(opts: {
     {} as any,
     submissionsService as any,
     formsService as any,
+    {} as any,
   );
   return { service, taskModel, formsService, submissionsService };
 }

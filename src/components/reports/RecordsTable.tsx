@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useFormRecords } from '../../hooks/useFormRecords';
-import { requestBulkPdfApi } from '../../services/api';
+import { requestBulkPdfApi, deleteSubmissionApi, type RecordRowDto } from '../../services/api';
 import SubmissionsListView from './SubmissionsListView';
 import ConfirmModal from '../common/ConfirmModal';
+import DeleteRecordModal from './DeleteRecordModal';
 import Icon from '../common/Icon';
 
 type Props = {
@@ -10,20 +11,54 @@ type Props = {
   formName: string;
 };
 
+const SEARCH_DEBOUNCE_MS = 300;
+
 export default function RecordsTable({ formId, formName }: Props) {
   const [from, setFrom] = useState<string>('');
   const [to, setTo] = useState<string>('');
+  // Dos states para la búsqueda: `q` refleja lo que el usuario ve mientras
+  // escribe (no salta ni se resetea entre teclas), `debouncedQ` es lo que
+  // se envía al backend después de 300ms de quietud. Sin debounce cada tecla
+  // disparaba un fetch y la tabla parpadeaba porque el spinner reemplazaba
+  // toda la vista (ver useFormRecords: `isInitialLoading` vs `loading`).
   const [q, setQ] = useState<string>('');
+  const [debouncedQ, setDebouncedQ] = useState<string>('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQ(q), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [q]);
 
-  const filters = useMemo(() => ({ from, to, q }), [from, to, q]);
-  const { data, total, loading, error, page, setPage, pageCount } = useFormRecords(
-    formId,
-    filters,
+  const filters = useMemo(
+    () => ({ from, to, q: debouncedQ }),
+    [from, to, debouncedQ],
   );
+  const {
+    data,
+    total,
+    loading,
+    isInitialLoading,
+    error,
+    page,
+    setPage,
+    pageCount,
+    refresh,
+  } = useFormRecords(formId, filters);
 
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkFeedback, setBulkFeedback] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null);
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+  const [rowToDelete, setRowToDelete] = useState<RecordRowDto | null>(null);
+  const [deleteFeedback, setDeleteFeedback] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null);
+
+  const handleDeleteConfirmed = async (reason: string): Promise<string | null> => {
+    if (!rowToDelete) return 'Sin registro seleccionado';
+    const res = await deleteSubmissionApi(rowToDelete.id, reason);
+    if (res.error) return res.error;
+    setRowToDelete(null);
+    setDeleteFeedback({ kind: 'ok', msg: `Registro eliminado (${rowToDelete.id.slice(0, 8)}…). Queda registrado en el reporte de acciones.` });
+    await refresh();
+    return null;
+  };
 
   const handleBulk = () => setBulkConfirmOpen(true);
 
@@ -33,7 +68,9 @@ export default function RecordsTable({ formId, formName }: Props) {
     setBulkFeedback(null);
     // Endpoint responde 202 Accepted: la generación corre en background y el
     // usuario recibe el link por correo. Aquí solo confirmamos que arrancó.
-    const res = await requestBulkPdfApi(formId, { from, to, q });
+    // Uso debouncedQ (no q) porque es el que refleja el filtro APLICADO en
+    // la tabla — el usuario espera que el bulk envíe exactamente los N que ve.
+    const res = await requestBulkPdfApi(formId, { from, to, q: debouncedQ });
     setBulkBusy(false);
     if (res.error || !res.data) {
       setBulkFeedback({ kind: 'err', msg: res.error ?? 'No se pudo iniciar la descarga masiva.' });
@@ -87,7 +124,7 @@ export default function RecordsTable({ formId, formName }: Props) {
               type="text"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Buscar por texto…"
+              placeholder="Buscar por texto o ID exacto…"
               className="w-full rounded-lg border-[1.5px] border-slate-200 bg-white py-2 pl-9 pr-3 text-[12.5px] text-gray-900 outline-none transition focus:border-[#00c2a8] focus:ring-2 focus:ring-[#00c2a8]/15"
             />
           </div>
@@ -103,8 +140,13 @@ export default function RecordsTable({ formId, formName }: Props) {
         </button>
       </div>
 
-      {/* Estados */}
-      {loading ? (
+      {/* Estados
+          - initial load (nunca hubo data): spinner grande centrado
+          - error: banner rojo
+          - refetch en curso (ya había data): la tabla NO se reemplaza; se
+            muestra con un pequeño indicador arriba para evitar layout shift
+            (era el bug de "página rara al escribir"). */}
+      {isInitialLoading ? (
         <div className="flex items-center justify-center gap-2 rounded-[20px] border border-slate-200/80 bg-white px-6 py-14 text-[13px] text-slate-400">
           <Icon name="refresh" size={16} className="animate-spin" /> Cargando…
         </div>
@@ -113,14 +155,28 @@ export default function RecordsTable({ formId, formName }: Props) {
           <Icon name="alert" size={16} className="flex-shrink-0" /> {error}
         </div>
       ) : (
-        <SubmissionsListView
-          data={data}
-          total={total}
-          page={page}
-          pageCount={pageCount}
-          onPageChange={setPage}
-          formName={formName}
-        />
+        <div className="relative">
+          {loading && (
+            <div className="pointer-events-none absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/95 px-2.5 py-1 text-[11px] font-medium text-slate-500 shadow-sm">
+              <Icon name="refresh" size={12} className="animate-spin" />
+              Actualizando…
+            </div>
+          )}
+          <div className={loading ? 'opacity-70 transition-opacity' : 'transition-opacity'}>
+            <SubmissionsListView
+              data={data}
+              total={total}
+              page={page}
+              pageCount={pageCount}
+              onPageChange={setPage}
+              formName={formName}
+              onDeleteRequest={(row) => {
+                setDeleteFeedback(null);
+                setRowToDelete(row);
+              }}
+            />
+          </div>
+        </div>
       )}
 
       {bulkFeedback && (
@@ -128,6 +184,22 @@ export default function RecordsTable({ formId, formName }: Props) {
           <Icon name={bulkFeedback.kind === 'ok' ? 'checkCircle' : 'alert'} size={15} className="flex-shrink-0" />
           <span>{bulkFeedback.msg}</span>
         </div>
+      )}
+
+      {deleteFeedback && (
+        <div className={`mt-3 flex items-center gap-2 rounded-xl border px-3 py-2.5 text-[12.5px] ${deleteFeedback.kind === 'ok' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-800'}`}>
+          <Icon name={deleteFeedback.kind === 'ok' ? 'checkCircle' : 'alert'} size={15} className="flex-shrink-0" />
+          <span>{deleteFeedback.msg}</span>
+        </div>
+      )}
+
+      {rowToDelete && (
+        <DeleteRecordModal
+          recordId={rowToDelete.id}
+          recordLabel={`${rowToDelete.userName} · ${new Date(rowToDelete.submittedAt).toLocaleString()}`}
+          onCancel={() => setRowToDelete(null)}
+          onConfirm={handleDeleteConfirmed}
+        />
       )}
 
       {bulkConfirmOpen && (

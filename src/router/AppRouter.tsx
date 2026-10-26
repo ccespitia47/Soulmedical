@@ -4,6 +4,7 @@ import { ROLE_PERMISSIONS } from "../types/auth.types";
 import { useAuthRestore } from "../hooks/useAuthRestore";
 import { useIdleLogout } from "../hooks/useIdleLogout";
 import ProtectedRoute from "./ProtectedRoute";
+import AuthTransitionLayout from "./routes/AuthTransitionLayout";
 import LoginRoute from "./routes/LoginRoute";
 import {
   ForgotPasswordRoute,
@@ -37,11 +38,15 @@ export default function AppRouter() {
   return (
     <Routes>
       <Route path="/" element={<RootRedirect />} />
-      <Route path="/login" element={<LoginRoute />} />
       <Route path="/consientify/login" element={<ConsientifyLoginRoute />} />
-      <Route path="/register" element={<RegisterRoute />} />
-      <Route path="/forgot-password" element={<ForgotPasswordRoute />} />
-      <Route path="/reset-password" element={<ResetPasswordRoute />} />
+
+      {/* Rutas de auth con transición 3D compartida entre pantallas. */}
+      <Route element={<AuthTransitionLayout />}>
+        <Route path="/login" element={<LoginRoute />} />
+        <Route path="/register" element={<RegisterRoute />} />
+        <Route path="/forgot-password" element={<ForgotPasswordRoute />} />
+        <Route path="/reset-password" element={<ResetPasswordRoute />} />
+      </Route>
 
       {/* Rutas públicas — sin ProtectedRoute */}
       <Route path="/task/:token" element={<TaskPage />} />

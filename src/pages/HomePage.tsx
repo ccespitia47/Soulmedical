@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useFolderStore } from "../store/useFolderStore";
 import { useProjectStore } from "../store/useProjectStore";
 import { FOLDER_COLORS, FOLDER_ICONS, PROJECT_COLORS, PROJECT_ICONS, type FormItem } from "../types/folder.types";
+import type { FormRule } from "../types/widget.types";
 import {
   getUsersApi,
   assignFormToUserApi,
@@ -38,7 +39,7 @@ export default function HomePage({ onOpenBuilder, onOpenForm, currentUser }: Hom
   const {
     folders, addFolder, deleteFolder, updateFolder, addForm, deleteForm, renameForm,
     selectFolder, selectedFolderId, duplicateFolder, duplicateForm, loadFolders,
-    setFormShareFlags,
+    setFormShareFlags, loadFormDetails,
   } = useFolderStore();
   const { projects, selectedProjectId, addProject, deleteProject, updateProject, selectProject, loadProjects } =
     useProjectStore();
@@ -52,6 +53,8 @@ export default function HomePage({ onOpenBuilder, onOpenForm, currentUser }: Hom
 
   const [viewMode, setViewMode] = useState<"grid" | "list">("list");
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
+  // Drawer del sidebar en móvil (en escritorio siempre visible).
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => { loadProjects(); }, []);
   useEffect(() => { if (selectedProjectId) loadFolders(selectedProjectId); }, [selectedProjectId]);
@@ -97,6 +100,7 @@ export default function HomePage({ onOpenBuilder, onOpenForm, currentUser }: Hom
     folderId: string;
     formName: string;
     widgets: any[];
+    rules: FormRule[];
   } | null>(null);
 
   const [shareForm, setShareForm] = useState<{
@@ -106,16 +110,20 @@ export default function HomePage({ onOpenBuilder, onOpenForm, currentUser }: Hom
     isPublic: boolean;
     sendConfirmationEmail: boolean;
     requiresEmailVerification: boolean;
+    /** Cantidad de destinatarios ya configurados en el emailTemplate del
+     *  form. Si es 0, el toggle "Enviar email cada vez que alguien
+     *  complete" no puede funcionar (backend no tiene a dónde escribir). */
+    toRecipientsCount: number;
   } | null>(null);
 
   // Inputs de formularios
   const [folderName, setFolderName] = useState("");
   const [folderColor, setFolderColor] = useState("#00c2a8");
-  const [folderIcon, setFolderIcon] = useState("📁");
+  const [folderIcon, setFolderIcon] = useState("folder");
   const [newFormName, setNewFormName] = useState("");
   const [projectName, setProjectName] = useState("");
   const [projectColor, setProjectColor] = useState("#00c2a8");
-  const [projectIcon, setProjectIcon] = useState("🏢");
+  const [projectIcon, setProjectIcon] = useState("building");
 
   // Derivados
   const selectedFolder = useMemo(
@@ -155,12 +163,12 @@ export default function HomePage({ onOpenBuilder, onOpenForm, currentUser }: Hom
   const handleCreateFolder = () => {
     if (!folderName.trim() || !selectedProjectId) return;
     addFolder(folderName.trim(), folderColor, folderIcon, selectedProjectId);
-    setFolderName(""); setFolderColor("#00c2a8"); setFolderIcon("📁"); setShowNewFolder(false);
+    setFolderName(""); setFolderColor("#00c2a8"); setFolderIcon("folder"); setShowNewFolder(false);
   };
   const handleCreateProject = () => {
     if (!projectName.trim()) return;
     addProject(projectName.trim(), projectColor, projectIcon);
-    setProjectName(""); setProjectColor("#00c2a8"); setProjectIcon("🏢"); setShowNewProject(false);
+    setProjectName(""); setProjectColor("#00c2a8"); setProjectIcon("building"); setShowNewProject(false);
   };
   const handleOpenEditProject = (id: string) => {
     const p = projects.find((p) => p.id === id);
@@ -240,7 +248,7 @@ export default function HomePage({ onOpenBuilder, onOpenForm, currentUser }: Hom
     onEdit: () => handleOpenEditProject(project.id),
     onAssign: () => openAssignTarget({ id: project.id, name: project.name, kind: "project" }),
     onDelete: () => setConfirmDeleteProject({ projectId: project.id, projectName: project.name }),
-    onSelectFolder: (id: string) => selectFolder(id),
+    onSelectFolder: (id: string) => { selectFolder(id); setSidebarOpen(false); },
     onNewFolder: () => setShowNewFolder(true),
     onEditFolder: (id: string) => handleOpenEditFolder(id),
     onDupFolder: (id: string, name: string) => setConfirmDuplicateFolder({ folderId: id, folderName: name }),
@@ -273,21 +281,52 @@ export default function HomePage({ onOpenBuilder, onOpenForm, currentUser }: Hom
       onDelete: canDeleteForms
         ? () => setConfirmDelete({ folderId: selectedFolder.id, formId: form.id, formName: form.name })
         : undefined,
-      onCreateTask: () => setTaskForm({
-        formId: form.id,
-        folderId: selectedFolder.id,
-        formName: form.name,
-        widgets: form.widgets ?? [],
-      }),
-      onShare: () =>
+      onCreateTask: async () => {
+        // El form del store viene en "modo resumen" (sin widgets/rules).
+        // Hidratamos ANTES de abrir el modal para que la tarea arranque
+        // con el snapshot completo del formulario.
+        if (!form.widgets || form.widgets.length === 0) {
+          await loadFormDetails(selectedFolder.id, form.id);
+        }
+        const hydrated = useFolderStore
+          .getState()
+          .folders.find((f) => f.id === selectedFolder.id)
+          ?.forms.find((fm) => fm.id === form.id);
+        setTaskForm({
+          formId: form.id,
+          folderId: selectedFolder.id,
+          formName: form.name,
+          widgets: hydrated?.widgets ?? form.widgets ?? [],
+          rules: hydrated?.rules ?? form.rules ?? [],
+        });
+      },
+      onShare: async () => {
+        // Mismo patrón que onCreateTask: el form del store viene en "modo
+        // resumen"; hidratamos para que el modal de compartir muestre los
+        // flags reales (isPublic, requiresEmailVerification, template).
+        if (
+          !form.emailTemplate &&
+          (form.widgets?.length ?? 0) === 0
+        ) {
+          await loadFormDetails(selectedFolder.id, form.id);
+        }
+        const hydrated =
+          useFolderStore
+            .getState()
+            .folders.find((f) => f.id === selectedFolder.id)
+            ?.forms.find((fm) => fm.id === form.id) ?? form;
         setShareForm({
           formId: form.id,
           folderId: selectedFolder.id,
           formName: form.name,
-          isPublic: form.isPublic ?? false,
-          sendConfirmationEmail: form.sendConfirmationEmail ?? true,
-          requiresEmailVerification: form.requiresEmailVerification ?? false,
-        }),
+          isPublic: hydrated.isPublic ?? false,
+          sendConfirmationEmail: hydrated.sendConfirmationEmail ?? true,
+          requiresEmailVerification: hydrated.requiresEmailVerification ?? false,
+          toRecipientsCount:
+            ((hydrated.emailTemplate as { toRecipients?: unknown[] } | undefined)
+              ?.toRecipients?.length ?? 0),
+        });
+      },
     };
   };
 
@@ -302,7 +341,9 @@ export default function HomePage({ onOpenBuilder, onOpenForm, currentUser }: Hom
         favorites={favorites}
         buildProjectRowProps={buildProjectRowProps}
         onCreateProject={() => setShowNewProject(true)}
-        onNavigateToForm={handleNavigateToForm}
+        onNavigateToForm={(folderId, formId) => { handleNavigateToForm(folderId, formId); setSidebarOpen(false); }}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
 
       {selectedFolder ? (
@@ -318,9 +359,14 @@ export default function HomePage({ onOpenBuilder, onOpenForm, currentUser }: Hom
           onCreateForm={() => setShowNewForm(true)}
           onOpenForm={handleOpenForm}
           onOpenBuilder={handleOpenBuilder}
+          onOpenSidebar={() => setSidebarOpen(true)}
         />
       ) : (
-        <FormsEmptyState hasProject={!!selectedProjectId} currentUser={currentUser} />
+        <FormsEmptyState
+          hasProject={!!selectedProjectId}
+          currentUser={currentUser}
+          onOpenSidebar={() => setSidebarOpen(true)}
+        />
       )}
 
       {showNewProject && (
@@ -400,6 +446,7 @@ export default function HomePage({ onOpenBuilder, onOpenForm, currentUser }: Hom
           isPublic={shareForm.isPublic}
           sendConfirmationEmail={shareForm.sendConfirmationEmail}
           requiresEmailVerification={shareForm.requiresEmailVerification}
+          toRecipientsCount={shareForm.toRecipientsCount}
           token={token}
           onClose={() => setShareForm(null)}
           onUpdate={(
@@ -437,6 +484,7 @@ export default function HomePage({ onOpenBuilder, onOpenForm, currentUser }: Hom
           folderId={taskForm.folderId}
           formName={taskForm.formName}
           widgets={taskForm.widgets}
+          rules={taskForm.rules}
           onClose={() => setTaskForm(null)}
           onCreated={() => setTaskForm(null)}
         />

@@ -8,11 +8,13 @@ import {
   updateFolderApi,
   deleteFolderApi,
   getFormsByFolder,
+  getFormByIdApi,
   createFormApi,
   updateFormApi,
   deleteFormApi,
   type FolderData,
   type FormApiData,
+  type FormSummaryData,
 } from "../services/api";
 
 function mapForm(f: FormApiData): FormItem {
@@ -43,6 +45,25 @@ function mapFolder(f: FolderData, forms: FormItem[] = []): FolderItem {
   };
 }
 
+/** Convierte un resumen liviano de form (sin schema/widgets) a FormItem.
+ *  Los campos pesados (widgets/rules/emailTemplate) quedan en defaults
+ *  vacíos — se hidratan on-demand al abrir el Builder vía loadFormDetails. */
+function mapFormSummary(f: FormSummaryData): FormItem {
+  return {
+    id: f.id,
+    name: f.name,
+    createdAt: new Date(f.createdAt).toLocaleDateString("es-CO"),
+    updatedAt: new Date(f.updatedAt).toLocaleDateString("es-CO"),
+    widgets: [],
+    rules: [],
+    emailTemplate: undefined,
+    isPublic: false,
+    sendConfirmationEmail: true,
+    requiresEmailVerification: false,
+    status: "published",
+  };
+}
+
 interface FolderState {
   folders: FolderItem[];
   selectedFolderId: string | null;
@@ -50,6 +71,9 @@ interface FolderState {
 
   loadFolders: (projectId: string) => Promise<void>;
   loadAllFolders: (projectIds: string[]) => Promise<void>;
+  /** Hidrata widgets/rules/emailTemplate de un form específico (los que no
+   *  vienen en el resumen inicial de loadFolders). Idempotente. */
+  loadFormDetails: (folderId: string, formId: string) => Promise<void>;
   addFolder: (name: string, color: string, icon: string, projectId: string) => Promise<void>;
   renameFolder: (id: string, name: string) => Promise<void>;
   deleteFolder: (id: string) => Promise<void>;
@@ -91,17 +115,20 @@ export const useFolderStore = create<FolderState>()((set, get) => ({
 
   loadFolders: async (projectId) => {
     set({ loading: true });
+    // UN SOLO request: trae carpetas con un resumen liviano de sus forms
+    // + formsCount. Antes esto hacía 1 + N requests (uno por carpeta) y
+    // cada form venía con todo su schema/widgets/emailTemplate — causa de
+    // la demora al cargar el sidebar y del "0 formularios" temporal.
     const { data: foldersData, error } = await getFoldersByProject(projectId);
     if (error) console.error('[FolderStore] loadFolders error:', error);
     if (!foldersData) { set({ loading: false }); return; }
 
-    // Cargar forms de todas las carpetas en paralelo
-    const foldersWithForms = await Promise.all(
-      foldersData.map(async (f) => {
-        const { data: formsData } = await getFormsByFolder(f.id);
-        return mapFolder(f, (formsData ?? []).map(mapForm));
-      })
-    );
+    const foldersWithForms = foldersData.map((f) => {
+      // El endpoint nuevo trae `forms` anidado (summary). Si por algún motivo
+      // viene sin esa clave (compat con `withForms: false`), caemos a [].
+      const summaries = (f as unknown as { forms?: FormSummaryData[] }).forms ?? [];
+      return mapFolder(f, summaries.map(mapFormSummary));
+    });
 
     // Merge: conservar carpetas de otros proyectos y reemplazar solo las del actual.
     // Sin esto, Promise.all(projects.map(p => loadFolders(p.id))) deja solo el último ganador.
@@ -111,6 +138,29 @@ export const useFolderStore = create<FolderState>()((set, get) => ({
         ...foldersWithForms,
       ],
       loading: false,
+    }));
+  },
+
+  /** Hidrata widgets/rules/emailTemplate de un form específico desde el
+   *  backend. Se usa al abrir el Builder: el store tiene el form en
+   *  "modo resumen" (sin schema). Idempotente — si ya está hidratado,
+   *  igual re-sincroniza con lo del backend. */
+  loadFormDetails: async (folderId, formId) => {
+    const { data, error } = await getFormByIdApi(formId);
+    if (error || !data) {
+      console.error('[FolderStore] loadFormDetails error:', error);
+      return;
+    }
+    const hydrated = mapForm(data);
+    set((state) => ({
+      folders: state.folders.map((f) =>
+        f.id !== folderId
+          ? f
+          : {
+              ...f,
+              forms: f.forms.map((fm) => (fm.id === formId ? hydrated : fm)),
+            },
+      ),
     }));
   },
 

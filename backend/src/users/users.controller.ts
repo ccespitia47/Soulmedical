@@ -137,7 +137,10 @@ export class UsersController {
       throw new BadRequestException('No puedes eliminar tu propia cuenta.');
     }
     const before = await this.usersService.findById(+id);
-    await this.usersService.remove(+id);
+    // Soft delete: pasa deletedById para registrar quién lo hizo. El
+    // usuario queda en la BD (email/nombre preservados para trazabilidad
+    // de sus submissions viejas) pero no puede volver a loguearse.
+    await this.usersService.remove(+id, Number(req.user.id));
     await this.auditService.log({
       actor: actorFrom(req),
       action: AdminActionType.USER_DELETE,

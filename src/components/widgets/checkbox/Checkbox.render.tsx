@@ -1,7 +1,12 @@
 import type { WidgetRenderProps } from "../../../types/widget.types";
 
-export default function CheckboxRender({ widget }: WidgetRenderProps) {
-  const options = (widget.config.options as string[]) || [];
+export default function CheckboxRender({ widget, hiddenWidgetIds }: WidgetRenderProps) {
+  const rawOptions = (widget.config.options as string[]) || [];
+  // Oculta opciones individuales marcadas por reglas vía ID compuesto
+  // `${widget.id}::${opt}` (coincide con lo que escribe RuleTargetSelector).
+  const options = hiddenWidgetIds
+    ? rawOptions.filter((opt) => !hiddenWidgetIds.has(`${widget.id}::${opt}`))
+    : rawOptions;
 
   // El prefill puede llegar como CSV ("a,b,c") o como string único.
   const raw = (widget.config.defaultValue as string) || "";

@@ -30,3 +30,11 @@ server/.env
 *.sw?
 .superpowers/
 tsconfig.tsbuildinfo
+
+# Artefactos de ejecución y caché de herramientas (no son fuente)
+backend/backend.pid
+backend/scripts/out.pdf
+backend/scripts/out.png
+dev-dist/
+.impeccable/
+.claude/skills/

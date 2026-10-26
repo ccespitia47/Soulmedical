@@ -7,6 +7,24 @@ type RichTextEditorProps = {
   placeholder?: string;
 };
 
+/**
+ * Si `value` llega como documento HTML completo (<!DOCTYPE>, <html>, <head>
+ * con <style>), lo normalizamos: devolvemos SOLO el contenido del <body>.
+ * Meterlo tal cual en un contenteditable descarta <html>/<head> pero deja
+ * flotando el <style>, que rompe el editor y afecta el resto de la app.
+ */
+function extractEditableBody(html: string): string {
+  if (!html) return "";
+  // Shortcut: si no incluye <html, es un fragmento ya editable.
+  if (!/<html[\s>]/i.test(html) && !/<!doctype/i.test(html)) return html;
+  try {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    return doc.body?.innerHTML ?? html;
+  } catch {
+    return html;
+  }
+}
+
 export default function RichTextEditor({
   value,
   onChange,
@@ -18,13 +36,18 @@ export default function RichTextEditor({
 
   useEffect(() => {
     if (editorRef.current && !isUpdatingRef.current) {
+      const safe = extractEditableBody(value);
       const currentHtml = editorRef.current.innerHTML;
-      if (currentHtml !== value && value !== undefined) {
-        editorRef.current.innerHTML = value;
+      if (currentHtml !== safe && safe !== undefined) {
+        editorRef.current.innerHTML = safe;
+        // Si vino un documento completo y lo recortamos al body, avisamos
+        // al parent para que `value` quede alineado con lo que realmente
+        // está en el editor — así los próximos cambios no vuelven a chocar.
+        if (safe !== value) onChange(safe);
       }
     }
     isUpdatingRef.current = false;
-  }, [value]);
+  }, [value, onChange]);
 
   const handleInput = () => {
     if (editorRef.current) {

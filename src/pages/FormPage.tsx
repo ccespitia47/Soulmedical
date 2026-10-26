@@ -4,16 +4,20 @@ import { useFolderStore } from "../store/useFolderStore";
 import { useUsersStore } from "../store/useUsersStore";
 import { useAuthStore } from "../store/useAuthStore";
 import { sendFormEmail, type EmailAttachment } from "../services/emailService";
-import { generateExcelHtml } from "../utils/excelToHtml";
 import { evaluateRules } from "../utils/formRules";
 import { htmlToPdfBase64 } from "../utils/pdfExporter";
+import { fetchRenderedPdfFile } from "../services/pdfPreview";
+import { fetchRenderedPdf } from "../services/excelPreview";
+import { blobToBase64 } from "../utils/blobToBase64";
 import { saveDraft, loadDraft, deleteDraft } from "../utils/formDrafts";
-import { expandFormData, renderFilename } from "../utils/placeholders";
+import { buildEmailFormData, expandFormData, renderFilename } from "../utils/placeholders";
 import type { FormRule, WidgetInstance } from "../types/widget.types";
 import FormHeader from "../components/form/FormHeader";
 import FormBody from "../components/form/FormBody";
 import MissingFieldsModal from "../components/form/MissingFieldsModal";
 import SuccessModal, { type EmailStatus } from "../components/form/SuccessModal";
+import QuizReviewModal from "../components/form/QuizReviewModal";
+import { computeQuizReview } from "../lib/quizReview";
 
 type FormPageProps = {
   formId: string;
@@ -222,25 +226,89 @@ export default function FormPage({
         const labeledData = expandFormData(widgets, data, hiddenWidgetIds);
         const attachments: EmailAttachment[] = [];
 
-        // Excel mapeado → PDF
+        // Excel mapeado → PDF (mismo pipeline que el enlace público:
+        // backend con LibreOffice + fillXlsx + convertBufferToPdf).
+        //
+        // Antes acá se generaba localmente con html2canvas + jsPDF sobre un
+        // HTML "aproximado" del Excel, que salía visualmente distinto al
+        // formato real. Ahora pega al endpoint /forms/excel/render-pdf que
+        // ya usa el Preview del admin y produce un PDF pixel-perfect con
+        // los mismos fixes de alignment / firma anclada / merges detectados.
         if (template.excelBase64 && (template.excelMappings?.length ?? 0) > 0) {
-          const html = generateExcelHtml(
-            template.excelBase64,
-            template.excelMappings!,
-            labeledData,
-            template.excelLogoBase64,
-          );
-          if (html) {
-            try {
-              const base64 = await htmlToPdfBase64(html);
+          try {
+            const result = await fetchRenderedPdf({
+              excelBase64: template.excelBase64,
+              mappings: template.excelMappings!.map((m) => ({
+                coord: m.coord,
+                placeholder: m.placeholder,
+              })),
+              values: labeledData,
+              customLogoBase64: template.excelLogoBase64,
+              filename:
+                template.excelFilename?.replace(/\.xlsx?$/i, "") ?? "formulario",
+            });
+            if (result.blob) {
+              const base64 = await blobToBase64(result.blob);
+              // Usa el pdfFilename configurado (con placeholders interpolados
+              // por renderFilename) para que el adjunto llegue con el mismo
+              // nombre que se configuró en Config → Email. Fallback a
+              // excelFilename → "formulario.pdf" si no hay pdfFilename.
+              const configuredName = renderFilename(template.pdfFilename, labeledData);
+              const attachmentName =
+                configuredName && configuredName !== "formulario.pdf"
+                  ? configuredName
+                  : template.excelFilename?.replace(/\.xlsx?$/i, ".pdf") ??
+                    "formulario.pdf";
               attachments.push({
-                name: template.excelFilename?.replace(/\.xlsx?$/i, ".pdf") ?? "formulario.pdf",
+                name: attachmentName,
                 contentType: "application/pdf",
                 contentBytes: base64,
               });
-            } catch (e) {
-              console.error("Error generando PDF del Excel:", e);
+            } else if (result.error) {
+              console.error("Error generando PDF del Excel:", result.error);
             }
+          } catch (e) {
+            console.error("Error generando PDF del Excel:", e);
+          }
+        }
+
+        // PDF subido + mappings → PDF con overlay de texto en las coordenadas
+        // mapeadas. Se llena en el backend con pdf-lib (mismo endpoint que usa
+        // el modal Preview). Devuelve un PDF binario listo para adjuntar.
+        if (template.pdfBase64 && (template.pdfMappings?.length ?? 0) > 0) {
+          try {
+            // El mapper guarda placeholders en formato ${key}; el backend
+            // acepta cualquiera de las dos formas pero mandamos ambas por
+            // compatibilidad con distintos guardados.
+            const values: Record<string, string> = {};
+            for (const [k, v] of Object.entries(labeledData)) {
+              values[k] = v;
+              values[`\${${k}}`] = v;
+            }
+            const result = await fetchRenderedPdfFile({
+              pdfBase64: template.pdfBase64,
+              mappings: template.pdfMappings!.map((m) => ({
+                placeholder: m.placeholder,
+                x: m.x,
+                y: m.y,
+                page: m.page,
+                fontSize: m.fontSize,
+              })),
+              values,
+              filename: "formulario",
+            });
+            if (result.blob) {
+              const base64 = await blobToBase64(result.blob);
+              attachments.push({
+                name: renderFilename(template.pdfFilename, labeledData),
+                contentType: "application/pdf",
+                contentBytes: base64,
+              });
+            } else if (result.error) {
+              console.error("Error rellenando PDF:", result.error);
+            }
+          } catch (e) {
+            console.error("Error generando PDF con mappings:", e);
           }
         }
 
@@ -270,7 +338,7 @@ export default function FormPage({
 
         await sendFormEmail({
           template,
-          formData: labeledData,
+          formData: buildEmailFormData(widgets, data, hiddenWidgetIds),
           users,
           currentUser: currentUser ?? undefined,
           attachments,
@@ -313,14 +381,31 @@ export default function FormPage({
       {missingFields.length > 0 && (
         <MissingFieldsModal fields={missingFields} onClose={() => setMissingFields([])} />
       )}
-      {showSuccess && (
-        <SuccessModal
-          emailStatus={emailStatus}
-          emailError={emailError}
-          onNewRegistration={handleCloseSuccess}
-          onClose={onClose}
-        />
-      )}
+      {showSuccess && (() => {
+        const review = computeQuizReview(widgets, fieldValues);
+        if (review.hasReview) {
+          return (
+            <QuizReviewModal
+              questions={review.questions}
+              fieldValues={fieldValues}
+              showCorrectness={review.showCorrectness}
+              scoresToShow={review.scoresToShow}
+              onClose={() => {
+                handleCloseSuccess();
+                onClose?.();
+              }}
+            />
+          );
+        }
+        return (
+          <SuccessModal
+            emailStatus={emailStatus}
+            emailError={emailError}
+            onNewRegistration={handleCloseSuccess}
+            onClose={onClose}
+          />
+        );
+      })()}
     </div>
   );
 }

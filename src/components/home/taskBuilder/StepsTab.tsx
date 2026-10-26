@@ -1,6 +1,6 @@
 import type { GroupData } from "../../../services/api";
 import StepCard from "./StepCard";
-import type { Recipient, SimpleUser, Step } from "./types";
+import type { SimpleUser, Step } from "./types";
 
 type StepsTabProps = {
   steps: Step[];
@@ -12,9 +12,9 @@ type StepsTabProps = {
   onAddStep: () => void;
   onRemoveStep: (id: string) => void;
   onMoveStep: (id: string, dir: -1 | 1) => void;
-  onChangeStepEmail: (id: string, email: string, name: string) => void;
+  onSetStepEmails: (id: string, emails: string[]) => void;
   onSetShowDropdown: (id: string, show: boolean) => void;
-  onSelectStepUser: (id: string, recipient: Recipient) => void;
+  onAddUserToStep: (id: string, user: SimpleUser) => void;
   onAddGroupMembers: (id: string, group: GroupData) => void;
   shareEnabled?: boolean;
   onShareEnabledChange?: (v: boolean) => void;
@@ -35,9 +35,9 @@ export default function StepsTab({
   onAddStep,
   onRemoveStep,
   onMoveStep,
-  onChangeStepEmail,
+  onSetStepEmails,
   onSetShowDropdown,
-  onSelectStepUser,
+  onAddUserToStep,
   onAddGroupMembers,
   shareEnabled = false,
   onShareEnabledChange,
@@ -48,16 +48,15 @@ export default function StepsTab({
   oneShotLink = false,
   onOneShotLinkChange,
 }: StepsTabProps) {
+  // Devuelve TODOS los usuarios disponibles (sin ya agregados como chips).
+  // StepCard hace el filtro por texto tipeado y el slice final — si aquí
+  // recortáramos a 6, un usuario buscado por nombre podría quedar fuera del
+  // slice inicial y el texto tipeado jamás lo encontraría.
   const getFiltered = (stepId: string): SimpleUser[] => {
-    const q = (steps.find((s) => s.id === stepId)?.inputEmail || "").toLowerCase();
-    if (!q) return allUsers.slice(0, 6);
-    return allUsers
-      .filter(
-        (u) =>
-          u.email.toLowerCase().includes(q) ||
-          u.name.toLowerCase().includes(q),
-      )
-      .slice(0, 6);
+    const step = steps.find((s) => s.id === stepId);
+    if (!step) return allUsers;
+    const already = new Set(step.emails.map((e) => e.toLowerCase()));
+    return allUsers.filter((u) => !already.has(u.email.toLowerCase()));
   };
 
   return (
@@ -178,9 +177,9 @@ export default function StepsTab({
             groups={groups}
             onMove={onMoveStep}
             onRemove={onRemoveStep}
-            onChangeEmail={onChangeStepEmail}
+            onSetEmails={onSetStepEmails}
             onSetShowDropdown={onSetShowDropdown}
-            onSelectUser={onSelectStepUser}
+            onAddUser={onAddUserToStep}
             onAddGroupMembers={onAddGroupMembers}
           />
         ))}

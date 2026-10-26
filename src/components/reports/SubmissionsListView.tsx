@@ -12,7 +12,14 @@ type Props = {
   onPageChange: (page: number) => void;
   emptyMessage?: string;
   formName?: string;
+  /** Callback opcional: si viene, la tabla muestra el botón eliminar en cada fila. */
+  onDeleteRequest?: (row: RecordRowDto) => void;
 };
+
+/** Muestra los primeros 8 caracteres del id, con el id completo en `title`. */
+function shortId(id: string): string {
+  return id.length > 8 ? id.slice(0, 8) : id;
+}
 
 export default function SubmissionsListView({
   data,
@@ -22,6 +29,7 @@ export default function SubmissionsListView({
   onPageChange,
   emptyMessage = 'No hay registros en el rango seleccionado.',
   formName = 'Formulario',
+  onDeleteRequest,
 }: Props) {
   const preview = usePdfPreview();
   const [openId, setOpenId] = useState<string | null>(null);
@@ -80,21 +88,42 @@ export default function SubmissionsListView({
                     <div className="text-[11px] text-gray-400 tabular-nums">
                       {new Date(row.submittedAt).toLocaleString()}
                     </div>
-                  </div>
-                  {row.hasPdf ? (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRowClick(row.id, true);
-                      }}
-                      className="inline-flex flex-shrink-0 cursor-pointer items-center gap-1 rounded-lg border-[1.5px] border-[#00c2a8]/30 bg-[#00c2a8]/5 px-2.5 py-1.5 text-[11.5px] font-semibold text-[#0891b2] transition hover:bg-[#00c2a8]/10"
+                    <div
+                      className="mt-1 font-mono text-[10.5px] text-slate-400"
+                      title={row.id}
                     >
-                      <Icon name="eye" size={13} /> Ver PDF
-                    </button>
-                  ) : (
-                    <span className="flex-shrink-0 text-[11px] text-slate-400">Sin PDF</span>
-                  )}
+                      ID: {shortId(row.id)}
+                    </div>
+                  </div>
+                  <div className="flex flex-shrink-0 items-center gap-2">
+                    {row.hasPdf ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRowClick(row.id, true);
+                        }}
+                        className="inline-flex cursor-pointer items-center gap-1 rounded-lg border-[1.5px] border-[#00c2a8]/30 bg-[#00c2a8]/5 px-2.5 py-1.5 text-[11.5px] font-semibold text-[#0891b2] transition hover:bg-[#00c2a8]/10"
+                      >
+                        <Icon name="eye" size={13} /> Ver PDF
+                      </button>
+                    ) : (
+                      <span className="text-[11px] text-slate-400">Sin PDF</span>
+                    )}
+                    {onDeleteRequest && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteRequest(row);
+                        }}
+                        title="Eliminar registro"
+                        className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border-[1.5px] border-red-200 bg-red-50 text-red-600 transition hover:bg-red-100"
+                      >
+                        <Icon name="trash" size={13} />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {summaryCols.length > 0 && (
                   <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 border-t border-slate-100 pt-2.5">
@@ -120,6 +149,7 @@ export default function SubmissionsListView({
               <table className="w-full border-collapse text-[12.5px]">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-[10.5px] font-semibold uppercase tracking-wide text-gray-400">
+                    <th className="px-4 py-3">ID</th>
                     <th className="px-4 py-3">Fecha</th>
                     <th className="px-4 py-3">Usuario</th>
                     {summaryCols.map((c) => (
@@ -137,6 +167,12 @@ export default function SubmissionsListView({
                         onClick={() => handleRowClick(row.id, row.hasPdf)}
                         className={`border-b border-slate-100 transition-colors last:border-b-0 ${disabled ? 'text-slate-400' : 'cursor-pointer hover:bg-slate-50/70'}`}
                       >
+                        <td
+                          className="px-4 py-3 font-mono text-[11px] text-slate-500"
+                          title={row.id}
+                        >
+                          {shortId(row.id)}
+                        </td>
                         <td className="px-4 py-3 whitespace-nowrap tabular-nums text-gray-500">
                           {new Date(row.submittedAt).toLocaleString()}
                         </td>
@@ -147,20 +183,35 @@ export default function SubmissionsListView({
                           </td>
                         ))}
                         <td className="px-4 py-3 text-right">
-                          {row.hasPdf ? (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleRowClick(row.id, true);
-                              }}
-                              className="inline-flex cursor-pointer items-center gap-1 rounded-lg border-[1.5px] border-[#00c2a8]/30 bg-[#00c2a8]/5 px-2.5 py-1.5 text-[11.5px] font-semibold text-[#0891b2] transition hover:bg-[#00c2a8]/10"
-                            >
-                              <Icon name="eye" size={13} /> Ver PDF
-                            </button>
-                          ) : (
-                            <span className="text-[11px] text-slate-400">No disponible</span>
-                          )}
+                          <div className="inline-flex items-center justify-end gap-2">
+                            {row.hasPdf ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRowClick(row.id, true);
+                                }}
+                                className="inline-flex cursor-pointer items-center gap-1 rounded-lg border-[1.5px] border-[#00c2a8]/30 bg-[#00c2a8]/5 px-2.5 py-1.5 text-[11.5px] font-semibold text-[#0891b2] transition hover:bg-[#00c2a8]/10"
+                              >
+                                <Icon name="eye" size={13} /> Ver PDF
+                              </button>
+                            ) : (
+                              <span className="text-[11px] text-slate-400">Sin PDF</span>
+                            )}
+                            {onDeleteRequest && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDeleteRequest(row);
+                                }}
+                                title="Eliminar registro"
+                                className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border-[1.5px] border-red-200 bg-red-50 text-red-600 transition hover:bg-red-100"
+                              >
+                                <Icon name="trash" size={13} />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );

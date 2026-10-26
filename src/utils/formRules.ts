@@ -17,6 +17,13 @@ function checkCondition(
       return val !== "";
     case "is_empty":
       return val === "";
+    case "has_value":
+      // target === "si" ⇒ el campo DEBE tener valor para que la condición se
+      // cumpla. target === "no" ⇒ el campo NO debe tener valor. Cualquier
+      // otro valor del target cuenta como no-cumplida (defensa).
+      if (target === "si") return val !== "";
+      if (target === "no") return val === "";
+      return false;
     default:
       return false;
   }

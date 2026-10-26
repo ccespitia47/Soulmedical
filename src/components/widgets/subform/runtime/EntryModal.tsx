@@ -90,6 +90,8 @@ export default function EntryModal({
                   onChange={(v) =>
                     setDraft((prev) => ({ ...prev, [field.id]: v }))
                   }
+                  entry={draft}
+                  fields={fields}
                 />
               </div>
             ))

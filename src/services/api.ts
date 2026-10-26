@@ -66,6 +66,18 @@ async function request<T>(
 
     if (response.status === 204) return { data: null, error: null };
 
+    // Algunos endpoints devuelven 200 con body VACÍO (ej. DELETE /api-keys/:id
+    // cuyo service retorna Promise<void> — Nest no lo convierte a 204). Si
+    // intentamos response.json() con body vacío, lanza "Unexpected end of JSON
+    // input" y el catch convierte eso en un error confuso tipo "No se pudo
+    // conectar con el servidor". Chequeamos Content-Length / Content-Type para
+    // detectar esos casos y resolver con data=null limpio.
+    const contentLength = response.headers.get('content-length');
+    const contentType = response.headers.get('content-type') || '';
+    if (contentLength === '0' || !contentType.includes('application/json')) {
+      return { data: null, error: null };
+    }
+
     const data = await response.json();
     return { data, error: null };
   } catch (e) {
@@ -164,8 +176,19 @@ export async function reset2FAApi(password: string): Promise<ApiResponse<AuthMes
 
 export type AuthMessageResponse = { success: boolean; message: string };
 
-export async function register(name: string, email: string, password: string): Promise<ApiResponse<AuthMessageResponse>> {
-  return request<AuthMessageResponse>('/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password }) });
+export async function register(
+  name: string,
+  email: string,
+  password: string,
+  documentNumber?: string,
+): Promise<ApiResponse<AuthMessageResponse>> {
+  const body: Record<string, string> = { name, email, password };
+  const doc = documentNumber?.trim();
+  if (doc) body.documentNumber = doc;
+  return request<AuthMessageResponse>('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 }
 
 export async function forgotPassword(email: string): Promise<ApiResponse<AuthMessageResponse>> {
@@ -178,6 +201,38 @@ export async function resetPassword(token: string, password: string): Promise<Ap
 
 export async function getProfile(): Promise<ApiResponse<AuthUser>> {
   return request<AuthUser>('/auth/profile');
+}
+
+/**
+ * Renueva el JWT del usuario logueado. El backend requiere el token actual
+ * válido y devuelve uno nuevo con TTL fresco. Se llama desde useIdleLogout
+ * mientras hay actividad, para evitar que la sesión caiga por el TTL
+ * absoluto del JWT (30 min desde emisión).
+ */
+export async function refreshTokenApi(): Promise<ApiResponse<LoginFinalResponse>> {
+  // redirectOn401:false es CRÍTICO: si el refresh llega tarde (pestaña en
+  // segundo plano, equipo suspendido) el token ya expiró y este POST responde
+  // 401. Con el manejo por defecto, ese 401 borraba la sesión y mandaba al
+  // login en mitad del trabajo. Devolviéndolo como error normal, useIdleLogout
+  // reintenta en vez de cerrar la sesión.
+  return request<LoginFinalResponse>('/auth/refresh', { method: 'POST', redirectOn401: false });
+}
+
+/**
+ * Auto-edición del perfil del usuario logueado. El backend acepta SOLO
+ * nombre, email, documentNumber y (opcional) password nueva. Rol, permisos
+ * y 2FA son manejados exclusivamente por admin desde /users/:id.
+ */
+export function updateMyProfileApi(body: {
+  name?: string;
+  email?: string;
+  password?: string;
+  documentNumber?: string;
+}) {
+  return request<UserApiData>('/auth/profile', {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
 }
 
 // --- Helpers de sesión ---
@@ -294,6 +349,7 @@ export type AdminAuditAction =
   | 'USER_TOGGLE_ACTIVE'
   | 'USER_PERMISSIONS_CHANGE'
   | 'USER_RESET_2FA'
+  | 'FORM_EDIT'
   | 'FORM_DELETE'
   | 'FORM_TOGGLE_PUBLIC'
   | 'REPORT_REQUESTED'
@@ -301,6 +357,7 @@ export type AdminAuditAction =
   | 'REPORT_DOWNLOAD_FAILED'
   | 'SUBMISSION_PDF_VIEWED'
   | 'SUBMISSION_PDF_DOWNLOADED'
+  | 'SUBMISSION_DELETE'
   | 'SUBMISSIONS_BULK_PDF_REQUESTED'
   | 'SUBMISSIONS_BULK_PDF_DOWNLOADED'
   | 'SUBMISSIONS_BULK_PDF_FAILED'
@@ -409,8 +466,40 @@ export type FolderData = {
   updatedAt: string;
 };
 
-export async function getFoldersByProject(projectId: string) {
-  return request<FolderData[]>(`/folders?projectId=${projectId}`);
+/** Resumen liviano de un form — sin schema/widgets/emailTemplate. Lo
+ *  devuelve el endpoint `/folders?withForms=summary` para que el sidebar
+ *  del HomePage no haga N+1 ni mueva payloads enormes al cargar la lista. */
+export type FormSummaryData = {
+  id: string;
+  name: string;
+  folderId: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type FolderWithFormsData = FolderData & {
+  forms: FormSummaryData[];
+  formsCount: number;
+};
+
+/**
+ * Trae las carpetas de un proyecto. Por defecto incluye un resumen liviano
+ * de los forms de cada carpeta + el conteo — el sidebar los consume así
+ * sin disparar un request por carpeta.
+ *
+ * Para traer solo las carpetas (sin forms), pasa `{ withForms: false }`.
+ */
+export async function getFoldersByProject(
+  projectId: string,
+  opts: { withForms?: boolean } = { withForms: true },
+) {
+  if (opts.withForms === false) {
+    return request<FolderData[]>(`/folders?projectId=${projectId}`);
+  }
+  return request<FolderWithFormsData[]>(
+    `/folders?projectId=${projectId}&withForms=summary`,
+  );
 }
 
 export async function createFolder(dto: { name: string; color: string; icon: string; projectId: string }) {
@@ -443,6 +532,13 @@ export type FormApiData = {
 
 export async function getFormsByFolder(folderId: string) {
   return request<FormApiData[]>(`/forms?folderId=${folderId}`);
+}
+
+/** Trae un formulario individual con su schema/widgets/rules/emailTemplate
+ *  completos. Se usa al abrir el Builder (los endpoints de lista traen un
+ *  resumen liviano sin esos campos pesados). */
+export async function getFormByIdApi(formId: string) {
+  return request<FormApiData>(`/forms/${formId}`);
 }
 
 export async function createFormApi(dto: { name: string; folderId: string; schema?: object; emailTemplate?: object }) {
@@ -545,7 +641,12 @@ export async function requestTaskReportByEmailApi(
 
 export type ReportDownloadMeta = {
   formName: string;
-  expiresAt: string; // ISO date
+  expiresAt: string; // ISO date (reloj del servidor; informativo)
+  // Milisegundos restantes calculados en el servidor en el instante en que
+  // responde al GET /meta. El frontend debe usar este valor para armar el
+  // countdown, no comparar `expiresAt` contra Date.now() del navegador — así
+  // el flujo es inmune al clock-skew entre PC y servidor.
+  remainingMs: number;
   kind?: 'excel' | 'bulk-pdf';
 };
 
@@ -776,6 +877,17 @@ export async function getSubmissionPdfBlobApi(
   }
 }
 
+/**
+ * Elimina una submission del formulario. Requiere motivo (mín 5, máx 300).
+ * El motivo se guarda en el log de acciones administrativas para auditoría.
+ */
+export function deleteSubmissionApi(id: string, reason: string) {
+  return request<{ ok: true }>(`/submissions/${id}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ reason }),
+  });
+}
+
 export function requestBulkPdfApi(
   formId: string,
   filters: { from?: string; to?: string; q?: string },
@@ -829,6 +941,24 @@ export type TaskRecipientDto = {
   lastResendAt: string | null;
 };
 
+export type TaskScoreWidgetDto = {
+  id: string;
+  label: string;
+};
+
+export type TaskSubmissionDto = {
+  id: string;
+  submittedAt: string;
+  userName: string;
+  hasPdf: boolean;
+  summary: Record<string, string>;
+  /** Correo del respondent que envió esta submission (solo tareas paralelas). */
+  respondentEmail?: string;
+  /** Data cruda del formulario — el frontend lee `data[widget.id]` para leer
+   * la nota de widgets tipo quiz_score. */
+  data?: Record<string, string>;
+};
+
 export type TaskDetailDto = {
   id: string;
   title: string;
@@ -839,9 +969,12 @@ export type TaskDetailDto = {
   /** Persiste aunque `shareLinkUrl` sea null (link ya utilizado/desactivado). */
   shareLinkOneShot: boolean;
   recipients: TaskRecipientDto[];
-  submissions: RecordRowDto[]; // reusa el tipo existente de records
+  submissions: TaskSubmissionDto[];
   /** Externos (sin cuenta) que diligenciaron la tarea vía el enlace. */
   externalCount: number;
+  /** Widgets tipo "quiz_score" del formulario. Si tiene al menos uno, el
+   * frontend agrega columna Nota y tarjeta Promedio. */
+  scoreWidgets: TaskScoreWidgetDto[];
 };
 
 export type TaskSummaryPageDto = {
@@ -937,4 +1070,35 @@ export type ConsentPdfPayload = {
 };
 export function getConsentPdfPayloadApi(id: string) {
   return request<ConsentPdfPayload>(`/consents/${id}/pdf`);
+}
+
+// ─── API Keys (admin) ────────────────────────────────────────────────────────
+// Pensadas para integraciones externas: el MCP de Claude, Power BI, SDK propio.
+// Las keys se emiten UNA sola vez y queda en la UI responsabilidad de que el
+// admin la copie en el momento — después solo quedan el nombre, estado y
+// metadatos de uso.
+
+export type ApiKeyDto = {
+  id: string;
+  key: string; // completo solo en el response del POST; en listados viene igual
+  name: string;
+  createdById: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function listApiKeysApi() {
+  return request<ApiKeyDto[]>(`/api-keys`);
+}
+
+export function createApiKeyApi(name: string) {
+  return request<ApiKeyDto>(`/api-keys`, {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function revokeApiKeyApi(id: string) {
+  return request<void>(`/api-keys/${id}`, { method: 'DELETE' });
 }

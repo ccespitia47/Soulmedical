@@ -9,6 +9,11 @@ type ShareFormModalProps = {
   isPublic: boolean;
   sendConfirmationEmail: boolean;
   requiresEmailVerification?: boolean;
+  /** Cantidad de destinatarios configurados en el emailTemplate del form.
+   *  Si es 0, el toggle "Enviar email cada vez que alguien complete el
+   *  formulario" no puede funcionar aunque esté ON — mostramos warning
+   *  que dirige al usuario a la Config → Email. */
+  toRecipientsCount?: number;
   token: string | null;
   onClose: () => void;
   onUpdate: (
@@ -24,6 +29,7 @@ export default function ShareFormModal({
   isPublic: initialIsPublic,
   sendConfirmationEmail: initialSendConfirm,
   requiresEmailVerification: initialRequires2FA = false,
+  toRecipientsCount = 0,
   token,
   onClose,
   onUpdate,
@@ -33,12 +39,19 @@ export default function ShareFormModal({
   const [requires2FA, setRequires2FA] = useState(initialRequires2FA);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const publicUrl = `${APP_URL}/f/${formId}`;
 
   /**
    * Único punto que pega al backend. Recibe los 3 campos y envía los 3 juntos,
    * para que activar un toggle no pise el estado de otro.
+   *
+   * IMPORTANTE: chequea `res.ok` antes de actualizar el UI. Antes, si el
+   * backend rechazaba el PATCH (403, 500, etc.) fetch NO rechaza — solo
+   * fetch tirones de red tiran al catch. El UI mostraba el toggle "off"
+   * pero la BD seguía "on" y el próximo submit igual mandaba email. Ese
+   * era el bug reportado de "no se habilita y se envía igual".
    */
   const patchShareSettings = async (next: {
     isPublic: boolean;
@@ -46,8 +59,9 @@ export default function ShareFormModal({
     requiresEmailVerification: boolean;
   }) => {
     setSaving(true);
+    setError(null);
     try {
-      await fetch(`${API_URL}/api/forms/${formId}/toggle-public`, {
+      const res = await fetch(`${API_URL}/api/forms/${formId}/toggle-public`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -55,6 +69,14 @@ export default function ShareFormModal({
         },
         body: JSON.stringify(next),
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(
+          (body as { message?: string })?.message ??
+            `No se guardó el cambio (código ${res.status}).`,
+        );
+        return;
+      }
       setIsPublic(next.isPublic);
       setSendConfirmationEmail(next.sendConfirmationEmail);
       setRequires2FA(next.requiresEmailVerification);
@@ -65,6 +87,7 @@ export default function ShareFormModal({
       );
     } catch (e) {
       console.error(e);
+      setError("No pudimos conectar con el servidor. Reintentá en unos segundos.");
     } finally {
       setSaving(false);
     }
@@ -192,7 +215,7 @@ export default function ShareFormModal({
                 </div>
               </div>
 
-              {/* Email de confirmación */}
+              {/* Email de notificación al completarse el formulario */}
               <label className="mb-2.5 flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
                 <input
                   type="checkbox"
@@ -203,13 +226,30 @@ export default function ShareFormModal({
                 />
                 <div>
                   <div className="text-[13px] font-semibold text-gray-900">
-                    Enviar email de confirmación al usuario
+                    Enviar email cada vez que alguien complete el formulario
                   </div>
                   <div className="text-xs text-gray-500">
-                    Si el formulario tiene un campo de email, se enviará confirmación automáticamente
+                    El correo se envía a los destinatarios configurados en
+                    Config → Email del formulario, con el PDF de la respuesta
+                    adjunto.
                   </div>
                 </div>
               </label>
+
+              {/* Warning si el toggle está ON pero no hay destinatarios
+                  configurados: el envío no puede ocurrir hasta que se
+                  agreguen destinatarios en Config → Email. */}
+              {sendConfirmationEmail && toRecipientsCount === 0 && (
+                <div className="mb-2.5 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11.5px] text-amber-800">
+                  <span className="mt-px flex-shrink-0">⚠️</span>
+                  <span>
+                    Este formulario <strong>no tiene destinatarios configurados</strong>.
+                    Andá a <strong>Config → Email</strong> del formulario y
+                    agregá al menos un correo en el campo "Para" para que
+                    lleguen las notificaciones.
+                  </span>
+                </div>
+              )}
 
               {/* 2FA por correo */}
               <label
@@ -240,6 +280,13 @@ export default function ShareFormModal({
             </>
           )}
         </div>
+
+        {error && (
+          <div className="mx-6 mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700">
+            <span>⚠️</span>
+            <span>{error}</span>
+          </div>
+        )}
 
         {/* Footer */}
         <div className="flex justify-end border-t border-slate-200 px-6 py-4">

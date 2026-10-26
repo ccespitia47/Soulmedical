@@ -54,10 +54,12 @@ export function ColorPickerButton({ title, symbol, onChange }: ColorPickerButton
     >
       <label className="flex h-full w-full cursor-pointer flex-col items-center justify-center p-1">
         <div className="text-base font-semibold">{symbol}</div>
+        {/* Sin preventDefault en mousedown: en un <input type="color"> la acción
+            por defecto es abrir el selector de color, así que cancelarla impedía
+            elegir color. La selección del editor la restaura execCommand. */}
         <input
           type="color"
           onChange={(e) => onChange(e.target.value)}
-          onMouseDown={(e) => e.preventDefault()}
           className="m-0 h-1.5 w-full cursor-pointer border-none p-0"
         />
       </label>

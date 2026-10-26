@@ -1,12 +1,16 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Request } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtOrApiKeyGuard } from '../auth/jwt-or-api-key.guard';
 import { ProjectsService } from './projects.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 
 interface AuthRequest { user: { id: number; role: string } }
 
-@UseGuards(JwtAuthGuard)
+// Por defecto JwtOrApiKey (lectura/edición desde MCP, Power BI, integraciones).
+// Las operaciones destructivas o de asignación se restringen a JWT abajo: una
+// API key fugada no debería poder borrar un proyecto o cambiar sus asignaciones.
+@UseGuards(JwtOrApiKeyGuard)
 @Controller('projects')
 export class ProjectsController {
   constructor(private readonly projectsService: ProjectsService) {}
@@ -31,16 +35,23 @@ export class ProjectsController {
     return this.projectsService.update(id, dto, req.user.id, req.user.role);
   }
 
+  // DELETE: solo JWT. Una API key no debe poder borrar proyectos aunque sea
+  // de un admin; es una operación irreversible desde una integración externa.
+  @UseGuards(JwtAuthGuard)
   @Delete(':id')
   remove(@Param('id') id: string, @Request() req: AuthRequest) {
     return this.projectsService.remove(id, req.user.id, req.user.role);
   }
 
+  // Asignaciones: solo JWT. Cambios de permisos efectivos no deberían venir
+  // de una integración.
+  @UseGuards(JwtAuthGuard)
   @Post(':id/assign')
   assignUser(@Param('id') id: string, @Body() body: { userId: number }) {
     return this.projectsService.assignUser(id, body.userId);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Delete(':id/assign/:userId')
   unassignUser(@Param('id') id: string, @Param('userId') userId: string) {
     return this.projectsService.unassignUser(id, parseInt(userId));

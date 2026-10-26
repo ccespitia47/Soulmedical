@@ -1,9 +1,7 @@
 import { useState, useRef } from "react";
-import { Document, Page, pdfjs } from 'react-pdf';
+import { Document, Page } from 'react-pdf';
+import "../../utils/pdfWorker";
 import type { PdfFieldMapping } from "../../types/email-template.types";
-
-// Configurar worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
 
 type PdfMapperProps = {
   pdfBase64: string;

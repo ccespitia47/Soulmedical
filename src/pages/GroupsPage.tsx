@@ -7,6 +7,8 @@ import {
   type GroupData,
 } from "../services/api";
 import ConfirmModal from "../components/common/ConfirmModal";
+import Icon from "../components/common/Icon";
+import EntityIcon from "../components/common/EntityIcon";
 import GroupsSidebar from "../components/groups/GroupsSidebar";
 import MembersPanel from "../components/groups/MembersPanel";
 import GroupAssignmentsPanel from "../components/groups/GroupAssignmentsPanel";
@@ -16,7 +18,7 @@ const EMPTY_FORM: GroupFormValues = {
   name: "",
   description: "",
   color: "#6366f1",
-  icon: "👥",
+  icon: "users",
 };
 
 export default function GroupsPage() {
@@ -108,41 +110,41 @@ export default function GroupsPage() {
 
       {selectedGroup ? (
         <div className="flex flex-1 flex-col">
-          <div className="flex h-[60px] items-center gap-4 border-b border-slate-200 bg-white px-6">
+          <div className="animate-fade-up flex h-[68px] items-center gap-3.5 border-b border-slate-200 bg-white px-6">
             <div
-              className="flex h-[42px] w-[42px] items-center justify-center rounded-xl text-[22px]"
+              className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl shadow-sm"
               style={{
-                background: selectedGroup.color + "20",
+                background: selectedGroup.color + "1f",
                 color: selectedGroup.color,
               }}
             >
-              {selectedGroup.icon}
+              <EntityIcon icon={selectedGroup.icon} size={24} />
             </div>
-            <div>
-              <h1 className="m-0 text-base font-extrabold text-gray-900">
+            <div className="min-w-0">
+              <h1 className="m-0 truncate text-[19px] font-extrabold tracking-tight text-slate-900">
                 {selectedGroup.name}
               </h1>
               {selectedGroup.description && (
-                <p className="m-0 text-xs text-gray-500">{selectedGroup.description}</p>
+                <p className="m-0 truncate text-[12.5px] text-gray-400">{selectedGroup.description}</p>
               )}
             </div>
           </div>
 
-          <div className="flex border-b border-slate-200 bg-white px-6">
-            {([["members", "👤 Miembros"], ["assignments", "🗂️ Asignaciones"]] as const).map(
-              ([tab, label]) => (
+          <div className="flex gap-1 border-b border-slate-200 bg-white px-6">
+            {([["members", "Miembros", "users"], ["assignments", "Asignaciones", "folder"]] as const).map(
+              ([tab, label, icon]) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className="-mb-px cursor-pointer border-b-2 border-none bg-transparent px-4 py-3 font-sans text-[13px] transition-all"
+                  className="-mb-px flex cursor-pointer items-center gap-1.5 border-b-2 border-none bg-transparent px-4 py-3 font-sans text-[13px] transition-all"
                   style={{
                     borderBottomColor:
                       activeTab === tab ? selectedGroup.color : "transparent",
                     fontWeight: activeTab === tab ? 700 : 500,
-                    color: activeTab === tab ? selectedGroup.color : "#6b7280",
+                    color: activeTab === tab ? selectedGroup.color : "#94a3b8",
                   }}
                 >
-                  {label}
+                  <Icon name={icon} size={15} /> {label}
                 </button>
               )
             )}
@@ -161,10 +163,12 @@ export default function GroupsPage() {
           </div>
         </div>
       ) : (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-gray-400">
-          <span className="text-[56px]">🏷️</span>
-          <p className="m-0 text-[15px] font-semibold text-gray-700">Selecciona un grupo</p>
-          <p className="m-0 text-[13px]">
+        <div className="animate-fade-up flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+          <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-[#00c2a8]/10 text-[#00c2a8]">
+            <Icon name="tag" size={40} />
+          </div>
+          <p className="m-0 text-lg font-extrabold tracking-tight text-slate-700">Selecciona un grupo</p>
+          <p className="m-0 max-w-[340px] text-[13px] text-gray-400">
             Elige un grupo del panel izquierdo para ver sus miembros y asignaciones
           </p>
         </div>

@@ -7,7 +7,24 @@ export type SubformFieldType =
   | "date"
   | "select"
   | "checkbox"
-  | "radio";
+  | "radio"
+  // ── Nuevos (portados del formulario principal, versión simplificada) ──
+  | "time"
+  | "price"
+  | "header"
+  | "htmlblock"
+  | "image"
+  | "video"
+  | "file"
+  | "barcode"
+  | "idscanner"
+  | "idDocument"
+  | "signature"
+  | "photo"
+  | "search"
+  | "calc"
+  | "quiz_question"
+  | "quiz_score";
 
 export type SubformField = {
   id: string;
@@ -17,6 +34,20 @@ export type SubformField = {
   placeholder?: string;
   options?: string[];
   defaultValue?: string;
+  // ── Configs específicas de widgets portados ──
+  /** URL (para image/video) o contenido HTML (htmlblock). */
+  url?: string;
+  htmlContent?: string;
+  /** price: prefijo visual (ej. "$", "COP"). */
+  pricePrefix?: string;
+  /** file: filtro MIME (ej. "application/pdf,image/*"). */
+  accept?: string;
+  /** calc: fórmula simple con ids de campos del mismo subform. Ej. "a+b*2". */
+  formula?: string;
+  /** quiz_question: índice de la opción correcta (0-based). */
+  correctOptionIndex?: number;
+  /** quiz_question: puntos que vale la opción correcta. */
+  points?: number;
 };
 
 export type SubformEntry = Record<string, string>;
@@ -28,7 +59,8 @@ export type SubformRuleOperator =
   | "not_equals"
   | "contains"
   | "not_empty"
-  | "is_empty";
+  | "is_empty"
+  | "has_value";
 
 export type SubformCondition = {
   fieldId: string;
@@ -61,6 +93,10 @@ export function evaluateSubformRules(
         case "contains":   return val.includes(target);
         case "not_empty":  return val !== "";
         case "is_empty":   return val === "";
+        case "has_value":
+          if (target === "si") return val !== "";
+          if (target === "no") return val === "";
+          return false;
         default:           return false;
       }
     });
@@ -91,6 +127,10 @@ export function evaluateSubformRules(
         case "contains":   return val.includes(target);
         case "not_empty":  return val !== "";
         case "is_empty":   return val === "";
+        case "has_value":
+          if (target === "si") return val !== "";
+          if (target === "no") return val === "";
+          return false;
         default:           return false;
       }
     });

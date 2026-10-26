@@ -1,12 +1,21 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { register } from "../services/api";
+import AuthLayout from "../components/auth/AuthLayout";
+import Icon from "../components/common/Icon";
 
 type RegisterProps = {
   onBackToLogin: () => void;
 };
 
+// Degradado corporativo (SoulForms · colores del logo)
+const GRAD = "linear-gradient(135deg, #1CB4CE 0%, #127E96 100%)";
+
+const INPUT_CLASS =
+  "w-full rounded-[10px] border-[1.5px] border-slate-200 bg-slate-50 py-3 pl-[42px] pr-[14px] text-sm text-slate-900 outline-none transition focus:border-[#16A6C0] focus:bg-white focus:ring-2 focus:ring-[#16A6C0]/20";
+
 export default function Register({ onBackToLogin }: RegisterProps) {
   const [name, setName] = useState("");
+  const [documentNumber, setDocumentNumber] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -32,7 +41,7 @@ export default function Register({ onBackToLogin }: RegisterProps) {
     }
 
     setLoading(true);
-    const result = await register(name, email, password);
+    const result = await register(name, email, password, documentNumber);
     setLoading(false);
 
     if (result.error || !result.data) {
@@ -43,146 +52,159 @@ export default function Register({ onBackToLogin }: RegisterProps) {
   };
 
   return (
-    <div style={{
-      minHeight: "100vh", width: "100%",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      backgroundImage: `url('/Imagen_Fondo.jpeg')`,
-      backgroundSize: "cover", backgroundPosition: "center",
-      fontFamily: "'Segoe UI', system-ui, sans-serif",
-      position: "relative",
-    }}>
-      <div style={{ position: "absolute", inset: 0, background: "rgba(8,40,80,0.18)", backdropFilter: "blur(1px)" }} />
-
-      <div style={{ position: "relative", zIndex: 1, width: "100%", maxWidth: 420, margin: "0 16px" }}>
-
-        <div style={{ textAlign: "center", marginBottom: 28 }}>
-          <div style={{
-            display: "inline-flex", alignItems: "center", justifyContent: "center",
-            width: 64, height: 64, borderRadius: 20,
-            background: "linear-gradient(135deg, #00c2a8 0%, #0891b2 100%)",
-            boxShadow: "0 8px 32px rgba(0,194,168,0.45)", marginBottom: 14,
-          }}>
-            <span style={{ fontSize: 32 }}>🏥</span>
-          </div>
-          <h1 style={{ fontSize: 28, fontWeight: 800, color: "#fff", margin: 0, letterSpacing: "-0.5px", textShadow: "0 2px 12px rgba(0,0,0,0.25)" }}>
-            SoulForms
-          </h1>
+    <AuthLayout maxWidth="sm" variant="light">
+      <div className="animate-fade-up mb-7 text-center">
+        <div
+          className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-[20px] text-white shadow-[0_12px_30px_-6px_rgba(22,166,192,0.55)]"
+          style={{ background: GRAD }}
+        >
+          <Icon name="clipboard" size={30} />
         </div>
-
-        <div style={{
-          background: "rgba(255,255,255,0.88)",
-          backdropFilter: "blur(24px)",
-          borderRadius: 20, padding: "36px 36px 32px",
-          boxShadow: "0 24px 60px rgba(0,40,80,0.22), 0 1px 0 rgba(255,255,255,0.6) inset",
-          border: "1px solid rgba(255,255,255,0.7)",
-        }}>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: "#0f172a", margin: "0 0 4px" }}>Crear cuenta</h2>
-          <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 24px" }}>
-            Tu solicitud quedará pendiente hasta que un administrador la apruebe.
-          </p>
-
-          {success ? (
-            <div style={{ padding: "14px 16px", background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: 10, fontSize: 13, color: "#065f46", marginBottom: 16, lineHeight: 1.5 }}>
-              ✅ {success}
-            </div>
-          ) : (
-            <>
-              <Field label="Nombre completo" icon="👤">
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Tu nombre"
-                  style={inputStyle}
-                />
-              </Field>
-
-              <Field label="Correo electrónico" icon="✉️">
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="usuario@gruposoul.com"
-                  style={inputStyle}
-                />
-              </Field>
-
-              <Field label="Contraseña" icon="🔒">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Mínimo 6 caracteres"
-                  style={{ ...inputStyle, paddingRight: 44 }}
-                />
-                <button type="button" onClick={() => setShowPassword(!showPassword)}
-                  style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "#94a3b8", padding: "2px" }}>
-                  {showPassword ? "🙈" : "👁️"}
-                </button>
-              </Field>
-
-              <Field label="Confirmar contraseña" icon="🔒">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={confirm}
-                  onChange={(e) => setConfirm(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-                  placeholder="Repite la contraseña"
-                  style={inputStyle}
-                />
-              </Field>
-            </>
-          )}
-
-          {error && (
-            <div style={{ padding: "10px 14px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, fontSize: 13, color: "#dc2626", marginBottom: 16, display: "flex", alignItems: "center", gap: 6 }}>
-              ⚠️ {error}
-            </div>
-          )}
-
-          {!success && (
-            <button onClick={handleSubmit} disabled={loading} style={primaryButtonStyle(loading)}>
-              {loading ? "Creando..." : "Crear cuenta →"}
-            </button>
-          )}
-
-          <button onClick={onBackToLogin} style={{ width: "100%", padding: 10, marginTop: 12, background: "none", border: "none", color: "#0891b2", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
-            ← Volver al inicio de sesión
-          </button>
-        </div>
+        <h1 className="m-0 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
+          SoulForms
+        </h1>
       </div>
-    </div>
+
+      <div
+        className="animate-fade-up rounded-[20px] border border-white/70 bg-white/70 p-6 shadow-[0_24px_60px_-20px_rgba(15,45,90,0.3)] ring-1 ring-slate-900/[0.03] backdrop-blur-xl sm:p-8"
+        style={{ animationDelay: "120ms" }}
+      >
+        <h2 className="m-0 text-xl font-extrabold tracking-tight text-slate-900">
+          Crear cuenta
+        </h2>
+        <p className="mb-6 mt-1.5 text-[13px] leading-relaxed text-slate-500">
+          Tu solicitud quedará pendiente hasta que un administrador la apruebe.
+        </p>
+
+        {success ? (
+          <div className="mb-4 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3.5 text-[13px] leading-relaxed text-emerald-700">
+            <span className="mt-px shrink-0 text-emerald-500">
+              <Icon name="checkCircle" size={18} />
+            </span>
+            <span>{success}</span>
+          </div>
+        ) : (
+          <>
+            <Field label="Nombre completo" icon="user">
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Tu nombre"
+                className={INPUT_CLASS}
+              />
+            </Field>
+
+            <Field label="Documento de identidad" icon="fileText">
+              <input
+                type="text"
+                value={documentNumber}
+                onChange={(e) => setDocumentNumber(e.target.value)}
+                placeholder="Opcional"
+                className={INPUT_CLASS}
+              />
+            </Field>
+
+            <Field label="Correo electrónico" icon="mail">
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="usuario@gruposoul.com"
+                className={INPUT_CLASS}
+              />
+            </Field>
+
+            <Field label="Contraseña" icon="lock">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Mínimo 6 caracteres"
+                className={`${INPUT_CLASS} pr-11`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 transition hover:text-slate-600"
+              >
+                {showPassword ? (
+                  <Icon name="eyeOff" size={18} />
+                ) : (
+                  <Icon name="eye" size={18} />
+                )}
+              </button>
+            </Field>
+
+            <Field label="Confirmar contraseña" icon="lock">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                placeholder="Repite la contraseña"
+                className={INPUT_CLASS}
+              />
+            </Field>
+          </>
+        )}
+
+        {error && (
+          <div className="mb-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-[14px] py-2.5 text-[13px] text-red-600">
+            <Icon name="alert" size={18} className="shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {!success && (
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="flex w-full items-center justify-center gap-2 rounded-[10px] py-[13px] text-[15px] font-bold text-white shadow-[0_6px_18px_-4px_rgba(22,166,192,0.5)] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_12px_26px_-6px_rgba(22,166,192,0.6)] disabled:cursor-not-allowed disabled:shadow-none"
+            style={{ background: loading ? "#94a3b8" : GRAD }}
+          >
+            {loading ? (
+              <>
+                <span className="animate-spin-slow inline-block h-4 w-4 rounded-full border-2 border-white/40 border-t-white" />
+                Creando…
+              </>
+            ) : (
+              "Crear cuenta →"
+            )}
+          </button>
+        )}
+
+        <button
+          onClick={onBackToLogin}
+          className="mt-3 w-full rounded-lg py-2.5 text-[13px] font-semibold text-[#0F7C90] transition hover:bg-slate-900/[0.03] hover:text-[#127E96]"
+        >
+          ← Volver al inicio de sesión
+        </button>
+      </div>
+    </AuthLayout>
   );
 }
 
-const inputStyle: React.CSSProperties = {
-  width: "100%", padding: "12px 14px 12px 42px",
-  border: "1.5px solid #e2e8f0", borderRadius: 10,
-  fontSize: 14, color: "#0f172a", background: "#f8fafc",
-  outline: "none", boxSizing: "border-box",
-};
-
-function Field({ label, icon, children }: { label: string; icon: string; children: React.ReactNode }) {
+function Field({
+  label,
+  icon,
+  children,
+}: {
+  label: string;
+  icon: string;
+  children: ReactNode;
+}) {
   return (
-    <div style={{ marginBottom: 14 }}>
-      <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6, letterSpacing: "0.4px", textTransform: "uppercase" }}>
+    <div className="mb-[14px]">
+      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.4px] text-gray-700">
         {label}
       </label>
-      <div style={{ position: "relative" }}>
-        <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 16 }}>{icon}</div>
+      <div className="relative">
+        <span className="pointer-events-none absolute left-[13px] top-1/2 -translate-y-1/2 text-[#0F7C90]">
+          <Icon name={icon} size={17} />
+        </span>
         {children}
       </div>
     </div>
   );
-}
-
-function primaryButtonStyle(loading: boolean): React.CSSProperties {
-  return {
-    width: "100%", padding: "13px",
-    background: loading ? "#94a3b8" : "linear-gradient(135deg, #00c2a8 0%, #0891b2 100%)",
-    color: "#fff", border: "none", borderRadius: 10,
-    fontSize: 15, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer",
-    boxShadow: loading ? "none" : "0 4px 16px rgba(0,194,168,0.4)",
-    fontFamily: "inherit",
-  };
 }

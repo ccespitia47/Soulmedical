@@ -1,5 +1,5 @@
-import type { CellData } from "../../../utils/excelParser";
-import { COL_LETTERS, COL_WIDTHS, decodeCol } from "../../../utils/excelParser";
+import type { CellData, ExcelColumn } from "../../../utils/excelParser";
+import { decodeCol } from "../../../utils/excelParser";
 import type { ExcelFieldMapping } from "../../../types/email-template.types";
 import type { PlaceholderItem } from "./PlaceholdersList";
 
@@ -12,6 +12,8 @@ const LEGEND = [
 
 type ExcelTableProps = {
   rows: CellData[][];
+  columns: ExcelColumn[];
+  rowHeights: number[];
   mappings: Record<string, ExcelFieldMapping>;
   selectedPlaceholder: PlaceholderItem | null;
   hoveredCell: string | null;
@@ -26,12 +28,15 @@ function cellStyle(
   cell: CellData,
   mapped: boolean,
   hovered: boolean,
-  selectedPlaceholder: PlaceholderItem | null
+  selectedPlaceholder: PlaceholderItem | null,
 ): React.CSSProperties {
-  const structural = cell.row <= 5 || cell.row >= 24;
-  let bg = structural ? "#f0fdf8" : "#ffffff";
+  // Base neutra — sin verde/negrita hardcoded por posición. Antes se pintaban
+  // filas 1-5 y ≥24 en verde estructural asumiendo un formato específico,
+  // pero eso rompía cualquier Excel con otra estructura (headers en fila 6,
+  // por ejemplo, se veían mal).
+  let bg = "#ffffff";
   let border = "1px solid #e2e8f0";
-  let color = structural ? "#064e3b" : "#1e293b";
+  let color = "#1e293b";
 
   if (cell.isMappable && hovered && selectedPlaceholder && !mapped) {
     bg = "#eff6ff";
@@ -54,7 +59,10 @@ function cellStyle(
     cursor:
       cell.isMappable && selectedPlaceholder ? "crosshair" : mapped ? "pointer" : "default",
     verticalAlign: "middle",
-    wordBreak: "break-word",
+    // overflow-wrap corta por espacio primero; word-break rompía letra por
+    // letra en columnas angostas ("CODIGO: THSST-FT-010" → C\nO\nD\nI…).
+    overflowWrap: "break-word",
+    whiteSpace: cell.style.wrapText ? "pre-wrap" : "nowrap",
     lineHeight: 1.3,
     transition: "background 0.12s, border 0.12s",
   };
@@ -62,6 +70,8 @@ function cellStyle(
 
 export default function ExcelTable({
   rows,
+  columns,
+  rowHeights,
   mappings,
   selectedPlaceholder,
   hoveredCell,
@@ -71,6 +81,8 @@ export default function ExcelTable({
   onCellClick,
   onRemoveMapping,
 }: ExcelTableProps) {
+  const totalWidth = columns.reduce((acc, c) => acc + c.width, 0);
+  const minTableWidth = Math.max(totalWidth, 720);
   const logoForCell = (colLetter: string, rowNum: number): string | null => {
     if (!customLogo) return null;
     const c = decodeCol(colLetter);
@@ -93,27 +105,27 @@ export default function ExcelTable({
       </div>
 
       <div className="overflow-x-auto rounded-[10px] border border-slate-200 bg-white shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-        <table className="border-collapse text-[10.5px]" style={{ tableLayout: "fixed", minWidth: 960 }}>
+        <table className="border-collapse text-[10.5px]" style={{ tableLayout: "fixed", minWidth: minTableWidth }}>
           <colgroup>
-            {COL_LETTERS.map((col) => (
-              <col key={col} style={{ width: COL_WIDTHS[col] }} />
+            {columns.map((col) => (
+              <col key={col.letter} style={{ width: col.width }} />
             ))}
           </colgroup>
           <thead>
             <tr>
-              {COL_LETTERS.map((col) => (
+              {columns.map((col) => (
                 <th
-                  key={col}
+                  key={col.letter}
                   className="border-b-2 border-r border-slate-200 border-r-slate-100 bg-slate-50 px-1.5 py-1 text-center text-[10px] font-bold tracking-[0.5px] text-slate-400"
                 >
-                  {col}
+                  {col.letter}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {rows.map((row, ri) => (
-              <tr key={ri}>
+              <tr key={ri} style={{ height: rowHeights[ri] }}>
                 {row.map((cell) => {
                   const mapped = mappings[cell.coord];
                   const isMapped = !!mapped;

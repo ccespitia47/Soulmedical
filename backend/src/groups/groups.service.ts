@@ -5,6 +5,7 @@ import { Group, GroupDocument } from './group.schema';
 import { UserGroupMembership, UserGroupMembershipDocument } from './user-group-membership.schema';
 import { UserFormAssignment, UserFormAssignmentDocument } from '../forms/user-form-assignment.schema';
 import { UsersService } from '../users/users.service';
+import { AssignmentHistoryService } from '../audit-history/assignment-history.service';
 
 @Injectable()
 export class GroupsService {
@@ -13,6 +14,10 @@ export class GroupsService {
     @InjectModel(UserGroupMembership.name) private readonly membershipModel: Model<UserGroupMembershipDocument>,
     @InjectModel(UserFormAssignment.name) private readonly assignmentModel: Model<UserFormAssignmentDocument>,
     private readonly usersService: UsersService,
+    // Historia de asignaciones "eliminadas". Cada delete de membership o
+    // assignment archiva el doc original en assignments_history ANTES de
+    // borrarlo, para conservar trazabilidad (quién estuvo en qué grupo).
+    private readonly history: AssignmentHistoryService,
   ) {}
 
   async findAll(): Promise<GroupDocument[]> {
@@ -45,9 +50,31 @@ export class GroupsService {
     const group = await this.findOne(id);
     group.isActive = false;
     await group.save();
-    // Remove all memberships
+
+    // Archivar TODAS las memberships y assignments del grupo antes de
+    // borrarlas. Así queda registro de quién estuvo en este grupo y a qué
+    // estuvo asignado. Sin esto, al borrar un grupo se perdía toda la
+    // historia de sus miembros y sus permisos.
+    const memberships = await this.membershipModel.find({ groupId: id }).lean();
+    for (const m of memberships) {
+      await this.history.archive({
+        type: 'user_group_membership',
+        originalDocument: m as unknown as Record<string, unknown>,
+        metadata: { reason: 'group_removed', groupId: id },
+      });
+    }
     await this.membershipModel.deleteMany({ groupId: id });
-    // Remove all assignments
+
+    const assignments = await this.assignmentModel.find({ groupId: id }).lean();
+    for (const a of assignments) {
+      await this.history.archive({
+        type: a.formId
+          ? 'group_form_assignment'
+          : 'group_project_assignment',
+        originalDocument: a as unknown as Record<string, unknown>,
+        metadata: { reason: 'group_removed', groupId: id },
+      });
+    }
     await this.assignmentModel.deleteMany({ groupId: id });
   }
 
@@ -65,6 +92,13 @@ export class GroupsService {
   }
 
   async removeMember(groupId: string, userId: number): Promise<void> {
+    const doc = await this.membershipModel.findOne({ groupId, userId }).lean();
+    if (!doc) return;
+    await this.history.archive({
+      type: 'user_group_membership',
+      originalDocument: doc as unknown as Record<string, unknown>,
+      metadata: { reason: 'member_removed', groupId, userId },
+    });
     await this.membershipModel.deleteOne({ groupId, userId });
   }
 
@@ -120,6 +154,15 @@ export class GroupsService {
   }
 
   async unassignProjectFromGroup(groupId: string, projectId: string): Promise<void> {
+    const doc = await this.assignmentModel
+      .findOne({ groupId, projectId, formId: null })
+      .lean();
+    if (!doc) return;
+    await this.history.archive({
+      type: 'group_project_assignment',
+      originalDocument: doc as unknown as Record<string, unknown>,
+      metadata: { reason: 'manual_unassign', groupId, projectId },
+    });
     await this.assignmentModel.deleteOne({ groupId, projectId, formId: null });
   }
 
@@ -133,6 +176,15 @@ export class GroupsService {
   }
 
   async unassignFormFromGroup(groupId: string, formId: string): Promise<void> {
+    const doc = await this.assignmentModel
+      .findOne({ groupId, formId, excluded: false })
+      .lean();
+    if (!doc) return;
+    await this.history.archive({
+      type: 'group_form_assignment',
+      originalDocument: doc as unknown as Record<string, unknown>,
+      metadata: { reason: 'manual_unassign', groupId, formId },
+    });
     await this.assignmentModel.deleteOne({ groupId, formId, excluded: false });
   }
 }

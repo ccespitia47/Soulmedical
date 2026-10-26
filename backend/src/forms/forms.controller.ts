@@ -1,5 +1,6 @@
 import {
   Controller,
+  ForbiddenException,
   Get,
   Post,
   Patch,
@@ -13,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtOrApiKeyGuard } from '../auth/jwt-or-api-key.guard';
 import { PermissionsGuard } from '../auth/permissions.guard';
 import { RequirePermission } from '../auth/permissions.decorator';
 import { Permission } from '../auth/permissions';
@@ -27,14 +29,36 @@ import {
 } from '../admin-audit/admin-action.entity';
 
 interface AuthRequest {
-  user: { id: number; email?: string; name?: string; role: string };
+  user: {
+    id: number;
+    email?: string;
+    name?: string;
+    role: string;
+    authSource?: 'jwt' | 'api_key';
+    apiKeyName?: string;
+  };
 }
 
+// Marca el actor como humano ("Nombre") o integración ("API Key: foo") para que
+// la bitácora distinga de dónde vino el cambio. Un reviewer externo no podía
+// diferenciarlos antes: todo quedaba a nombre del dueño de la key.
 function actorFrom(req: AuthRequest) {
+  const baseName = req.user.name ?? req.user.email ?? `user#${req.user.id}`;
+  const name =
+    req.user.authSource === 'api_key'
+      ? `API Key: ${req.user.apiKeyName ?? 'sin nombre'} (owner ${baseName})`
+      : baseName;
   return {
     id: Number(req.user.id),
-    name: req.user.name ?? req.user.email ?? `user#${req.user.id}`,
+    name,
     role: req.user.role,
+  };
+}
+
+function auditSourceMeta(req: AuthRequest) {
+  return {
+    authSource: req.user.authSource ?? 'jwt',
+    apiKeyName: req.user.apiKeyName ?? null,
   };
 }
 
@@ -88,14 +112,31 @@ export class FormsController {
 
   // ── Rutas protegidas (admin) ───────────────────────────────────────────────
 
-  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  // Create/read/edit aceptan API key para integraciones (MCP, Power BI, agentes).
+  // Edit queda limitado por Permission.FORMS_EDIT y auditado explícitamente abajo
+  // porque cambia el schema de un formulario en vivo; para dar a una integración
+  // sólo poder de editar (no borrar), emitir la API key a un usuario no-admin con
+  // permisos extra {FORMS_CREATE, FORMS_EDIT} y SIN FORMS_DELETE.
+  // Delete sigue requiriendo JWT: una key fugada no debería poder eliminar.
+  @UseGuards(JwtOrApiKeyGuard, PermissionsGuard)
   @RequirePermission(Permission.FORMS_CREATE)
   @Post()
-  create(@Body() dto: CreateFormDto, @Request() req: AuthRequest) {
+  async create(@Body() dto: CreateFormDto, @Request() req: AuthRequest) {
+    // Si se crea un formulario vía API key, bloqueamos definir emailTemplate
+    // desde el inicio: la plantilla de correo decide a quién llega el PDF del
+    // paciente, y no debe salir de una integración (mismo criterio que PATCH).
+    if (
+      (dto as { emailTemplate?: unknown }).emailTemplate !== undefined &&
+      req.user.authSource === 'api_key'
+    ) {
+      throw new ForbiddenException(
+        'La plantilla de correo (emailTemplate) debe configurarse desde la app, no vía API key.',
+      );
+    }
     return this.formsService.create(dto, req.user.id);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtOrApiKeyGuard)
   @Get()
   findByFolder(
     @Query('folderId') folderId: string,
@@ -110,17 +151,52 @@ export class FormsController {
     return this.formsService.findAssignedToUser(req.user.id);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtOrApiKeyGuard)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.formsService.findOne(id);
   }
 
-  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @UseGuards(JwtOrApiKeyGuard, PermissionsGuard)
   @RequirePermission(Permission.FORMS_EDIT)
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateFormDto) {
-    return this.formsService.update(id, dto);
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateFormDto,
+    @Request() req: AuthRequest,
+  ) {
+    // emailTemplate rige quién recibe el PDF firmado del paciente. Si una
+    // API key fugada pudiera editarlo, podría agregar un bccRecipients static
+    // con un correo externo y recibir copia oculta de todos los consentimientos
+    // (nombre, documento, firma) — una fuga reportable bajo Ley 1581. Solo JWT.
+    if (dto.emailTemplate !== undefined && req.user.authSource === 'api_key') {
+      throw new ForbiddenException(
+        'La edición de la plantilla de correo (emailTemplate) requiere sesión de usuario, no se permite vía API key.',
+      );
+    }
+
+    const before = await this.formsService.findOne(id).catch(() => null);
+    const result = await this.formsService.update(id, dto);
+    const changedFields: string[] = [];
+    if (dto.name !== undefined && dto.name !== before?.name)
+      changedFields.push('name');
+    if (dto.emailTemplate !== undefined) changedFields.push('emailTemplate');
+    if (dto.schema !== undefined) changedFields.push('schema');
+    await this.auditService.log({
+      actor: actorFrom(req),
+      action: AdminActionType.FORM_EDIT,
+      targetType: AdminActionTargetType.FORM,
+      targetId: id,
+      targetName: result.name,
+      metadata: {
+        changedFields,
+        versionBefore: before?.version ?? null,
+        versionAfter: result.version,
+        nameBefore: before?.name ?? null,
+        ...auditSourceMeta(req),
+      },
+    });
+    return result;
   }
 
   @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -135,6 +211,7 @@ export class FormsController {
       targetType: AdminActionTargetType.FORM,
       targetId: id,
       targetName: before?.name ?? null,
+      metadata: auditSourceMeta(req),
     });
     return result;
   }
@@ -198,6 +275,7 @@ export class FormsController {
           sendConfirmationEmail: result.sendConfirmationEmail,
           requiresEmailVerification: result.requiresEmailVerification,
         },
+        ...auditSourceMeta(req),
       },
     });
     return result;

@@ -1,29 +1,22 @@
-export const DEFAULT_EMAIL_HTML = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f0f4f8; }
-    .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; }
-    .header { background: #00c2a8; color: white; padding: 24px; text-align: center; }
-    .content { padding: 24px; color: #374151; line-height: 1.6; }
-    .footer { text-align: center; padding: 16px; border-top: 1px solid #e2e8f0; color: #9ca3af; font-size: 12px; }
-    @media (max-width: 600px) { body { padding: 8px; } .content { padding: 16px; } }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header"><h1 style="margin:0;font-size:22px">Nuevo Registro Recibido</h1></div>
-    <div class="content">
-      <p>Hola,</p>
-      <p>Se ha recibido un nuevo registro. Los detalles están en el PDF adjunto.</p>
-      <p>Gracias por tu atención.</p>
-    </div>
-    <div class="footer"><p>Este email fue generado automáticamente por SoulForms</p></div>
+// Plantilla con estilos INLINE (sin <!DOCTYPE>, <html>, <head> ni <style>).
+// Es imprescindible para que el <div contenteditable> del RichTextEditor
+// pueda editarla: inyectar un documento completo descarta los <html>/<head>
+// pero el <style> queda flotando y rompe el editor + afecta la UI de la app.
+// Además es best practice para emails (los clientes de correo soportan
+// estilos inline de forma consistente, no <style> global).
+export const DEFAULT_EMAIL_HTML = `<div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:8px;overflow:hidden;font-family:Arial,sans-serif;">
+  <div style="background:#00c2a8;color:#ffffff;padding:24px;text-align:center;">
+    <h1 style="margin:0;font-size:22px;">Nuevo Registro Recibido</h1>
   </div>
-</body>
-</html>`;
+  <div style="padding:24px;color:#374151;line-height:1.6;">
+    <p>Hola,</p>
+    <p>Se ha recibido un nuevo registro. Los detalles están en el PDF adjunto.</p>
+    <p>Gracias por tu atención.</p>
+  </div>
+  <div style="text-align:center;padding:16px;border-top:1px solid #e2e8f0;color:#9ca3af;font-size:12px;">
+    <p>Este email fue generado automáticamente por SoulForms</p>
+  </div>
+</div>`;
 
 type WidgetField = { label: string };
 

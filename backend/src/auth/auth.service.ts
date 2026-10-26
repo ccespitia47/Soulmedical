@@ -40,6 +40,16 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales incorrectas');
     }
 
+    // Soft delete: cuentas eliminadas quedan en la BD (para conservar
+    // sus submissions viejas) pero no pueden entrar. Mensaje distinto
+    // que "credenciales incorrectas" para que el usuario sepa contactar
+    // a un admin en vez de intentar resetear contraseña.
+    if (user.deletedAt) {
+      throw new UnauthorizedException(
+        'Cuenta no disponible. Contacta al administrador.',
+      );
+    }
+
     const passwordValid = await bcrypt.compare(dto.password, user.password);
     if (!passwordValid) {
       throw new UnauthorizedException('Credenciales incorrectas');
@@ -150,6 +160,16 @@ export class AuthService {
   private async issueFinalToken(userId: number) {
     const user = await this.usersService.findById(userId);
     if (!user) throw new UnauthorizedException('Usuario no encontrado');
+    // Defensa en profundidad: si el usuario fue soft-deleted entre el
+    // login inicial y esta emisión final (o entre login y refresh),
+    // rechazar aquí también. issueFinalToken() es el único punto por
+    // donde salen tokens de sesión — bloquearlo aquí cubre login normal,
+    // 2FA setup, 2FA verify y refresh.
+    if (user.deletedAt || !user.isActive) {
+      throw new UnauthorizedException(
+        'Cuenta no disponible. Contacta al administrador.',
+      );
+    }
 
     const payload = { sub: user.id, email: user.email, role: user.role };
     return {
@@ -173,6 +193,7 @@ export class AuthService {
       dto.password,
       UserRole.USER,
       false,
+      dto.documentNumber,
     );
     return {
       success: true,
@@ -237,6 +258,46 @@ export class AuthService {
       success: true,
       message: 'Contraseña actualizada. Ya puedes iniciar sesión.',
     };
+  }
+
+  /**
+   * Emite un JWT nuevo para un usuario ya autenticado. Se usa para
+   * refrescar la sesión mientras el usuario está activo, sin pedirle
+   * las credenciales otra vez.
+   */
+  async refreshToken(userId: number) {
+    return this.issueFinalToken(userId);
+  }
+
+  /**
+   * Auto-edición del perfil. Solo campos "seguros": nombre, email,
+   * password (opcional), documentNumber. Explícitamente NO acepta
+   * role, permissions, isActive, totpEnabled, deletedAt — para que
+   * un usuario no pueda escalar privilegios editando su propio perfil.
+   * Delega a UsersService.update() con el whitelist ya filtrado.
+   */
+  async updateOwnProfile(
+    userId: number,
+    changes: {
+      name?: string;
+      email?: string;
+      password?: string;
+      documentNumber?: string;
+    },
+  ) {
+    const safe: {
+      name?: string;
+      email?: string;
+      password?: string;
+      documentNumber?: string;
+    } = {};
+    if (changes.name !== undefined) safe.name = changes.name;
+    if (changes.email !== undefined) safe.email = changes.email;
+    if (changes.password !== undefined && changes.password.length > 0) {
+      safe.password = changes.password;
+    }
+    if (changes.documentNumber !== undefined) safe.documentNumber = changes.documentNumber;
+    return this.usersService.update(userId, safe);
   }
 
   async getProfile(userId: number) {

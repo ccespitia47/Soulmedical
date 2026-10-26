@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { forgotPassword } from "../services/api";
 import AuthLayout from "../components/auth/AuthLayout";
+import Icon from "../components/common/Icon";
 
 type ForgotPasswordProps = {
   onBackToLogin: () => void;
 };
 
-const BRAND_GRADIENT = "linear-gradient(135deg, #00c2a8 0%, #0891b2 100%)";
+// Degradado corporativo (colores del logo)
+const BRAND_GRADIENT = "linear-gradient(135deg, #1CB4CE 0%, #127E96 100%)";
 
 export default function ForgotPassword({ onBackToLogin }: ForgotPasswordProps) {
   const [email, setEmail] = useState("");
@@ -33,28 +35,36 @@ export default function ForgotPassword({ onBackToLogin }: ForgotPasswordProps) {
   };
 
   return (
-    <AuthLayout>
-      <div className="mb-7 text-center">
+    <AuthLayout variant="light">
+      <div className="animate-fade-up mb-7 text-center">
         <div
-          className="mb-3.5 inline-flex h-16 w-16 items-center justify-center rounded-[20px] shadow-[0_8px_32px_rgba(0,194,168,0.45)]"
+          className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-[20px] text-white shadow-[0_12px_30px_-6px_rgba(22,166,192,0.55)]"
           style={{ background: BRAND_GRADIENT }}
         >
-          <span className="text-[32px]">🏥</span>
+          <Icon name="mail" size={30} />
         </div>
-        <h1 className="m-0 text-[28px] font-extrabold tracking-tight text-white [text-shadow:0_2px_12px_rgba(0,0,0,0.25)]">
+        <h1 className="m-0 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
           SoulForms
         </h1>
       </div>
 
-      <div className="rounded-[20px] border border-white/70 bg-white/[0.88] px-9 pb-8 pt-9 shadow-[0_24px_60px_rgba(0,40,80,0.22),0_1px_0_rgba(255,255,255,0.6)_inset] backdrop-blur-2xl">
-        <h2 className="m-0 mb-1 text-xl font-bold text-slate-900">Restablecer contraseña</h2>
-        <p className="mb-6 mt-0 text-[13px] text-slate-500">
+      <div
+        className="animate-fade-up rounded-[20px] border border-white/70 bg-white/70 p-6 shadow-[0_24px_60px_-20px_rgba(15,45,90,0.3)] ring-1 ring-slate-900/[0.03] backdrop-blur-xl sm:p-8"
+        style={{ animationDelay: "120ms" }}
+      >
+        <h2 className="m-0 text-xl font-extrabold tracking-tight text-slate-900">
+          Restablecer contraseña
+        </h2>
+        <p className="mb-6 mt-1.5 text-[13px] leading-relaxed text-slate-500">
           Te enviaremos un enlace al correo asociado a tu cuenta. El enlace expira en 30 minutos.
         </p>
 
         {info ? (
-          <div className="mb-4 rounded-[10px] border border-emerald-200 bg-emerald-50 px-4 py-3.5 text-[13px] leading-relaxed text-emerald-800">
-            ✉️ {info}
+          <div className="mb-4 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3.5 text-[13px] leading-relaxed text-emerald-700">
+            <span className="mt-px shrink-0 text-emerald-500">
+              <Icon name="mail" size={18} />
+            </span>
+            <span>{info}</span>
           </div>
         ) : (
           <div className="mb-3.5">
@@ -62,22 +72,25 @@ export default function ForgotPassword({ onBackToLogin }: ForgotPasswordProps) {
               Correo electrónico
             </label>
             <div className="relative">
-              <div className="absolute left-[14px] top-1/2 -translate-y-1/2 text-base">✉️</div>
+              <span className="pointer-events-none absolute left-[13px] top-1/2 -translate-y-1/2 text-[#0F7C90]">
+                <Icon name="mail" size={17} />
+              </span>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
                 placeholder="usuario@gruposoul.com"
-                className="w-full rounded-[10px] border-[1.5px] border-slate-200 bg-slate-50 px-[14px] py-3 pl-[42px] text-sm text-slate-900 outline-none"
+                className="w-full rounded-[10px] border-[1.5px] border-slate-200 bg-slate-50 py-3 pl-[42px] pr-[14px] text-sm text-slate-900 outline-none transition focus:border-[#16A6C0] focus:bg-white focus:ring-2 focus:ring-[#16A6C0]/20"
               />
             </div>
           </div>
         )}
 
         {error && (
-          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-[14px] py-2.5 text-sm text-red-600">
-            ⚠️ {error}
+          <div className="mb-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-[14px] py-2.5 text-[13px] text-red-600">
+            <Icon name="alert" size={18} className="shrink-0" />
+            <span>{error}</span>
           </div>
         )}
 
@@ -85,19 +98,23 @@ export default function ForgotPassword({ onBackToLogin }: ForgotPasswordProps) {
           <button
             onClick={handleSubmit}
             disabled={loading}
-            className="w-full rounded-[10px] py-[13px] text-[15px] font-bold text-white transition disabled:cursor-not-allowed"
-            style={{
-              background: loading ? "#94a3b8" : BRAND_GRADIENT,
-              boxShadow: loading ? "none" : "0 4px 16px rgba(0,194,168,0.4)",
-            }}
+            className="flex w-full items-center justify-center gap-2 rounded-[10px] py-[13px] text-[15px] font-bold text-white shadow-[0_6px_18px_-4px_rgba(22,166,192,0.5)] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_12px_26px_-6px_rgba(22,166,192,0.6)] disabled:cursor-not-allowed disabled:shadow-none"
+            style={{ background: loading ? "#94a3b8" : BRAND_GRADIENT }}
           >
-            {loading ? "Enviando..." : "Enviar enlace →"}
+            {loading ? (
+              <>
+                <span className="animate-spin-slow inline-block h-4 w-4 rounded-full border-2 border-white/40 border-t-white" />
+                Enviando…
+              </>
+            ) : (
+              "Enviar enlace →"
+            )}
           </button>
         )}
 
         <button
           onClick={onBackToLogin}
-          className="mt-3 w-full p-2.5 text-[13px] font-semibold text-cyan-700"
+          className="mt-3 w-full rounded-lg py-2.5 text-[13px] font-semibold text-[#0F7C90] transition hover:bg-slate-900/[0.03] hover:text-[#127E96]"
         >
           ← Volver al inicio de sesión
         </button>

@@ -61,4 +61,36 @@ export class ReportsController {
       );
     }
   }
+
+  /**
+   * Reporte Excel acotado a los registros de una tarea. Mismo mecanismo seguro
+   * (cifrado + enlace único con 2FA). Sin fieldIds exporta todas las columnas.
+   */
+  @RequirePermission(Permission.REPORTS_VIEW)
+  @Post(':formId/tasks/:taskId/export-email')
+  async requestTaskReportByEmail(
+    @Param('formId') formId: string,
+    @Param('taskId') taskId: string,
+    @Body() body: { fieldIds?: string[] },
+    @Req() req: { user: { id: number } },
+  ) {
+    try {
+      return await this.reportsService.exportTaskSubmissionsAndEmail(
+        Number(req.user.id),
+        formId,
+        taskId,
+        Array.isArray(body?.fieldIds) ? body.fieldIds : [],
+      );
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        `[requestTaskReportByEmail] userId=${req.user.id} formId=${formId} taskId=${taskId} error=${message}`,
+        err instanceof Error ? err.stack : undefined,
+      );
+      throw new InternalServerErrorException(
+        `Error generando el reporte: ${message}`,
+      );
+    }
+  }
 }

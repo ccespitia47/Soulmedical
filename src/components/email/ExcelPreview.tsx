@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { ExcelFieldMapping as ExcelMapping } from "../../types/email-template.types";
 import {
-  parseExcelForPreview,
-  type PreviewCellData,
-} from "../../utils/excelPreviewParser";
-import { exportElementToPdf } from "../../utils/pdfExporter";
+  fetchFilledPreview,
+  fetchRenderedPdf,
+} from "../../services/excelPreview";
 import PreviewHeader from "./excelPreview/PreviewHeader";
-import PreviewTable from "./excelPreview/PreviewTable";
 import PreviewFooter from "./excelPreview/PreviewFooter";
 
 type PlaceholderItem = {
@@ -23,6 +21,12 @@ type ExcelPreviewProps = {
   onClose: () => void;
 };
 
+/**
+ * Preview del PDF que se enviará. Renderiza el .xlsx con placeholders
+ * ya rellenados usando LibreOffice en el backend (mismo motor que el
+ * mapper, por eso se ve idéntico al Excel original). Permite descargar
+ * el PDF real (también generado con LibreOffice).
+ */
 export default function ExcelPreview({
   excelBase64,
   mappings,
@@ -31,53 +35,99 @@ export default function ExcelPreview({
   formValues,
   onClose,
 }: ExcelPreviewProps) {
-  const tableRef = useRef<HTMLDivElement>(null);
-  const [rows, setRows] = useState<PreviewCellData[][]>([]);
-  const [colWidths, setColWidths] = useState<Record<string, number>>({});
-  const [rowHeights, setRowHeights] = useState<Record<number, number>>({});
+  const hostRef = useRef<HTMLDivElement>(null);
+  const shadowRef = useRef<ShadowRoot | null>(null);
+  const [html, setHtml] = useState<string>("");
+  const [css, setCss] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const valueMap = useRef<Record<string, string>>({});
+  // Los placeholders sin valor real reciben un texto tipo "[Descripción]"
+  // para que el admin pueda ver DÓNDE va cada campo aunque no haya datos.
+  const values: Record<string, string> = (() => {
+    const out: Record<string, string> = {};
+    for (const p of availablePlaceholders) {
+      const key = p.placeholder.replace(/^\$\{/, "").replace(/\}$/, "");
+      out[key] =
+        formValues && formValues[p.placeholder] !== undefined
+          ? formValues[p.placeholder]
+          : `[${p.description}]`;
+    }
+    return out;
+  })();
 
   useEffect(() => {
-    try {
-      const parsed = parseExcelForPreview(excelBase64);
-      setRows(parsed.rows);
-      setColWidths(parsed.colWidths);
-      setRowHeights(parsed.rowHeights);
-
-      const vm: Record<string, string> = {};
-      for (const p of availablePlaceholders) {
-        vm[p.placeholder] =
-          formValues && formValues[p.placeholder] !== undefined
-            ? formValues[p.placeholder]
-            : `[${p.description}]`;
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      const result = await fetchFilledPreview({
+        excelBase64,
+        mappings: mappings.map((m) => ({ coord: m.coord, placeholder: m.placeholder })),
+        values,
+        customLogoBase64,
+      });
+      if (cancelled) return;
+      if (result.error) {
+        setError(result.error);
+        setLoading(false);
+        return;
       }
-      valueMap.current = vm;
-    } catch (e) {
-      setError("No se pudo cargar el Excel para la vista previa.");
-      console.error(e);
-    } finally {
+      setHtml(result.html);
+      setCss(result.css);
       setLoading(false);
-    }
-  }, [excelBase64, mappings, availablePlaceholders, formValues]);
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [excelBase64, mappings, customLogoBase64, formValues]);
 
-  const resolveValue = (coord: string, originalValue: string): string => {
-    const mapping = mappings.find((m) => m.coord === coord);
-    if (!mapping) return originalValue;
-    return valueMap.current[mapping.placeholder] ?? originalValue;
-  };
+  // Montamos el shadow root y poblamos el HTML en el MISMO efecto porque el
+  // `<div ref={hostRef}>` solo se renderiza cuando `!loading && !error`. Si
+  // separamos el montaje en un useEffect con [], corre antes de que el div
+  // exista y `hostRef.current` es null → shadow nunca se crea.
+  useEffect(() => {
+    if (loading || error || !html) return;
+    const host = hostRef.current;
+    if (!host) return;
+    if (!shadowRef.current) {
+      shadowRef.current = host.attachShadow({ mode: "open" });
+    }
+    shadowRef.current.innerHTML = `
+      <style>
+        :host { display: block; }
+        ${css}
+        .preview-wrapper { background: #fff; padding: 16px; overflow: auto; max-height: 70vh; }
+      </style>
+      <div class="preview-wrapper">${html}</div>
+    `;
+  }, [loading, error, html, css]);
 
   const handleExportPDF = async () => {
-    if (!tableRef.current) return;
     setExporting(true);
     try {
-      await exportElementToPdf(tableRef.current, "formulario.pdf");
-    } catch (e) {
-      alert("Error al generar el PDF. Intenta de nuevo.");
-      console.error(e);
+      const result = await fetchRenderedPdf({
+        excelBase64,
+        mappings: mappings.map((m) => ({ coord: m.coord, placeholder: m.placeholder })),
+        values,
+        customLogoBase64,
+        filename: "formulario",
+      });
+      if (result.error || !result.blob) {
+        alert(`Error al generar el PDF: ${result.error ?? "sin blob"}`);
+        return;
+      }
+      const url = URL.createObjectURL(result.blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "formulario.pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
     } finally {
       setExporting(false);
     }
@@ -97,7 +147,7 @@ export default function ExcelPreview({
         <div className="flex flex-1 justify-center overflow-auto bg-slate-100 p-6">
           {loading && (
             <div className="flex w-full items-center justify-center gap-2 text-slate-500">
-              ⏳ Cargando vista previa...
+              ⏳ Generando vista previa con LibreOffice…
             </div>
           )}
           {error && (
@@ -106,16 +156,7 @@ export default function ExcelPreview({
             </div>
           )}
           {!loading && !error && (
-            <PreviewTable
-              ref={tableRef}
-              rows={rows}
-              colWidths={colWidths}
-              rowHeights={rowHeights}
-              mappings={mappings}
-              customLogoBase64={customLogoBase64}
-              isReal={!!formValues}
-              resolveValue={resolveValue}
-            />
+            <div ref={hostRef} className="w-full" />
           )}
         </div>
 

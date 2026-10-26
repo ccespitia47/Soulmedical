@@ -16,6 +16,7 @@ import { EmailModule } from './email/email.module';
 import { ExcelModule } from './excel/excel.module';
 import { ConsentsModule } from './consents/consents.module';
 import { AdminAuditModule } from './admin-audit/admin-audit.module';
+import { AuditHistoryModule } from './audit-history/audit-history.module';
 import { ReportsModule } from './reports/reports.module';
 import { dataSourceOptions } from './data-source';
 import {TasksModule} from './tasks/tasks.module';
@@ -46,6 +47,7 @@ import {TasksModule} from './tasks/tasks.module';
     EmailModule,
     ConsentsModule,
     AdminAuditModule,
+    AuditHistoryModule,
     ReportsModule,
     TasksModule,
     ExcelModule,

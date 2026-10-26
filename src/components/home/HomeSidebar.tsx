@@ -6,7 +6,10 @@ import Icon from "../common/Icon";
 import QuickPanel from "./QuickPanel";
 import ProjectRow, { type ProjectRowProps } from "./ProjectRow";
 
-const ACCENT = "#00c2a8";
+// Teal de marca del app + acentos del logo Grupo Soul (dorado y magenta)
+const ACCENT = "#00c2a8"; // teal de marca
+const GOLD = "#F3B01C"; // dorado (logo)
+const MAGENTA = "#A62E8A"; // magenta (logo)
 
 type Project = ProjectRowProps["project"];
 
@@ -20,6 +23,9 @@ type HomeSidebarProps = {
   buildProjectRowProps: (p: Project) => ProjectRowProps;
   onCreateProject: () => void;
   onNavigateToForm: (folderId: string, formId: string) => void;
+  /** Estado del drawer en móvil. En escritorio el sidebar es siempre visible. */
+  open?: boolean;
+  onClose?: () => void;
 };
 
 export default function HomeSidebar({
@@ -32,16 +38,29 @@ export default function HomeSidebar({
   buildProjectRowProps,
   onCreateProject,
   onNavigateToForm,
+  open = false,
+  onClose,
 }: HomeSidebarProps) {
   const { theme, density, T, setTheme, setDensity } = useTheme();
   const [quickMode, setQuickMode] = useState<"recents" | "favorites" | null>(null);
   const [showSettings, setShowSettings] = useState(false);
 
   return (
-    <aside
-      className="flex w-[300px] flex-shrink-0 flex-col border-r"
-      style={{ background: T.bg, color: T.text, borderColor: T.border }}
-    >
+    <>
+      {/* Backdrop móvil/tablet */}
+      {open && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+          onClick={onClose}
+          aria-hidden
+        />
+      )}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex w-[280px] max-w-[85vw] flex-col border-r transition-transform duration-300 ease-out lg:static lg:z-auto lg:w-[300px] lg:max-w-none lg:flex-shrink-0 lg:translate-x-0 ${
+          open ? "translate-x-0" : "-translate-x-full"
+        }`}
+        style={{ background: T.bg, color: T.text, borderColor: T.border }}
+      >
       <div className="relative px-3.5 pb-2.5 pt-3.5">
         <div
           className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-xs"
@@ -59,15 +78,17 @@ export default function HomeSidebar({
         <div className="mt-2 flex gap-2">
           {(["recents", "favorites"] as const).map((m) => {
             const active = quickMode === m;
+            // Recientes → teal · Favoritos → dorado (colores del logo)
+            const c = m === "recents" ? ACCENT : GOLD;
             return (
               <button
                 key={m}
                 onClick={() => setQuickMode(active ? null : m)}
-                className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-[7px] border py-[7px] font-sans text-xs font-medium transition-all"
+                className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border py-[7px] font-sans text-xs font-semibold transition-all duration-150"
                 style={{
-                  borderColor: active ? ACCENT : T.border,
-                  background: active ? ACCENT + "18" : T.bgElev,
-                  color: active ? ACCENT : T.text,
+                  borderColor: active ? c : T.border,
+                  background: active ? c + "1a" : T.bgElev,
+                  color: active ? c : T.text,
                 }}
                 onMouseOver={(e) => {
                   if (!active) e.currentTarget.style.background = T.bgHover;
@@ -76,12 +97,12 @@ export default function HomeSidebar({
                   if (!active) e.currentTarget.style.background = T.bgElev;
                 }}
               >
-                <Icon name={m === "recents" ? "clock" : "star"} size={13} />
+                <Icon name={m === "recents" ? "clock" : "star"} size={14} filled={m === "favorites" && active} />
                 {m === "recents" ? "Recientes" : "Favoritos"}
                 {m === "favorites" && favorites.length > 0 && (
                   <span
                     className="min-w-[14px] rounded-[10px] text-center text-[9px] font-bold text-white"
-                    style={{ background: ACCENT, padding: "0 4px" }}
+                    style={{ background: GOLD, padding: "0 4px" }}
                   >
                     {favorites.length}
                   </span>
@@ -108,10 +129,11 @@ export default function HomeSidebar({
           <>
             <div className="flex items-center gap-1.5 px-1.5 pb-1 pt-2">
               <span
-                className="text-[9px] font-bold uppercase tracking-[0.08em]"
+                className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.08em]"
                 style={{ color: T.label }}
               >
-                📌 Anclados
+                <Icon name="pin" size={11} />
+                Anclados
               </span>
             </div>
             {pinnedProjects.map((p) => (
@@ -162,8 +184,8 @@ export default function HomeSidebar({
         style={{ borderColor: T.border }}
       >
         <div
-          className="flex h-[22px] w-[22px] items-center justify-center rounded-md text-[11px] font-extrabold"
-          style={{ background: ACCENT + "28", color: ACCENT }}
+          className="flex h-[24px] w-[24px] items-center justify-center rounded-lg text-[11px] font-extrabold text-white shadow-[0_3px_8px_-2px_rgba(22,166,192,0.5)]"
+          style={{ background: `linear-gradient(135deg, ${ACCENT}, ${MAGENTA})` }}
         >
           S
         </div>
@@ -217,7 +239,7 @@ export default function HomeSidebar({
                         color: active ? "#fff" : T.textMuted,
                       }}
                     >
-                      <span>{t === "light" ? "☀️" : t === "dark" ? "🌙" : "🌌"}</span>
+                      <Icon name={t === "light" ? "sun" : t === "dark" ? "moon" : "moonStars"} size={15} />
                       <span className="text-[9px] font-semibold">
                         {t === "light" ? "Claro" : t === "dark" ? "Oscuro" : "Noche"}
                       </span>
@@ -261,6 +283,7 @@ export default function HomeSidebar({
           )}
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }

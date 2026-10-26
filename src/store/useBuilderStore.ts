@@ -24,6 +24,14 @@ interface BuilderState {
   insertWidget: (widget: WidgetInstance) => void;
 }
 
+// Garantiza que cada widget tenga `config` como objeto. Hubo widgets persistidos
+// (localStorage y payloads antiguos del backend) con config undefined/null, que
+// hacían crashear los renders al leer widget.config.X con el ErrorBoundary.
+const normalizeWidget = (w: WidgetInstance): WidgetInstance =>
+  w.config ? w : { ...w, config: {} };
+const normalizeWidgets = (ws: WidgetInstance[]): WidgetInstance[] =>
+  ws.map(normalizeWidget);
+
 export const useBuilderStore = create<BuilderState>()(
   persist(
     (set, get) => ({
@@ -32,7 +40,7 @@ export const useBuilderStore = create<BuilderState>()(
       currentFormId: null,
 
       setWidgets: (widgets, formId) =>
-        set({ widgets, currentFormId: formId ?? null }),
+        set({ widgets: normalizeWidgets(widgets), currentFormId: formId ?? null }),
 
       clearWidgets: () =>
         set({ widgets: [], selectedWidgetId: null, currentFormId: null }),
@@ -91,10 +99,18 @@ export const useBuilderStore = create<BuilderState>()(
 
       insertWidget: (widget) =>
         set((state) => ({
-          widgets: [...state.widgets, widget],
+          widgets: [...state.widgets, normalizeWidget(widget)],
           selectedWidgetId: widget.id,
         })),
     }),
-    { name: "soulforms-builder" }
+    {
+      name: "soulforms-builder",
+      // Sanea el estado persistido en localStorage al rehidratar: usuarios con
+      // widgets antiguos sin `config` dejan de ver el ErrorBoundary al abrir
+      // Vista Previa.
+      onRehydrateStorage: () => (state) => {
+        if (state?.widgets) state.widgets = normalizeWidgets(state.widgets);
+      },
+    }
   )
 );

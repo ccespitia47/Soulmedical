@@ -17,7 +17,7 @@ export type PdfFieldMapping = {
 
 // ─── Destinatarios ────────────────────────────────────────────────────────────
 
-export type RecipientType = "static" | "group";
+export type RecipientType = "static" | "group" | "field";
 
 export type EmailRecipient = {
   id: string;
@@ -27,6 +27,12 @@ export type EmailRecipient = {
   // type === "group": todos los usuarios de ese rol
   group?: string; // "admin" | "coordinator" | "user" | nombre de grupo custom
   groupLabel?: string; // Etiqueta visible: "Administradores", "Coordinadores", etc.
+  // type === "field": apunta a un widget específico del formulario (su valor
+  // es el correo del destinatario). Reemplaza al grupo heurístico
+  // "current_user" que podía enviar el PDF al correo equivocado si el form
+  // tenía varios campos email (médico, cuidador, paciente).
+  widgetId?: string;
+  widgetLabel?: string; // Etiqueta visible: "Correo del paciente"
 };
 
 export type EmailTemplate = {

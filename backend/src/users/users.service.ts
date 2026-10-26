@@ -135,10 +135,21 @@ export class UsersService {
     return rest;
   }
 
-  async remove(id: number): Promise<void> {
+  /**
+   * Soft delete: NO borra la fila (perderíamos email/nombre y las
+   * submissions históricas del usuario quedarían huérfanas). Marca
+   * `deletedAt` + `isActive:false`. El login rechaza usuarios con
+   * deletedAt != null con mensaje "cuenta no disponible". Reversible:
+   * un admin puede restaurar limpiando `deletedAt`.
+   */
+  async remove(id: number, deletedById?: number): Promise<void> {
     const user = await this.findById(id);
     if (!user) throw new NotFoundException('Usuario no encontrado');
-    await this.usersRepository.delete(id);
+    await this.usersRepository.update(id, {
+      isActive: false,
+      deletedAt: new Date(),
+      deletedById: deletedById ?? null,
+    });
   }
 
   async toggleActive(id: number): Promise<Omit<User, 'password'>> {

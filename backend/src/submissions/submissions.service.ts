@@ -135,7 +135,12 @@ export class SubmissionsService {
     limit = 50,
   ): Promise<SubmissionsPage> {
     const skip = (page - 1) * limit;
-    const query: Record<string, unknown> = { formId };
+    // deletedAt: null → excluye los eliminados por soft delete. Se aplica
+    // en todas las queries de listado (findByForm, findByUser, findAll,
+    // findByTaskId, countByForm, exportByForm, searchSubmissions) para
+    // que un registro "eliminado" desaparezca de vistas, reportes y
+    // exports por igual.
+    const query: Record<string, unknown> = { formId, deletedAt: null };
     const [data, total] = await Promise.all([
       this.submissionModel
         .find(query)
@@ -154,7 +159,7 @@ export class SubmissionsService {
     limit = 50,
   ): Promise<SubmissionsPage> {
     const skip = (page - 1) * limit;
-    const query = { submittedById: userId };
+    const query = { submittedById: userId, deletedAt: null };
     const [data, total] = await Promise.all([
       this.submissionModel
         .find(query)
@@ -175,7 +180,9 @@ export class SubmissionsService {
    * tarea, no de todo el formulario), así que el costo es aceptable.
    */
   async findByTaskId(taskId: string): Promise<FormSubmissionDocument[]> {
-    return this.submissionModel.find({ taskId }).sort({ submittedAt: -1 });
+    return this.submissionModel
+      .find({ taskId, deletedAt: null })
+      .sort({ submittedAt: -1 });
   }
 
   async findOne(id: string): Promise<FormSubmissionDocument> {
@@ -187,20 +194,21 @@ export class SubmissionsService {
 
   async findAll(page = 1, limit = 50): Promise<SubmissionsPage> {
     const skip = (page - 1) * limit;
+    const filter = { deletedAt: null };
     const [data, total] = await Promise.all([
       this.submissionModel
-        .find()
+        .find(filter)
         .sort({ submittedAt: -1 })
         .skip(skip)
         .limit(limit)
         .select('-templateSnapshot'),
-      this.submissionModel.countDocuments(),
+      this.submissionModel.countDocuments(filter),
     ]);
     return { data, total, page, limit };
   }
 
   async countByForm(formId: string): Promise<number> {
-    return this.submissionModel.countDocuments({ formId });
+    return this.submissionModel.countDocuments({ formId, deletedAt: null });
   }
 
   // ── Export para Power BI ──────────────────────────────────────────────────
@@ -213,7 +221,13 @@ export class SubmissionsService {
     to?: string,
   ): Promise<ExportPage> {
     const form = await this.formsService.findOneForExport(formId);
-    const EXCLUDED_TYPES = new Set(['header', 'html_block']);
+    // Widgets puramente visuales — no aportan datos de usuario y no deben
+    // aparecer como columnas en Power BI.
+    const EXCLUDED_TYPES = new Set(['header', 'html_block', 'image']);
+    // Widgets que persisten su valor como referencia GridFS (prefijo
+    // `gridfs:<fileId>`). Para Power BI los convertimos a URL pública así
+    // el reporte puede embebemer la imagen/descargar el archivo directo.
+    const GRIDFS_TYPES = new Set(['signature', 'photo', 'file', 'video']);
 
     type SubField = { id: string; label?: string };
     interface WidgetMeta {
@@ -246,7 +260,7 @@ export class SubmissionsService {
     if (from) dateFilter['$gte'] = new Date(from);
     if (to) dateFilter['$lte'] = new Date(to + 'T23:59:59.999Z');
 
-    const query: Record<string, unknown> = { formId };
+    const query: Record<string, unknown> = { formId, deletedAt: null };
     if (from || to) query['submittedAt'] = dateFilter;
 
     const skip = page * limit;
@@ -275,7 +289,7 @@ export class SubmissionsService {
         const type = widget.type;
         if (EXCLUDED_TYPES.has(type)) continue;
 
-        if (type === 'signature' || type === 'photo') {
+        if (GRIDFS_TYPES.has(type)) {
           if (typeof value === 'string' && value.startsWith(GRIDFS_PREFIX)) {
             const fileId = value.slice(GRIDFS_PREFIX.length);
             // Usamos APP_BASE_URL: PUBLIC_BASE_URL no esta definida en
@@ -317,7 +331,30 @@ export class SubmissionsService {
             return labeled;
           });
         } else {
-          row[label] = value;
+          // Default: valores escalares (text, number, email, phone, date, etc.)
+          // van tal cual. Pero widgets multi-valor (checkbox, select multi,
+          // radio multi, quiz_question multi) persisten como arreglo nativo o
+          // como JSON array string: en Power BI eso se ve feo (celda con el
+          // JSON crudo). Lo aplanamos a "A, B, C" para que la columna sea
+          // legible y filtrable como texto.
+          if (Array.isArray(value)) {
+            row[label] = value.map((v) => String(v)).join(', ');
+          } else if (
+            typeof value === 'string' &&
+            value.startsWith('[') &&
+            value.endsWith(']')
+          ) {
+            try {
+              const parsed: unknown = JSON.parse(value);
+              row[label] = Array.isArray(parsed)
+                ? parsed.map((v) => String(v)).join(', ')
+                : value;
+            } catch {
+              row[label] = value;
+            }
+          } else {
+            row[label] = value;
+          }
         }
       }
 
@@ -347,7 +384,7 @@ export class SubmissionsService {
     // seleccionar sin tener que escribir.
     if (!query) {
       const submissions = await this.submissionModel
-        .find({ formId })
+        .find({ formId, deletedAt: null })
         .sort({ submittedAt: -1 })
         .limit(cappedLimit)
         .lean();
@@ -365,6 +402,7 @@ export class SubmissionsService {
       // config del widget (data.<widgetId> regex, case-insensitive).
       const mongoQuery = {
         formId,
+        deletedAt: null,
         $or: fieldIds.map((wid) => ({
           [`data.${wid}`]: { $regex: escapedQuery, $options: 'i' },
         })),
@@ -386,7 +424,7 @@ export class SubmissionsService {
     // escanear toda la colección del formulario.
     const regex = new RegExp(escapedQuery, 'i');
     const candidates = await this.submissionModel
-      .find({ formId })
+      .find({ formId, deletedAt: null })
       .sort({ submittedAt: -1 })
       .limit(200)
       .select('-templateSnapshot');

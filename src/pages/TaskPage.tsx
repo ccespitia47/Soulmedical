@@ -6,6 +6,9 @@ import { generateExcelHtml } from "../utils/excelToHtml";
 import { htmlToPdfBase64 } from "../utils/pdfExporter";
 import { expandFormData, renderFilename } from "../utils/placeholders";
 import MissingFieldsModal from "../components/form/MissingFieldsModal";
+import SuccessModal from "../components/form/SuccessModal";
+import QuizReviewModal from "../components/form/QuizReviewModal";
+import { computeQuizReview } from "../lib/quizReview";
 import type { EmailTemplate } from "../types/email-template.types";
 import type { FormRule, WidgetInstance } from "../types/widget.types";
 
@@ -124,7 +127,7 @@ async function collectPdfAttachments(
 ): Promise<void> {
   // Excel mapeado → PDF
   if (template.excelBase64 && (template.excelMappings?.length ?? 0) > 0) {
-    const html = generateExcelHtml(
+    const html = await generateExcelHtml(
       template.excelBase64,
       template.excelMappings!,
       labeledData,
@@ -171,6 +174,10 @@ export default function TaskPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [result, setResult] = useState<Result | null>(null);
   const [missingFields, setMissingFields] = useState<string[]>([]);
+  // Cuando el submit termina bien, mostramos SuccessModal / QuizReviewModal
+  // (igual que FormPage). Este flag controla si el modal sigue abierto —
+  // al cerrarlo, cae el mensaje final "puedes cerrar esta ventana".
+  const [successModalOpen, setSuccessModalOpen] = useState(true);
 
   useEffect(() => {
     if (!token) {
@@ -240,12 +247,26 @@ export default function TaskPage() {
   };
 
   const handleFormChange = (e: React.FormEvent<HTMLFormElement>) => {
-    const fd = new FormData(e.currentTarget);
-    const next: Record<string, string> = {};
-    (task?.widgets ?? []).forEach((w) => {
-      next[w.id] = collectFieldValue(fd, w.id);
+    // Capturamos TODAS las claves de FormData (no solo widget.id) porque los
+    // widgets derivados emiten hidden inputs auxiliares como `${id}__points`
+    // (quiz_question) o `${id}__max` (quiz_score) que otros widgets (quiz_score,
+    // QuizReviewModal) necesitan leer para calcular notas. Sin esto, la nota
+    // sale 0 y "incorrecta" aunque el usuario haya seleccionado bien.
+    //
+    // El `requestAnimationFrame` espera a que React re-renderice los hidden
+    // inputs derivados: el evento `change` del radio/checkbox burbujea antes
+    // del re-render y sin este delay leemos los puntos viejos. Mismo patrón
+    // que usa FormBody.
+    const form = e.currentTarget;
+    requestAnimationFrame(() => {
+      if (!form.isConnected) return;
+      const fd = new FormData(form);
+      const next: Record<string, string> = {};
+      fd.forEach((v, k) => {
+        next[k] = typeof v === "string" ? v : "";
+      });
+      setFieldValues(next);
     });
-    setFieldValues(next);
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -375,8 +396,11 @@ export default function TaskPage() {
     );
   }
 
-  if (state === "done" && result) {
-    return (
+  if (state === "done" && result && task) {
+    // Fondo final (siempre visible). Sobre este se monta el mismo modal
+    // que usa el flujo /f/:formId (SuccessModal o QuizReviewModal), para
+    // que la experiencia del participante sea idéntica en ambos flujos.
+    const doneContent = (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-emerald-50 to-emerald-100 p-4 font-sans">
         <div className="w-full max-w-[480px] rounded-[20px] bg-white px-9 py-12 text-center shadow-[0_12px_40px_rgba(0,194,168,0.15)] sm:px-11">
           <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-[#00c2a8] to-emerald-600 text-[38px]">
@@ -406,6 +430,34 @@ export default function TaskPage() {
           <p className="mt-6 text-xs text-gray-400">Puedes cerrar esta ventana</p>
         </div>
       </div>
+    );
+
+    if (!successModalOpen) return doneContent;
+
+    // Si el formulario tiene un widget quiz_score con "showAnswersReview",
+    // usamos el QuizReviewModal (mismo que /f/:formId). Si no, el
+    // SuccessModal genérico. El fondo con el mensaje final va debajo.
+    const review = computeQuizReview(task.widgets, fieldValues);
+    return (
+      <>
+        {doneContent}
+        {review.hasReview ? (
+          <QuizReviewModal
+            questions={review.questions}
+            fieldValues={fieldValues}
+            showCorrectness={review.showCorrectness}
+            scoresToShow={review.scoresToShow}
+            onClose={() => setSuccessModalOpen(false)}
+          />
+        ) : (
+          <SuccessModal
+            emailStatus="sent"
+            emailError={null}
+            onNewRegistration={() => setSuccessModalOpen(false)}
+            primaryLabel="Cerrar"
+          />
+        )}
+      </>
     );
   }
 
@@ -481,7 +533,12 @@ export default function TaskPage() {
                           ✓ Diligenciado en un paso anterior
                         </div>
                       )}
-                      <RenderComponent widget={widget} />
+                      <RenderComponent
+                        widget={widget}
+                        fieldValues={fieldValues}
+                        hiddenWidgetIds={hiddenIds}
+                        allWidgets={task.widgets}
+                      />
                     </div>
                   );
                 })

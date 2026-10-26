@@ -44,6 +44,7 @@ describe('TasksService.toggleShareLink', () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
     );
     return { service, taskModel };
   }

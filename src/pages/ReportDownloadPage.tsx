@@ -58,10 +58,15 @@ export default function ReportDownloadPage() {
         return;
       }
       setDownloadKind(res.data.kind ?? "excel");
+      // Anclamos `expiresAt` al reloj LOCAL usando `remainingMs` que el
+      // servidor calculó al responder. Antes convertíamos `res.data.expiresAt`
+      // (reloj del servidor) a epoch y comparábamos contra `Date.now()`
+      // (reloj del navegador) → si los dos relojes diferían, la UI mostraba
+      // "expirado" aunque el backend aún aceptara el token.
       setState({
         kind: "ready",
         formName: res.data.formName,
-        expiresAt: new Date(res.data.expiresAt).getTime(),
+        expiresAt: Date.now() + res.data.remainingMs,
       });
     })();
   }, [token, user]);
@@ -291,7 +296,7 @@ export default function ReportDownloadPage() {
               Enlace no válido o expirado
             </p>
             <p className="mb-5 text-center text-[12.5px] text-slate-500">
-              El link es de un solo uso y expira en 2 minutos. Solicita el reporte de nuevo desde la app.
+              El link es de un solo uso y expira en 10 minutos. Solicita el reporte de nuevo desde la app.
             </p>
             <button
               onClick={() => navigate("/")}

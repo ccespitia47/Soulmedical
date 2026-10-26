@@ -6,7 +6,9 @@ import {
   removeGroupMemberApi,
   type UserApiData,
 } from "../../services/api";
-import { ROLE_AVATARS, ROLE_LABELS, type UserRole } from "../../types/auth.types";
+import { ROLE_LABELS, type UserRole } from "../../types/auth.types";
+import Avatar from "../common/Avatar";
+import { ROLE_COLORS } from "../users/UserListItem";
 
 type MembersPanelProps = {
   groupId: string;
@@ -92,10 +94,10 @@ export default function MembersPanel({ groupId, groupColor }: MembersPanelProps)
                 >
                   {checked && <span className="text-[13px] text-white">✓</span>}
                 </div>
-                <span className="text-xl">{ROLE_AVATARS[user.role as UserRole]}</span>
+                <Avatar name={user.name} size={30} color={ROLE_COLORS[user.role as UserRole]} />
                 <div className="min-w-0 flex-1">
-                  <div className="text-[13px] font-semibold text-gray-900">{user.name}</div>
-                  <div className="text-[11px] text-gray-500">
+                  <div className="truncate text-[13px] font-semibold text-gray-900">{user.name}</div>
+                  <div className="truncate text-[11px] text-gray-500">
                     {user.email} · {ROLE_LABELS[user.role as UserRole]}
                   </div>
                 </div>

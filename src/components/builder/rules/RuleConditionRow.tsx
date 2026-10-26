@@ -10,9 +10,22 @@ const OPERATOR_LABELS: Record<RuleOperator, string> = {
   contains: "contiene",
   not_empty: "no está vacío",
   is_empty: "está vacío",
+  has_value: "tiene valor",
 };
 
-const OPERATORS_WITH_VALUE: RuleOperator[] = ["equals", "not_equals", "contains"];
+// Operadores que requieren un input de "value". `has_value` también lo pide,
+// pero con un select Si/No en vez de texto/opciones — se maneja aparte abajo.
+const OPERATORS_WITH_VALUE: RuleOperator[] = [
+  "equals",
+  "not_equals",
+  "contains",
+  "has_value",
+];
+
+const HAS_VALUE_OPTIONS: { value: string; label: string }[] = [
+  { value: "si", label: "Si" },
+  { value: "no", label: "No" },
+];
 
 const SELECT_CLASS =
   "cursor-pointer rounded-[7px] border-[1.5px] border-slate-200 bg-white px-2.5 py-1.5 font-sans text-xs text-gray-900 outline-none";
@@ -68,7 +81,21 @@ export default function RuleConditionRow({
       </select>
 
       {needsValue &&
-        (options.length > 0 ? (
+        (condition.operator === "has_value" ? (
+          <select
+            value={condition.value}
+            onChange={(e) => onUpdate({ value: e.target.value })}
+            className={SELECT_CLASS}
+            style={{ flex: "0 0 150px", minWidth: 120 }}
+          >
+            <option value="">-- Selecciona --</option>
+            {HAS_VALUE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        ) : options.length > 0 ? (
           <select
             value={condition.value}
             onChange={(e) => onUpdate({ value: e.target.value })}

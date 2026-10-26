@@ -5,6 +5,11 @@ import {
   type AdminAuditEntry,
   type AdminAuditTargetType,
 } from "../services/api";
+import type { UserRole } from "../types/auth.types";
+import Avatar from "../components/common/Avatar";
+import Icon from "../components/common/Icon";
+import SelectMenu, { type SelectOption } from "../components/common/SelectMenu";
+import { ROLE_COLORS } from "../components/users/UserListItem";
 
 const ACTION_LABELS: Record<AdminAuditAction, string> = {
   USER_CREATE: "Usuario creado",
@@ -13,6 +18,7 @@ const ACTION_LABELS: Record<AdminAuditAction, string> = {
   USER_TOGGLE_ACTIVE: "Cambio activo",
   USER_PERMISSIONS_CHANGE: "Permisos modificados",
   USER_RESET_2FA: "2FA reiniciado",
+  FORM_EDIT: "Formulario editado",
   FORM_DELETE: "Formulario eliminado",
   FORM_TOGGLE_PUBLIC: "Acceso público modificado",
   REPORT_REQUESTED: "Reporte solicitado",
@@ -20,6 +26,7 @@ const ACTION_LABELS: Record<AdminAuditAction, string> = {
   REPORT_DOWNLOAD_FAILED: "Descarga de reporte fallida",
   SUBMISSION_PDF_VIEWED: "Vio PDF de registro",
   SUBMISSION_PDF_DOWNLOADED: "Descargó PDF de registro",
+  SUBMISSION_DELETE: "Registro eliminado",
   SUBMISSIONS_BULK_PDF_REQUESTED: "Solicitó descarga masiva de PDFs",
   SUBMISSIONS_BULK_PDF_DOWNLOADED: "Descargó ZIP masivo de PDFs",
   SUBMISSIONS_BULK_PDF_FAILED: "Falló descarga de PDFs (2FA o TTL)",
@@ -34,6 +41,7 @@ const ACTION_COLORS: Record<AdminAuditAction, string> = {
   USER_TOGGLE_ACTIVE: "#f59e0b",
   USER_PERMISSIONS_CHANGE: "#7c3aed",
   USER_RESET_2FA: "#ea580c",
+  FORM_EDIT: "#2563eb",
   FORM_DELETE: "#dc2626",
   FORM_TOGGLE_PUBLIC: "#0891b2",
   REPORT_REQUESTED: "#00c2a8",
@@ -41,6 +49,7 @@ const ACTION_COLORS: Record<AdminAuditAction, string> = {
   REPORT_DOWNLOAD_FAILED: "#dc2626",
   SUBMISSION_PDF_VIEWED: "#3b82f6",
   SUBMISSION_PDF_DOWNLOADED: "#0d9488",
+  SUBMISSION_DELETE: "#dc2626",
   SUBMISSIONS_BULK_PDF_REQUESTED: "#7c3aed",
   SUBMISSIONS_BULK_PDF_DOWNLOADED: "#059669",
   SUBMISSIONS_BULK_PDF_FAILED: "#dc2626",
@@ -58,6 +67,13 @@ const TARGET_LABELS: Record<AdminAuditTargetType, string> = {
 };
 
 const PAGE_SIZE = 50;
+
+/** Extrae un string `reason` de metadata (auditoría de eliminaciones). */
+function getReason(metadata: Record<string, unknown> | null | undefined): string | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const r = (metadata as Record<string, unknown>).reason;
+  return typeof r === "string" && r.trim().length > 0 ? r : null;
+}
 
 export default function AdminAuditPage() {
   const [entries, setEntries] = useState<AdminAuditEntry[]>([]);
@@ -118,195 +134,318 @@ export default function AdminAuditPage() {
     }
   };
 
-  const actionOptions = useMemo(
-    () => Object.keys(ACTION_LABELS) as AdminAuditAction[],
+  const actionOptions = useMemo<SelectOption[]>(
+    () => [
+      { value: "", label: "Todas" },
+      ...(Object.keys(ACTION_LABELS) as AdminAuditAction[]).map((a) => ({
+        value: a,
+        label: ACTION_LABELS[a],
+        color: ACTION_COLORS[a],
+      })),
+    ],
     [],
   );
-  const targetOptions = useMemo(
-    () => Object.keys(TARGET_LABELS) as AdminAuditTargetType[],
+  const targetOptions = useMemo<SelectOption[]>(
+    () => [
+      { value: "", label: "Todos" },
+      ...(Object.keys(TARGET_LABELS) as AdminAuditTargetType[]).map((t) => ({
+        value: t,
+        label: TARGET_LABELS[t],
+      })),
+    ],
     [],
   );
 
   return (
     <div className="flex h-screen flex-col bg-[#f0f4f8]">
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[1100px] px-6 py-8">
-          <div className="mb-6">
-            <h1 className="m-0 text-[22px] font-bold text-gray-900">
-              🕵️ Reporte de acciones
-            </h1>
-            <p className="mt-1 text-[13px] text-gray-500">
-              Bitácora de cambios realizados por administradores. {total}{" "}
-              registro{total !== 1 ? "s" : ""} en total.
-            </p>
+        <div className="mx-auto max-w-[1100px] px-4 py-6 sm:px-6 sm:py-8">
+          <div className="animate-fade-up mb-6 flex items-center gap-3 sm:gap-3.5">
+            <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#00c2a8_0%,#0891b2_100%)] text-white shadow-[0_8px_20px_-6px_rgba(0,194,168,0.55)] sm:h-12 sm:w-12">
+              <Icon name="eye" size={22} className="sm:hidden" />
+              <Icon name="eye" size={24} className="hidden sm:block" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="m-0 text-[20px] font-extrabold tracking-tight text-slate-900 sm:text-[24px]">
+                Reporte de acciones
+              </h1>
+              <p className="mt-0.5 text-[12.5px] text-gray-500 sm:text-[13px]">
+                Bitácora de cambios de administradores.{" "}
+                <span className="font-semibold text-gray-700">{total}</span>{" "}
+                registro{total !== 1 ? "s" : ""} en total.
+              </p>
+            </div>
           </div>
 
           {/* Filtros */}
-          <div className="mb-5 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
-            <div className="min-w-[180px] flex-1">
-              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                Tipo de acción
+          <div className="animate-fade-up mb-5 flex flex-col gap-3 rounded-[20px] border border-slate-200/80 bg-white/80 p-4 shadow-[0_10px_30px_-18px_rgba(15,40,80,0.25)] backdrop-blur-sm sm:flex-row sm:flex-wrap sm:items-end [animation-delay:60ms]">
+            <div className="sm:min-w-[190px] sm:flex-1">
+              <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                <Icon name="tag" size={12} className="text-[#00c2a8]" /> Tipo de acción
               </label>
-              <select
+              <SelectMenu
                 value={filterAction}
-                onChange={(e) => onChangeAction(e.target.value)}
-                className="w-full cursor-pointer rounded-md border-[1.5px] border-slate-200 bg-white px-2.5 py-2 text-[13px] text-gray-900 outline-none"
-              >
-                <option value="">Todas</option>
-                {actionOptions.map((a) => (
-                  <option key={a} value={a}>
-                    {ACTION_LABELS[a]}
-                  </option>
-                ))}
-              </select>
+                onChange={onChangeAction}
+                options={actionOptions}
+                leftIcon="target"
+              />
             </div>
-            <div className="min-w-[160px] flex-1">
-              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                Tipo de objeto
+            <div className="sm:min-w-[170px] sm:flex-1">
+              <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                <Icon name="folder" size={12} className="text-[#00c2a8]" /> Tipo de objeto
               </label>
-              <select
+              <SelectMenu
                 value={filterTargetType}
-                onChange={(e) => onChangeTargetType(e.target.value)}
-                className="w-full cursor-pointer rounded-md border-[1.5px] border-slate-200 bg-white px-2.5 py-2 text-[13px] text-gray-900 outline-none"
-              >
-                <option value="">Todos</option>
-                {targetOptions.map((t) => (
-                  <option key={t} value={t}>
-                    {TARGET_LABELS[t]}
-                  </option>
-                ))}
-              </select>
+                onChange={onChangeTargetType}
+                options={targetOptions}
+                leftIcon="folder"
+              />
             </div>
-            <button
-              onClick={() => {
-                setFilterAction("");
-                setFilterTargetType("");
-                setPage(1);
-              }}
-              className="cursor-pointer rounded-md border-[1.5px] border-slate-200 bg-white px-3 py-2 text-[12px] font-semibold text-gray-600 hover:bg-slate-50"
-            >
-              Limpiar
-            </button>
-            <button
-              onClick={load}
-              className="cursor-pointer rounded-md border-none bg-[#00c2a8] px-4 py-2 text-[12px] font-semibold text-white"
-            >
-              ↻ Refrescar
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setFilterAction("");
+                  setFilterTargetType("");
+                  setPage(1);
+                }}
+                className="inline-flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-[1.5px] border-slate-200 bg-white px-3.5 py-2.5 text-[12px] font-semibold text-gray-600 transition-all duration-150 hover:-translate-y-px hover:border-slate-300 hover:text-gray-900 sm:flex-none"
+              >
+                <Icon name="x" size={14} /> Limpiar
+              </button>
+              <button
+                onClick={load}
+                className="inline-flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none bg-[linear-gradient(135deg,#00c2a8_0%,#0891b2_100%)] px-4 py-2.5 text-[12px] font-bold text-white shadow-[0_4px_14px_-4px_rgba(0,194,168,0.5)] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-6px_rgba(0,194,168,0.6)] sm:flex-none"
+              >
+                <Icon name="refresh" size={14} /> Refrescar
+              </button>
+            </div>
           </div>
 
           {/* Listado */}
           {loading ? (
-            <div className="px-6 py-14 text-center text-gray-400">
-              Cargando...
+            <div className="flex items-center justify-center gap-2 px-6 py-16 text-[13px] text-gray-400">
+              <Icon name="refresh" size={16} className="animate-spin" /> Cargando...
             </div>
           ) : error ? (
-            <div className="p-10 text-center text-red-600">{error}</div>
+            <div className="flex items-center justify-center gap-2 rounded-[20px] border border-red-200 bg-red-50 p-10 text-center text-[13px] font-medium text-red-600">
+              <Icon name="alert" size={16} className="shrink-0" /> {error}
+            </div>
           ) : entries.length === 0 ? (
-            <div className="rounded-2xl border-2 border-dashed border-slate-200 px-6 py-14 text-center text-gray-400">
-              <span className="mb-3 block text-5xl">🗒️</span>
-              <p className="text-[15px] font-semibold">Sin registros</p>
-              <p className="text-[13px]">
+            <div className="animate-fade-up rounded-[20px] border-2 border-dashed border-slate-200 bg-white/60 px-6 py-16 text-center">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+                <Icon name="fileText" size={26} />
+              </div>
+              <p className="text-[15px] font-bold text-slate-700">Sin registros</p>
+              <p className="mt-1 text-[13px] text-gray-400">
                 No hay acciones que coincidan con los filtros.
               </p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-              <table className="w-full border-collapse text-[12.5px]">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
-                    <th className="px-3 py-2.5">Fecha</th>
-                    <th className="px-3 py-2.5">Actor</th>
-                    <th className="px-3 py-2.5">Acción</th>
-                    <th className="px-3 py-2.5">Objeto</th>
-                    <th className="px-3 py-2.5 text-right">Detalle</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {entries.map((e) => {
-                    const expanded = expandedId === e.id;
-                    return (
-                      <tr
-                        key={e.id}
-                        className="border-b border-slate-100 align-top last:border-b-0 hover:bg-slate-50"
-                      >
-                        <td className="px-3 py-2.5 whitespace-nowrap text-gray-500">
+            <>
+              {/* Móvil: tarjetas apiladas */}
+              <div className="animate-fade-up space-y-3 sm:hidden [animation-delay:120ms]">
+                {entries.map((e) => {
+                  const expanded = expandedId === e.id;
+                  const actionColor = ACTION_COLORS[e.action] ?? "#64748b";
+                  return (
+                    <div
+                      key={e.id}
+                      className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_6px_20px_-14px_rgba(15,40,80,0.3)]"
+                    >
+                      <div className="mb-3 flex items-start justify-between gap-2">
+                        <span
+                          className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                          style={{ background: `${actionColor}14`, color: actionColor }}
+                        >
+                          <span
+                            className="h-1.5 w-1.5 flex-shrink-0 rounded-full"
+                            style={{ background: actionColor }}
+                          />
+                          {ACTION_LABELS[e.action] ?? e.action}
+                        </span>
+                        <span className="flex-shrink-0 text-right text-[11px] text-gray-400 tabular-nums">
                           {formatDate(e.createdAt)}
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <div className="font-semibold text-gray-900">
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2.5">
+                        <Avatar
+                          name={e.actorName}
+                          size={32}
+                          color={ROLE_COLORS[e.actorRole as UserRole] ?? "#00c2a8"}
+                        />
+                        <div className="min-w-0">
+                          <div className="truncate text-[13px] font-semibold text-gray-900">
                             {e.actorName}
                           </div>
                           <div className="text-[10.5px] uppercase tracking-wide text-gray-400">
                             {e.actorRole}
                           </div>
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <span
-                            className="inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold"
-                            style={{
-                              background: `${ACTION_COLORS[e.action] ?? "#64748b"}18`,
-                              color: ACTION_COLORS[e.action] ?? "#64748b",
-                            }}
+                        </div>
+                      </div>
+
+                      <div className="mt-3 border-t border-slate-100 pt-3">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                          {TARGET_LABELS[e.targetType] ?? e.targetType} #{e.targetId}
+                        </div>
+                        <div className="text-[13px] font-semibold text-gray-900">
+                          {e.targetName ?? <span className="text-gray-400">(sin nombre)</span>}
+                        </div>
+                      </div>
+
+                      {getReason(e.metadata) && (
+                        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-red-600">
+                            Motivo
+                          </div>
+                          <div className="mt-0.5 text-[12px] italic text-red-800">
+                            "{getReason(e.metadata)}"
+                          </div>
+                        </div>
+                      )}
+
+                      {e.metadata && (
+                        <div className="mt-3">
+                          <button
+                            onClick={() => setExpandedId(expanded ? null : e.id)}
+                            className="inline-flex cursor-pointer items-center gap-1 rounded-lg border-[1.5px] border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 transition hover:border-[#00c2a8]/40 hover:text-[#0891b2]"
                           >
-                            {ACTION_LABELS[e.action] ?? e.action}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <div className="font-semibold text-gray-900">
-                            {e.targetName ?? <span className="text-gray-400">(sin nombre)</span>}
-                          </div>
-                          <div className="text-[10.5px] text-gray-400">
-                            {TARGET_LABELS[e.targetType] ?? e.targetType} #{e.targetId}
-                          </div>
-                        </td>
-                        <td className="px-3 py-2.5 text-right">
-                          {e.metadata ? (
-                            <button
-                              onClick={() =>
-                                setExpandedId(expanded ? null : e.id)
-                              }
-                              className="cursor-pointer rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-slate-50"
-                            >
-                              {expanded ? "Ocultar" : "Ver"}
-                            </button>
-                          ) : (
-                            <span className="text-[11px] text-gray-300">—</span>
-                          )}
-                          {expanded && e.metadata && (
-                            <pre className="mt-2 max-w-[400px] overflow-x-auto rounded-md bg-slate-900 p-2.5 text-left font-mono text-[10.5px] text-slate-100">
+                            <Icon name="eye" size={12} />
+                            {expanded ? "Ocultar detalle" : "Ver detalle"}
+                          </button>
+                          {expanded && (
+                            <pre className="mt-2 overflow-x-auto rounded-lg bg-slate-900 p-3 text-left font-mono text-[10.5px] leading-relaxed text-slate-100 shadow-inner">
                               {JSON.stringify(e.metadata, null, 2)}
                             </pre>
                           )}
-                        </td>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Escritorio: tabla */}
+              <div className="animate-fade-up hidden overflow-hidden rounded-[20px] border border-slate-200/80 bg-white shadow-[0_10px_30px_-18px_rgba(15,40,80,0.25)] sm:block [animation-delay:120ms]">
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-[12.5px]">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-[10.5px] font-semibold uppercase tracking-wide text-gray-400">
+                        <th className="px-4 py-3">Fecha</th>
+                        <th className="px-4 py-3">Actor</th>
+                        <th className="px-4 py-3">Acción</th>
+                        <th className="px-4 py-3">Objeto</th>
+                        <th className="px-4 py-3 text-right">Detalle</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    </thead>
+                    <tbody>
+                      {entries.map((e) => {
+                        const expanded = expandedId === e.id;
+                        const actionColor = ACTION_COLORS[e.action] ?? "#64748b";
+                        return (
+                          <tr
+                            key={e.id}
+                            className="border-b border-slate-100 align-top transition-colors last:border-b-0 hover:bg-slate-50/70"
+                          >
+                            <td className="px-4 py-3 whitespace-nowrap text-gray-500 tabular-nums">
+                              {formatDate(e.createdAt)}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2.5">
+                                <Avatar
+                                  name={e.actorName}
+                                  size={30}
+                                  color={ROLE_COLORS[e.actorRole as UserRole] ?? "#00c2a8"}
+                                />
+                                <div className="min-w-0">
+                                  <div className="truncate font-semibold text-gray-900">
+                                    {e.actorName}
+                                  </div>
+                                  <div className="text-[10.5px] uppercase tracking-wide text-gray-400">
+                                    {e.actorRole}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span
+                                className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                                style={{
+                                  background: `${actionColor}14`,
+                                  color: actionColor,
+                                }}
+                              >
+                                <span
+                                  className="h-1.5 w-1.5 flex-shrink-0 rounded-full"
+                                  style={{ background: actionColor }}
+                                />
+                                {ACTION_LABELS[e.action] ?? e.action}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="font-semibold text-gray-900">
+                                {e.targetName ?? <span className="text-gray-400">(sin nombre)</span>}
+                              </div>
+                              {getReason(e.metadata) && (
+                                <div className="mt-1 max-w-[320px] rounded border border-red-200 bg-red-50 px-2 py-1 text-[11px] italic text-red-800">
+                                  Motivo: "{getReason(e.metadata)}"
+                                </div>
+                              )}
+                              <div className="text-[10.5px] text-gray-400">
+                                {TARGET_LABELS[e.targetType] ?? e.targetType} #{e.targetId}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {e.metadata ? (
+                                <button
+                                  onClick={() =>
+                                    setExpandedId(expanded ? null : e.id)
+                                  }
+                                  className="inline-flex cursor-pointer items-center gap-1 rounded-lg border-[1.5px] border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 transition hover:border-[#00c2a8]/40 hover:text-[#0891b2]"
+                                >
+                                  <Icon name="eye" size={12} />
+                                  {expanded ? "Ocultar" : "Ver"}
+                                </button>
+                              ) : (
+                                <span className="text-[11px] text-gray-300">—</span>
+                              )}
+                              {expanded && e.metadata && (
+                                <pre className="mt-2 max-w-[400px] overflow-x-auto rounded-lg bg-slate-900 p-3 text-left font-mono text-[10.5px] leading-relaxed text-slate-100 shadow-inner">
+                                  {JSON.stringify(e.metadata, null, 2)}
+                                </pre>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
           )}
 
           {/* Paginación */}
           {!loading && entries.length > 0 && totalPages > 1 && (
             <div className="mt-4 flex items-center justify-between text-[12.5px] text-gray-600">
               <div>
-                Página {page} de {totalPages}
+                Página <span className="font-semibold text-gray-800">{page}</span> de{" "}
+                <span className="font-semibold text-gray-800">{totalPages}</span>
               </div>
               <div className="flex gap-2">
                 <button
                   disabled={page <= 1}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  className="cursor-pointer rounded-md border-[1.5px] border-slate-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex cursor-pointer items-center gap-1 rounded-lg border-[1.5px] border-slate-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-gray-600 transition hover:border-slate-300 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-200 disabled:hover:text-gray-600"
                 >
-                  ← Anterior
+                  <Icon name="chevronRight" size={13} className="rotate-180" /> Anterior
                 </button>
                 <button
                   disabled={page >= totalPages}
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  className="cursor-pointer rounded-md border-[1.5px] border-slate-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex cursor-pointer items-center gap-1 rounded-lg border-[1.5px] border-slate-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-gray-600 transition hover:border-slate-300 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-200 disabled:hover:text-gray-600"
                 >
-                  Siguiente →
+                  Siguiente <Icon name="chevronRight" size={13} />
                 </button>
               </div>
             </div>

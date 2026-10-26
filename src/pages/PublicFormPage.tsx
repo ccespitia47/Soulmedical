@@ -3,6 +3,8 @@ import { useParams } from "react-router-dom";
 import { widgetRegistry } from "../components/widgets/registry";
 import { evaluateRules } from "../utils/formRules";
 import type { FormRule, WidgetInstance } from "../types/widget.types";
+import QuizReviewModal from "../components/form/QuizReviewModal";
+import { computeQuizReview } from "../lib/quizReview";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
@@ -35,6 +37,13 @@ export default function PublicFormPage() {
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const formRef = useRef<HTMLFormElement>(null);
+  // resetKey se incrementa al hacer "Enviar otra respuesta". Se pasa como
+  // `key` al <form> para forzar re-mount completo — así se limpian widgets
+  // controlados (signature, photo, subforms, etc.) que guardan estado
+  // interno en useState propio. formRef.current?.reset() solo limpiaba
+  // inputs nativos → esos widgets quedaban con la firma/foto/datos del
+  // envío anterior visibles.
+  const [resetKey, setResetKey] = useState(0);
 
   // ── 2FA por correo (formularios protegidos) ──────────────────────────────
   const [email, setEmail] = useState("");
@@ -191,12 +200,20 @@ export default function PublicFormPage() {
   );
 
   const handleFormChange = (e: React.FormEvent<HTMLFormElement>) => {
-    const fd = new FormData(e.currentTarget);
-    const next: Record<string, string> = {};
-    (form?.widgets ?? []).forEach((w) => {
-      next[w.id] = String(fd.get(w.id) ?? "");
+    // Postergamos 1 frame: los hidden inputs derivados (calc, quiz_question
+    // __points) se actualizan por React en el re-render posterior al change;
+    // leer inmediatamente devuelve valores viejos y el quiz_score marcaría
+    // todo como "incorrecto".
+    const form = e.currentTarget;
+    requestAnimationFrame(() => {
+      if (!form.isConnected) return;
+      const fd = new FormData(form);
+      const next: Record<string, string> = {};
+      fd.forEach((v, k) => {
+        next[k] = typeof v === "string" ? v : "";
+      });
+      setFieldValues(next);
     });
-    setFieldValues(next);
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -437,6 +454,27 @@ export default function PublicFormPage() {
   }
 
   if (state === "done") {
+    const review = computeQuizReview(form?.widgets ?? [], fieldValues);
+    const resetToReady = () => {
+      setState("ready");
+      formRef.current?.reset();
+      setFieldValues({});
+      setMissingFields([]);
+      // Fuerza re-mount del <form> (ver comentario en el useState de
+      // resetKey) para limpiar widgets con estado interno propio.
+      setResetKey((k) => k + 1);
+    };
+    if (review.hasReview) {
+      return (
+        <QuizReviewModal
+          questions={review.questions}
+          fieldValues={fieldValues}
+          showCorrectness={review.showCorrectness}
+          scoresToShow={review.scoresToShow}
+          onClose={resetToReady}
+        />
+      );
+    }
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-emerald-50 to-emerald-100 font-sans p-4">
         <div className="w-full max-w-[480px] rounded-[20px] bg-white px-9 py-12 text-center shadow-[0_12px_40px_rgba(0,194,168,0.15)]">
@@ -451,11 +489,7 @@ export default function PublicFormPage() {
             {form?.sendConfirmationEmail && " Recibirás un email de confirmación."}
           </p>
           <button
-            onClick={() => {
-              setState("ready");
-              formRef.current?.reset();
-              setFieldValues({});
-            }}
+            onClick={resetToReady}
             className="mt-6 cursor-pointer rounded-lg border-none bg-[#00c2a8] px-6 py-2.5 text-sm font-semibold text-white"
           >
             Enviar otra respuesta
@@ -494,18 +528,28 @@ export default function PublicFormPage() {
             </div>
           )}
 
-          <form ref={formRef} onSubmit={handleSubmit} onChange={handleFormChange}>
+          <form key={resetKey} ref={formRef} onSubmit={handleSubmit} onChange={handleFormChange}>
             <div className="flex flex-col gap-[18px]">
               {visibleWidgets.map((widget) => {
                 const RenderComponent = widgetRegistry[widget.type]?.render;
                 if (!RenderComponent) return null;
+                // Doble key: widget.id + resetKey. Cambiar el key del <form>
+                // ya remonta el árbol, pero widgets con estado interno
+                // persistente (canvas de signature, blob URL de photo, etc.)
+                // pueden reconciliar si React ve el mismo widget.id. Con el
+                // suffix de resetKey garantizamos re-mount fresh por widget.
                 return (
                   <div
-                    key={widget.id}
+                    key={`${widget.id}::${resetKey}`}
                     className="rounded-[10px] border border-gray-200 bg-slate-50 px-4 py-3.5"
                     style={{ opacity: submitting ? 0.7 : 1 }}
                   >
-                    <RenderComponent widget={widget} />
+                    <RenderComponent
+                      widget={widget}
+                      fieldValues={fieldValues}
+                      hiddenWidgetIds={hiddenIds}
+                      allWidgets={form?.widgets ?? []}
+                    />
                   </div>
                 );
               })}

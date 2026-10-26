@@ -10,7 +10,7 @@ export default function FormRoute() {
   const navigate = useNavigate();
   const { folderId, formId } = useParams<{ folderId: string; formId: string }>();
   const user = useAuthStore((s) => s.currentUser);
-  const { folders, loadAllFolders } = useFolderStore();
+  const { folders, loadAllFolders, loadFormDetails } = useFolderStore();
   const { projects, loadProjects } = useProjectStore();
   const [loading, setLoading] = useState(false);
 
@@ -40,6 +40,16 @@ export default function FormRoute() {
 
   const folder = folders.find((f) => f.id === folderId);
   const form = folder?.forms.find((fm) => fm.id === formId);
+
+  // El store trae los forms en "modo resumen" (sin widgets) para que el
+  // sidebar cargue instantáneo. Si vamos a diligenciar el formulario,
+  // hidratamos sus detalles bajo demanda la primera vez.
+  useEffect(() => {
+    if (!folderId || !formId) return;
+    if (form && (!form.widgets || form.widgets.length === 0)) {
+      void loadFormDetails(folderId, formId);
+    }
+  }, [folderId, formId, form, loadFormDetails]);
 
   const backTo = user && ROLE_PERMISSIONS[user.role].canManageProjects ? "/admin" : "/userapp";
 

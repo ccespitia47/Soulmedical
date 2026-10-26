@@ -11,6 +11,7 @@ import { Project, ProjectDocument } from '../projects/project.schema';
 import { Group, GroupDocument } from '../groups/group.schema';
 import { UsersService } from '../users/users.service';
 import { AssignmentsTreeDto } from './assignments-tree.dto';
+import { AssignmentHistoryService } from '../audit-history/assignment-history.service';
 
 type Subject = { userId: number } | { groupId: string };
 
@@ -44,6 +45,10 @@ export class AssignmentsTreeService {
     // UsersService ya está disponible porque FormsModule importa
     // UsersModule (forwardRef) para el flujo de OTP de forms públicos.
     private readonly usersService: UsersService,
+    // Archiva el estado anterior del árbol antes de cada replace-all para
+    // no perder historia de "quién estaba asignado a qué antes de este
+    // cambio". Módulo global.
+    private readonly history: AssignmentHistoryService,
   ) {}
 
   async read(subject: Subject): Promise<AssignmentsTreeDto> {
@@ -78,6 +83,13 @@ export class AssignmentsTreeService {
 
     const subjKey = this.subjectFilter(subject);
 
+    // Snapshot del estado anterior ANTES de replace-all. Va a
+    // assignments_history con type='assignment_tree_reset', para que Sara
+    // pueda ver exactamente qué había asignado antes de cada reemplazo del
+    // árbol. Sin esto se perdía toda la historia de asignaciones al usar
+    // este endpoint.
+    const previousDocs = await this.model.find(subjKey).lean();
+
     // Replace-all: delete + insertMany. El endpoint es idempotente porque
     // siempre parte de borrar todo lo existente del subject antes de
     // reinsertar el set completo del DTO — llamarlo 2x con el mismo payload
@@ -109,6 +121,18 @@ export class AssignmentsTreeService {
     );
 
     if (docs.length > 0) await this.model.insertMany(docs);
+
+    // Registrar el reemplazo del árbol en historia. Se hace después del
+    // insertMany para incluir el nuevo estado en el mismo doc de historia
+    // — así el registro tiene "antes" y "después" en un solo lugar.
+    await this.history.archiveTreeReset({
+      subjectType: 'userId' in subject ? 'user' : 'group',
+      subjectId: 'userId' in subject ? subject.userId : subject.groupId,
+      previousAssignments: previousDocs as unknown as Record<string, unknown>[],
+      newAssignments: docs as unknown as Record<string, unknown>[],
+      deletedById: null,
+    });
+
     return { ok: true };
   }
 

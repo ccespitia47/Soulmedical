@@ -1,5 +1,6 @@
 import {
   Injectable,
+  InternalServerErrorException,
   Logger,
   NotFoundException,
   ConflictException,
@@ -7,10 +8,13 @@ import {
   UnauthorizedException,
   OnModuleInit,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { InjectModel } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { Model } from 'mongoose';
 import * as crypto from 'crypto';
+import type { SubmissionsService } from '../submissions/submissions.service';
+import { AssignmentHistoryService } from '../audit-history/assignment-history.service';
 import { Form, FormDocument } from './form.schema';
 import {
   UserFormAssignment,
@@ -54,6 +58,16 @@ export class FormsService implements OnModuleInit {
     private readonly emailService: EmailService,
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
+    // ModuleRef en vez de inyectar SubmissionsService directo: SubmissionsModule
+    // importa FormsModule para FormsService, así que inyectarlo de vuelta arma un
+    // ciclo real que forwardRef no puede resolver (Nest lanza UndefinedModuleException
+    // en bootstrap). ModuleRef nos deja resolver el servicio en runtime cuando ya
+    // está listo — usado desde submitPublic() para persistir el submit del enlace
+    // público, que antes solo enviaba emails.
+    private readonly moduleRef: ModuleRef,
+    // AuditHistoryModule es @Global(), así que se inyecta directo. Se usa
+    // para archivar cada asignación antes de borrarla (conserva historia).
+    private readonly assignmentHistory: AssignmentHistoryService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -352,47 +366,422 @@ export class FormsService implements OnModuleInit {
     const formData = (body.data as Record<string, string>) ?? {};
     const userEmail = (body.email as string) ?? '';
 
-    // Enviar email de notificación usando el emailTemplate del formulario
-    if (form.emailTemplate) {
-      try {
-        const template = form.emailTemplate as any;
-        if (template.enabled && (template.toRecipients?.length ?? 0) > 0) {
-          await this.emailService.sendEmail({
-            subject: template.subject || `Nuevo envío: ${form.name}`,
-            emailBody: template.emailBody || `<p>Nuevo envío del formulario <strong>${form.name}</strong></p>`,
-            toRecipients: (template.toRecipients ?? []) as EmailRecipient[],
-            ccRecipients: (template.ccRecipients ?? []) as EmailRecipient[],
-            bccRecipients: (template.bccRecipients ?? []) as EmailRecipient[],
-            senderName: template.senderName,
-            formData,
-          });
-        }
-      } catch (err) {
-        console.error('[FormsService] Error enviando email de notificación:', err);
-      }
+    // Persiste la submission en Mongo — sin esto los envíos del enlace
+    // público NUNCA aparecían en el reporte "Registros y PDFs" ni en el
+    // Excel. Resolvemos SubmissionsService via ModuleRef (lazy) para
+    // evitar ciclo con SubmissionsModule; strict:false porque vive en
+    // otro módulo del árbol. userId=undefined porque el submitter es
+    // anónimo.
+    //
+    // Política: PROPAGAR errores. Sara pidió que "nada se pierda". Si el
+    // guardado falla, el cliente recibe 500 y reintenta; NO enviamos email
+    // ni respondemos success con datos perdidos.
+    const { SubmissionsService } = await import('../submissions/submissions.service');
+    const submissionsService = this.moduleRef.get<SubmissionsService>(
+      SubmissionsService,
+      { strict: false },
+    );
+    let submissionDoc;
+    try {
+      submissionDoc = await submissionsService.submit(id, { data: formData }, undefined);
+    } catch (err) {
+      this.logger.error(
+        `[submitPublic] FALLO guardando submission del form ${id}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+        err instanceof Error ? err.stack : undefined,
+      );
+      throw new InternalServerErrorException(
+        'No pudimos guardar tu envío. Por favor intenta de nuevo en unos segundos.',
+      );
     }
 
-    // Email de confirmación al usuario
-    if (form.sendConfirmationEmail && userEmail) {
-      try {
-        await this.emailService.sendEmail({
-          subject: `✅ Recibimos tu formulario: ${form.name}`,
-          emailBody: `
-            <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;">
-              <h2 style="color:#00c2a8;">¡Formulario recibido!</h2>
-              <p>Hemos recibido tu respuesta al formulario <strong>${form.name}</strong>.</p>
-              <p style="color:#6b7280;font-size:13px;">Si tienes preguntas puedes responder a este correo.</p>
-            </div>
-          `,
-          toRecipients: [{ type: 'static', email: userEmail }],
-          senderName: 'SoulForms',
-        });
-      } catch (err) {
-        console.error('[FormsService] Error enviando confirmación:', err);
-      }
-    }
+    // PDF + emails van en fire-and-forget: la submission ya está guardada
+    // en Mongo (lo hicimos arriba, propagando errores), así que no hay
+    // riesgo de perder datos. Puppeteer para generar el PDF puede tardar
+    // 2-5s la primera vez — si esperamos aquí, el usuario ve la página
+    // pegada "enviando…" varios segundos. Con fire-and-forget respondemos
+    // al usuario en ~50ms y los emails llegan a los pocos segundos.
+    //
+    // Si el envío del email falla, queda en el log del backend. No hay
+    // riesgo de perder la submission (ya persistida) — solo del email.
+    void this.dispatchSubmitPublicEmails({
+      form,
+      submissionDoc,
+      formData,
+      userEmail,
+    }).catch((err) => {
+      this.logger.error(
+        `[submitPublic] Fallo async enviando emails del form ${id}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+        err instanceof Error ? err.stack : undefined,
+      );
+    });
 
     return { success: true, message: 'Formulario enviado correctamente' };
+  }
+
+  /**
+   * Genera el PDF y envía los emails del submitPublic. Se ejecuta en
+   * background (fire-and-forget) para no bloquear la respuesta HTTP al
+   * usuario final. Cualquier error queda en el log — la submission ya
+   * está guardada en Mongo antes de llamar acá.
+   */
+  private async dispatchSubmitPublicEmails(input: {
+    form: FormDocument;
+    submissionDoc: { templateSnapshot: string | null; data: Record<string, unknown> };
+    formData: Record<string, string>;
+    userEmail: string;
+  }): Promise<void> {
+    const { form, submissionDoc, formData, userEmail } = input;
+
+    const pdfAttachment = await this.tryBuildSubmissionPdf(form, submissionDoc);
+
+    // formData con keys normalizadas por label (mismo shape que espera la
+    // interpolación de ${placeholders} en subject/emailBody). Sin esto los
+    // asuntos como "Nueva asistencia de ${nombrecompleto}" salían con el
+    // texto literal ${nombrecompleto} en vez del nombre.
+    const widgets = (form.schema as { widgets?: Array<{ id: string; label?: string }> })
+      .widgets ?? [];
+    // Si el widget tiene `placeholder` manual lo usamos; si no, caemos a
+    // normalizeKey(label) con sufijo numérico para labels duplicados.
+    // Espeja la lógica de `uniqueBaseKey` en src/utils/placeholders.ts.
+    const normalizeKey = (label: string): string =>
+      label.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/gi, '');
+    const labeledFormData: Record<string, string> = { ...formData };
+    const used = new Map<string, number>();
+    const widgetsExt = widgets as Array<{ id: string; label?: string; placeholder?: string }>;
+    for (const w of widgetsExt) {
+      if (!w.id) continue;
+      const manual = (w.placeholder ?? '').trim();
+      const base = manual ? normalizeKey(manual) : normalizeKey(w.label ?? '');
+      if (!base) continue;
+      const current = used.get(base) ?? 0;
+      used.set(base, current + 1);
+      const key = current === 0 ? base : `${base}${current}`;
+      const raw = submissionDoc.data?.[w.id];
+      if (raw != null) labeledFormData[key] = String(raw);
+    }
+    const interpolate = (text: string): string =>
+      text.replace(/\$\{([^}]+)\}/g, (_, k) => labeledFormData[k] ?? '');
+
+    // Email de notificación al completarse el formulario público.
+    //
+    // Se dispara si CUALQUIERA de estos dos flags está en true:
+    //   - form.sendConfirmationEmail (toggle rápido del modal Compartir)
+    //   - form.emailTemplate.enabled (toggle detallado de Config → Email)
+    //
+    // Ambos apuntan al mismo comportamiento: enviar a los toRecipients
+    // configurados en el emailTemplate del form, con el PDF adjunto. El
+    // toggle del modal Share funciona como ATAJO del emailTemplate.enabled
+    // sin obligar a Sara a entrar a la Config detallada por cada form.
+    //
+    // El email a un supuesto "usuario final" (que requería un widget email
+    // en el form) NO se envía porque los formularios de Sara no tienen
+    // ese campo — el flujo real es siempre al equipo interno.
+    const template = (form.emailTemplate ?? {}) as {
+      enabled?: boolean;
+      subject?: string;
+      emailBody?: string;
+      toRecipients?: EmailRecipient[];
+      ccRecipients?: EmailRecipient[];
+      bccRecipients?: EmailRecipient[];
+      senderName?: string;
+    };
+    const wantsToSend = form.sendConfirmationEmail === true || template.enabled === true;
+    const hasRecipients = (template.toRecipients?.length ?? 0) > 0;
+
+    if (wantsToSend && hasRecipients) {
+      try {
+        await this.emailService.sendEmail({
+          subject: interpolate(template.subject || `Nuevo envío: ${form.name}`),
+          emailBody: interpolate(
+            template.emailBody ||
+              `<p>Nuevo envío del formulario <strong>${form.name}</strong></p>`,
+          ),
+          toRecipients: (template.toRecipients ?? []) as EmailRecipient[],
+          ccRecipients: (template.ccRecipients ?? []) as EmailRecipient[],
+          bccRecipients: (template.bccRecipients ?? []) as EmailRecipient[],
+          senderName: template.senderName,
+          formData: labeledFormData,
+          attachments: pdfAttachment ? [pdfAttachment] : [],
+        });
+      } catch (err) {
+        this.logger.error(
+          `[submitPublic] Error enviando email: ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    } else if (wantsToSend && !hasRecipients) {
+      this.logger.warn(
+        `[submitPublic] Form ${form._id} tiene sendConfirmationEmail:true pero no hay toRecipients configurados — email no enviado.`,
+      );
+    }
+
+    // `userEmail` queda sin uso en este flow — se conserva el parámetro por
+    // compat de tipos pero no se lee. Si el día de mañana Sara quiere volver
+    // a habilitar un email "al usuario final" separado, este es el lugar.
+    void userEmail;
+  }
+
+  /**
+   * Construye el PDF de una submission recién guardada para adjuntarlo a
+   * los emails del submitPublic. Elige el mejor motor según el shape del
+   * emailTemplate del form:
+   *
+   *   1. Excel + mappings → LibreOffice (fillXlsx + convertBufferToPdf).
+   *      Pixel-perfect del Excel original: mismo motor que ya usa el
+   *      Preview del mapper y la descarga desde el panel admin.
+   *   2. PDF + mappings → pdf-lib (fillPdf). Overlay de texto en las
+   *      coordenadas mapeadas.
+   *   3. HTML template (fallback) → Puppeteer (htmlToPdfBuffer). Renderiza
+   *      un HTML minimalista con los placeholders sustituidos.
+   *
+   * Sin el path (1), los forms basados en Excel salían con las celdas
+   * "aplastadas" en líneas horizontales porque Puppeteer renderiza el
+   * HTML de generateExcelTemplateHtml literal (no reproduce el layout de
+   * bordes/celdas del Excel).
+   *
+   * Devuelve null si no hay nada que renderizar o si el render falla —
+   * los emails se envían igual sin adjunto para no bloquear el flujo.
+   */
+  private async tryBuildSubmissionPdf(
+    form: FormDocument,
+    submissionDoc: { templateSnapshot: string | null; data: Record<string, unknown> },
+  ): Promise<import('../email/email.types').EmailAttachment | null> {
+    const template = (form.emailTemplate ?? {}) as {
+      excelBase64?: string;
+      excelMappings?: Array<{ coord: string; placeholder: string }>;
+      excelLogoBase64?: string;
+      pdfBase64?: string;
+      pdfMappings?: Array<{
+        placeholder: string;
+        x: number;
+        y: number;
+        page: number;
+        fontSize?: number;
+      }>;
+    };
+    // Los "values" mapean placeholder → valor. IMPORTANTE: los mappings
+    // se guardan con placeholders derivados del LABEL del widget
+    // (normalizeKey del frontend: lowercase + sin espacios + solo a-z0-9),
+    // NO con el widget.id UUID. Enviar solo widget.id como clave dejaba
+    // el PDF vacío porque ninguna celda mapeada encontraba su valor.
+    //
+    // Espejamos exactamente la función normalizeKey de src/utils/placeholders.ts.
+    // Si esa función cambia, hay que sincronizar aquí también.
+    const widgets = (form.schema as {
+      widgets?: Array<{ id: string; label?: string; placeholder?: string }>;
+    }).widgets ?? [];
+    const normalizeKey = (label: string): string =>
+      label.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/gi, '');
+    // Mapa widgetId → key única: usa `widget.placeholder` manual si existe,
+    // sino `normalizeKey(label)` con sufijo numérico determinístico para
+    // desambiguar labels duplicados (espeja uniqueBaseKey del frontend).
+    const keyById = new Map<string, string>();
+    {
+      const used = new Map<string, number>();
+      for (const w of widgets) {
+        if (!w.id) continue;
+        const manual = (w.placeholder ?? '').trim();
+        const base = manual ? normalizeKey(manual) : normalizeKey(w.label ?? '');
+        if (!base) continue;
+        const current = used.get(base) ?? 0;
+        used.set(base, current + 1);
+        keyById.set(w.id, current === 0 ? base : `${base}${current}`);
+      }
+    }
+
+    const values: Record<string, string> = {};
+    const labeledValues: Record<string, string> = {};
+    for (const [widgetId, rawVal] of Object.entries(submissionDoc.data ?? {})) {
+      const str = rawVal == null ? '' : String(rawVal);
+      // Compat con quien ya usa widget.id:
+      values[widgetId] = str;
+      values[`\${${widgetId}}`] = str;
+      // Clave real que espera el fillXlsx / interpolación de emails:
+      const norm = keyById.get(widgetId);
+      if (norm) {
+        {
+          values[norm] = str;
+          values[`\${${norm}}`] = str;
+          labeledValues[norm] = str;
+        }
+      }
+    }
+
+    // Nombre del PDF adjunto: usa el pdfFilename configurado (con placeholders
+    // interpolados) para que llegue con el mismo formato que Sara configuró en
+    // Config → Email. Antes acá se ponía solo `form.name.pdf`, ignorando ese
+    // ajuste y dando distinto resultado que el flujo autenticado.
+    const templateForName = (form.emailTemplate ?? {}) as { pdfFilename?: string };
+    const configuredName = (templateForName.pdfFilename ?? '').trim();
+    const renderedName = configuredName
+      ? configuredName.replace(/\$\{([^}]+)\}/g, (_, k) => labeledValues[k] ?? '')
+      : `${form.name}.pdf`;
+    const safeName = renderedName
+      .replace(/[\\/:*?"<>|]/g, '_')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 200)
+      .replace(/\.pdf?$/i, '') + '.pdf';
+
+    // Diagnóstico: qué opciones tiene este form para generar PDF
+    this.logger.log(
+      `[tryBuildSubmissionPdf] form=${form._id} name="${form.name}" ` +
+        `excelBase64=${!!template.excelBase64} excelMappings=${
+          template.excelMappings?.length ?? 0
+        } pdfBase64=${!!template.pdfBase64} pdfMappings=${
+          template.pdfMappings?.length ?? 0
+        } templateSnapshot=${!!submissionDoc.templateSnapshot}`,
+    );
+
+    // Path 1: Excel + mappings → LibreOffice
+    if (
+      template.excelBase64 &&
+      Array.isArray(template.excelMappings) &&
+      template.excelMappings.length > 0
+    ) {
+      this.logger.log(
+        `[tryBuildSubmissionPdf] ⇒ PATH 1 (Excel + LibreOffice) — ${template.excelMappings.length} mappings`,
+      );
+      try {
+        const { ExcelPreviewService } = await import('./excel-preview.service');
+        const { FilesService } = await import('../files/files.service');
+        const excel = this.moduleRef.get(ExcelPreviewService, { strict: false });
+        const filesService = this.moduleRef.get(FilesService, { strict: false });
+        const buf = Buffer.from(
+          template.excelBase64.includes(',')
+            ? template.excelBase64.split(',')[1]
+            : template.excelBase64,
+          'base64',
+        );
+
+        // Resolver valores gridfs:xxx (firmas/fotos) a buffers de imagen,
+        // agrupados por coord de la celda mapeada. fillXlsx los anclará
+        // como imágenes en la celda en vez de escribir el gridfs id como
+        // texto (que era el bug del "6b59a22108" en la línea de firma).
+        const imagesByCoord = new Map<
+          string,
+          { buffer: Buffer; extension: 'png' | 'jpeg' | 'gif' }
+        >();
+        for (const m of template.excelMappings) {
+          const key = m.placeholder.replace(/^\$\{/, '').replace(/\}$/, '');
+          const val = values[key];
+          if (typeof val !== 'string') continue;
+          if (!val.startsWith('gridfs:')) continue;
+          const fileId = val.slice('gridfs:'.length);
+          try {
+            const { buffer: imgBuf, contentType } = await filesService.download(fileId);
+            const ct = (contentType ?? '').toLowerCase();
+            const extension: 'png' | 'jpeg' | 'gif' = ct.includes('gif')
+              ? 'gif'
+              : ct.includes('jpeg') || ct.includes('jpg')
+                ? 'jpeg'
+                : 'png';
+            imagesByCoord.set(m.coord, { buffer: imgBuf, extension });
+          } catch (err) {
+            this.logger.warn(
+              `[submitPublic] No se pudo descargar gridfs ${fileId} para ${m.coord}: ${
+                err instanceof Error ? err.message : err
+              }`,
+            );
+          }
+        }
+
+        const filled = await excel.fillXlsx(
+          buf,
+          template.excelMappings,
+          values,
+          template.excelLogoBase64,
+          imagesByCoord,
+        );
+        const pdf = await excel.convertBufferToPdf(filled);
+        this.logger.log(
+          `[tryBuildSubmissionPdf] ✅ PATH 1 completado — PDF ${Math.round(pdf.length / 1024)}KB, imagenes anclas=${imagesByCoord.size}`,
+        );
+        return {
+          name: safeName,
+          contentType: 'application/pdf',
+          contentBytes: Buffer.from(pdf).toString('base64'),
+        };
+      } catch (err) {
+        this.logger.warn(
+          `[submitPublic] Excel→PDF (LibreOffice) falló, cayendo a HTML: ${
+            err instanceof Error ? err.message : err
+          }`,
+        );
+      }
+    }
+
+    // Path 2: PDF + mappings → pdf-lib
+    if (
+      template.pdfBase64 &&
+      Array.isArray(template.pdfMappings) &&
+      template.pdfMappings.length > 0
+    ) {
+      try {
+        const { PdfFillService } = await import('./pdf-fill.service');
+        const filler = this.moduleRef.get(PdfFillService, { strict: false });
+        const buf = Buffer.from(
+          template.pdfBase64.includes(',')
+            ? template.pdfBase64.split(',')[1]
+            : template.pdfBase64,
+          'base64',
+        );
+        const filled = await filler.fillPdf(buf, template.pdfMappings, values);
+        return {
+          name: safeName,
+          contentType: 'application/pdf',
+          contentBytes: Buffer.from(filled).toString('base64'),
+        };
+      } catch (err) {
+        this.logger.warn(
+          `[submitPublic] PDF fill (pdf-lib) falló, cayendo a HTML: ${
+            err instanceof Error ? err.message : err
+          }`,
+        );
+      }
+    }
+
+    // Path 3: HTML template → Puppeteer (fallback)
+    if (!submissionDoc.templateSnapshot) {
+      this.logger.warn(
+        `[tryBuildSubmissionPdf] ⇒ NINGÚN PATH aplicable — no hay excelBase64+mappings, no hay pdfBase64+mappings, no hay templateSnapshot. PDF NO se generará.`,
+      );
+      return null;
+    }
+    this.logger.warn(
+      `[tryBuildSubmissionPdf] ⇒ PATH 3 (HTML + Puppeteer fallback). Si esperabas Path 1 (Excel), revisá que el emailTemplate tenga excelBase64+excelMappings.`,
+    );
+    try {
+      const { PdfRendererService } = await import('../submissions/pdf-renderer.service');
+      const { FilesService } = await import('../files/files.service');
+      const { interpolatePdfTemplate } = await import('../submissions/pdf-interpolator');
+      const pdfRenderer = this.moduleRef.get(PdfRendererService, { strict: false });
+      const filesService = this.moduleRef.get(FilesService, { strict: false });
+      const html = await interpolatePdfTemplate({
+        template: submissionDoc.templateSnapshot,
+        data: submissionDoc.data,
+        widgets:
+          (form.schema as { widgets?: Array<{ id: string; type: string; label?: string }> })
+            .widgets ?? [],
+        filesService,
+      });
+      const buffer = await pdfRenderer.htmlToPdfBuffer(html);
+      return {
+        name: safeName,
+        contentType: 'application/pdf',
+        contentBytes: buffer.toString('base64'),
+      };
+    } catch (err) {
+      this.logger.warn(
+        `[submitPublic] No se pudo generar PDF adjunto: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return null;
+    }
   }
 
   async togglePublic(
@@ -446,7 +835,18 @@ export class FormsService implements OnModuleInit {
 
   async unassignUser(formId: string, userId: number): Promise<void> {
     // Igual que en assignUser: no borrar la fila de exclusión, solo la
-    // asignación positiva legacy.
+    // asignación positiva legacy. Antes de borrarla la archivamos en
+    // assignments_history para conservar el registro histórico de quién
+    // estuvo asignado.
+    const doc = await this.assignmentModel
+      .findOne({ formId, userId, excluded: false })
+      .lean();
+    if (!doc) return;
+    await this.assignmentHistory.archive({
+      type: 'user_form_direct_assignment',
+      originalDocument: doc as unknown as Record<string, unknown>,
+      metadata: { reason: 'manual_unassign', formId, userId },
+    });
     await this.assignmentModel.deleteOne({ formId, userId, excluded: false });
   }
 

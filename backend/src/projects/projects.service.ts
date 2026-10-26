@@ -5,12 +5,14 @@ import { Project, ProjectDocument } from './project.schema';
 import { UserFormAssignment, UserFormAssignmentDocument } from '../forms/user-form-assignment.schema';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
+import { AssignmentHistoryService } from '../audit-history/assignment-history.service';
 
 @Injectable()
 export class ProjectsService {
   constructor(
     @InjectModel(Project.name) private readonly projectModel: Model<ProjectDocument>,
     @InjectModel(UserFormAssignment.name) private readonly assignmentModel: Model<UserFormAssignmentDocument>,
+    private readonly history: AssignmentHistoryService,
   ) {}
 
   async create(dto: CreateProjectDto, userId: number): Promise<ProjectDocument> {
@@ -66,6 +68,13 @@ export class ProjectsService {
   }
 
   async unassignUser(projectId: string, userId: number): Promise<void> {
+    const doc = await this.assignmentModel.findOne({ projectId, userId }).lean();
+    if (!doc) return;
+    await this.history.archive({
+      type: 'user_project_assignment',
+      originalDocument: doc as unknown as Record<string, unknown>,
+      metadata: { reason: 'manual_unassign', projectId, userId },
+    });
     await this.assignmentModel.deleteOne({ projectId, userId });
   }
 

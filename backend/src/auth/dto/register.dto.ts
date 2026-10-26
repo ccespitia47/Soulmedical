@@ -1,4 +1,11 @@
-import { IsEmail, IsNotEmpty, MinLength, IsOptional, IsEnum } from 'class-validator';
+import {
+  IsEmail,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
 import { UserRole } from '../../users/user.entity';
 
 export class RegisterDto {
@@ -11,6 +18,10 @@ export class RegisterDto {
   @IsNotEmpty({ message: 'La contraseña es requerida' })
   @MinLength(6, { message: 'La contraseña debe tener al menos 6 caracteres' })
   password: string;
+
+  @IsOptional()
+  @IsString()
+  documentNumber?: string;
 
   @IsOptional()
   @IsEnum(UserRole, { message: 'Rol no válido' })

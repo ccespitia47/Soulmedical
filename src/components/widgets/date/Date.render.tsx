@@ -1,6 +1,7 @@
 import type { WidgetRenderProps } from "../../../types/widget.types";
 
 export default function DateRender({ widget }: WidgetRenderProps) {
+  const config = widget.config ?? {};
   return (
     <div>
       <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
@@ -11,9 +12,9 @@ export default function DateRender({ widget }: WidgetRenderProps) {
         type="date"
         name={widget.id}
         required={widget.required}
-        min={(widget.config.min as string) || undefined}
-        max={(widget.config.max as string) || undefined}
-        defaultValue={(widget.config.defaultValue as string) || ""}
+        min={(config.min as string) || undefined}
+        max={(config.max as string) || undefined}
+        defaultValue={(config.defaultValue as string) || ""}
         style={{
           width: "100%",
           padding: "8px 12px",

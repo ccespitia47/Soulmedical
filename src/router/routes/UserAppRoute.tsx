@@ -20,7 +20,15 @@ export default function UserAppRoute() {
       user={user}
       onFillForm={(folderId, formId) => navigate(`/form/${folderId}/${formId}`)}
       onLogout={handleLogout}
-      onSwitchToAdmin={user.role === "admin" ? () => navigate("/admin") : undefined}
+      onSwitchToAdmin={
+        // Admin y coordinador pueden ir al panel: el AdminSidebar filtra
+        // qué secciones aparecen según los permisos efectivos del usuario
+        // (Formularios siempre; Reportes/Auditoría solo si tienen esos
+        // permisos extra). Los usuarios "user" nunca ven el botón.
+        user.role === "admin" || user.role === "coordinator"
+          ? () => navigate("/admin")
+          : undefined
+      }
     />
   );
 }

@@ -46,7 +46,12 @@ export class RecordsService {
       .filter((w) => w.label && !SUMMARY_SKIP.has(w.type))
       .slice(0, MAX_SUMMARY_COLS);
 
-    const query: Record<string, unknown> = { formId };
+    const query: Record<string, unknown> = {
+      formId,
+      // Excluye los eliminados por soft delete. Se conservan en Mongo por
+      // trazabilidad pero nunca deben aparecer en el listado ni en Excel.
+      deletedAt: null,
+    };
     if (opts.from || opts.to) {
       const range: Record<string, Date> = {};
       if (opts.from) range.$gte = new Date(opts.from);
@@ -72,14 +77,17 @@ export class RecordsService {
       this.submissionModel.countDocuments(query),
     ]);
 
-    // Filtro por texto post-fetch (simple)
+    // Filtro por texto post-fetch: busca en el ID exacto (útil para pegar un
+    // uuid) y también dentro de cualquier valor del data (búsqueda parcial).
     const needle = opts.search?.trim().toLowerCase() ?? '';
     const filtered = needle
-      ? docs.filter((d) =>
-          Object.values(d.data ?? {}).some((v) =>
+      ? docs.filter((d) => {
+          const id = String((d as any)._id ?? '').toLowerCase();
+          if (id === needle || id.includes(needle)) return true;
+          return Object.values(d.data ?? {}).some((v) =>
             String(v ?? '').toLowerCase().includes(needle),
-          ),
-        )
+          );
+        })
       : docs;
 
     const userIds = Array.from(new Set(filtered.map((d) => (d as any).submittedById).filter(Boolean))) as number[];
@@ -102,5 +110,37 @@ export class RecordsService {
     });
 
     return { data, total, page: opts.page, limit: opts.limit };
+  }
+
+  /**
+   * "Elimina" una submission: soft delete (marca deletedAt + quién + motivo).
+   * El registro permanece en Mongo para trazabilidad. Todas las queries de
+   * la app filtran por `deletedAt: null` así que desaparece del listado y
+   * del Excel. Devuelve datos mínimos (formId, nombre) para audit.
+   *
+   * Idempotente: si ya estaba eliminado, no-op (devuelve la info igual).
+   */
+  async deleteOne(
+    id: string,
+    actor: { userId: number; reason: string },
+  ): Promise<{ formId: string; formName: string }> {
+    const sub = await this.submissionModel
+      .findById(id)
+      .select('formId deletedAt')
+      .lean();
+    if (!sub) throw new NotFoundException('Registro no encontrado');
+    const form = await this.formsService.findOne(sub.formId);
+
+    if (!(sub as { deletedAt?: Date | null }).deletedAt) {
+      await this.submissionModel
+        .findByIdAndUpdate(id, {
+          deletedAt: new Date(),
+          deletedById: actor.userId,
+          deletedReason: actor.reason,
+        })
+        .exec();
+    }
+
+    return { formId: sub.formId, formName: form?.name ?? '(formulario eliminado)' };
   }
 }

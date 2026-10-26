@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { FormSubmission, FormSubmissionSchema } from './form-submission.schema';
 import { SubmissionsService } from './submissions.service';
 import { SubmissionsController } from './submissions.controller';
+import { SubmissionUploadsController } from './submission-uploads.controller';
 import { RecordsController } from './records.controller';
 import { RecordsService } from './records.service';
 import { PdfRendererService } from './pdf-renderer.service';
@@ -34,7 +35,7 @@ import { ReportsModule } from '../reports/reports.module';
     // resuelta con forwardRef() en los dos lados.
     forwardRef(() => ReportsModule),
   ],
-  controllers: [SubmissionsController, RecordsController],
+  controllers: [SubmissionsController, SubmissionUploadsController, RecordsController],
   providers: [
     SubmissionsService,
     RecordsService,

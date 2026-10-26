@@ -64,4 +64,14 @@ export class User {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  // ── Soft delete ──────────────────────────────────────────────────────────
+  // DELETE /users/:id NO borra la fila (perderíamos email/nombre y sus
+  // submissions viejas quedarían huérfanas). En su lugar se marca aquí
+  // con timestamp. El login rechaza usuarios con deletedAt != null.
+  @Column({ type: 'timestamp', nullable: true })
+  deletedAt: Date | null;
+
+  @Column({ type: 'integer', nullable: true })
+  deletedById: number | null;
 }

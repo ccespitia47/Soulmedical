@@ -1,4 +1,7 @@
-import RecipientsInput, { type RecipientUser } from "./RecipientsInput";
+import RecipientsInput, {
+  type RecipientUser,
+  type EmailFieldOption,
+} from "./RecipientsInput";
 import type { EmailRecipient } from "../../../types/email-template.types";
 
 type RecipientsSectionProps = {
@@ -6,6 +9,7 @@ type RecipientsSectionProps = {
   ccRecipients: EmailRecipient[];
   bccRecipients: EmailRecipient[];
   allUsers: RecipientUser[];
+  emailFields?: EmailFieldOption[];
   hasToError: boolean;
   showCcBcc: boolean;
   onToggleCcBcc: () => void;
@@ -19,6 +23,7 @@ export default function RecipientsSection({
   ccRecipients,
   bccRecipients,
   allUsers,
+  emailFields,
   hasToError,
   showCcBcc,
   onToggleCcBcc,
@@ -57,6 +62,7 @@ export default function RecipientsSection({
         label="Para (To) *"
         recipients={toRecipients}
         allUsers={allUsers}
+        emailFields={emailFields}
         hasError={hasToError}
         onChange={onChangeTo}
       />
@@ -66,12 +72,14 @@ export default function RecipientsSection({
             label="CC (opcional)"
             recipients={ccRecipients}
             allUsers={allUsers}
+            emailFields={emailFields}
             onChange={onChangeCc}
           />
           <RecipientsInput
             label="BCC (opcional)"
             recipients={bccRecipients}
             allUsers={allUsers}
+            emailFields={emailFields}
             onChange={onChangeBcc}
           />
         </div>

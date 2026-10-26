@@ -11,6 +11,8 @@ type TwoFactorSetupPanelProps = {
   accent?: string;
   gradient?: string;
   shadow?: string;
+  /** Tema oscuro (SoulForms): adapta textos/inputs al fondo #0F1623. */
+  dark?: boolean;
   /** Llamado cuando el setup se completa con éxito y el backend entrega el JWT. */
   onSuccess: (result: LoginFinalResponse) => void;
   onCancel?: () => void;
@@ -26,9 +28,11 @@ export default function TwoFactorSetupPanel({
   accent = "#00c2a8",
   gradient = "linear-gradient(135deg,#00c2a8,#0891b2)",
   shadow = "rgba(0,194,168,0.35)",
+  dark = false,
   onSuccess,
   onCancel,
 }: TwoFactorSetupPanelProps) {
+  const fieldColor = accent;
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(true);
@@ -78,10 +82,10 @@ export default function TwoFactorSetupPanel({
   return (
     <div>
       <div className="mb-4 text-center">
-        <div className="mb-1 text-base font-bold text-slate-900">
+        <div className={`mb-1 text-base font-bold ${dark ? "text-white" : "text-slate-900"}`}>
           🔐 Configura tu doble factor
         </div>
-        <p className="m-0 text-[12.5px] leading-relaxed text-slate-500">
+        <p className={`m-0 text-[12.5px] leading-relaxed ${dark ? "text-slate-400" : "text-slate-500"}`}>
           Escanea el código con tu app authenticator (Google Authenticator,
           Authy, Microsoft Authenticator, 1Password…) y luego ingresa el código
           de 6 dígitos que aparece para confirmar.
@@ -105,7 +109,7 @@ export default function TwoFactorSetupPanel({
             />
           </div>
 
-          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.4px] text-gray-700">
+          <label className={`mb-1.5 block text-xs font-semibold uppercase tracking-[0.4px] ${dark ? "text-slate-200" : "text-gray-700"}`}>
             Código de 6 dígitos
           </label>
           <input
@@ -118,12 +122,12 @@ export default function TwoFactorSetupPanel({
             onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, ""))}
             onKeyDown={(e) => e.key === "Enter" && handleVerify()}
             placeholder="000000"
-            className="mb-4 w-full rounded-[10px] border-[1.5px] border-slate-200 bg-slate-50 px-[14px] py-3 text-center font-mono text-[20px] tracking-[0.5em] text-slate-900 outline-none focus:border-current focus:bg-white"
-            style={{ color: accent }}
+            className={`mb-4 w-full rounded-[10px] border-[1.5px] px-[14px] py-3 text-center font-mono text-[20px] tracking-[0.5em] outline-none focus:border-current ${dark ? "border-white/15 bg-white/[0.05] text-white placeholder:text-slate-500 focus:bg-white/[0.09]" : "border-slate-200 bg-slate-50 text-slate-900 focus:bg-white"}`}
+            style={{ color: fieldColor }}
           />
 
           {error && (
-            <div className="mb-3 flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-[14px] py-2.5 text-sm text-red-600">
+            <div className={`mb-3 flex items-center gap-1.5 rounded-lg border px-[14px] py-2.5 text-sm ${dark ? "border-red-400/30 bg-red-500/10 text-red-300" : "border-red-200 bg-red-50 text-red-600"}`}>
               ⚠️ {error}
             </div>
           )}
@@ -144,7 +148,7 @@ export default function TwoFactorSetupPanel({
             <button
               type="button"
               onClick={onCancel}
-              className="mt-3 w-full cursor-pointer rounded-[10px] border-none bg-transparent py-2 text-xs font-semibold text-slate-500"
+              className={`mt-3 w-full cursor-pointer rounded-[10px] border-none bg-transparent py-2 text-xs font-semibold ${dark ? "text-slate-400 hover:text-slate-200" : "text-slate-500"}`}
             >
               Cancelar
             </button>
@@ -153,7 +157,7 @@ export default function TwoFactorSetupPanel({
       )}
 
       {!loading && !qrDataUrl && error && (
-        <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-[14px] py-2.5 text-sm text-red-600">
+        <div className={`mb-3 rounded-lg border px-[14px] py-2.5 text-sm ${dark ? "border-red-400/30 bg-red-500/10 text-red-300" : "border-red-200 bg-red-50 text-red-600"}`}>
           ⚠️ {error}
         </div>
       )}

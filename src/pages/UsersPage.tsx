@@ -11,6 +11,7 @@ import GroupsPage from "./GroupsPage";
 import ConfirmModal from "../components/common/ConfirmModal";
 import UserListItem from "../components/users/UserListItem";
 import UserFormModal, { type UserFormValues } from "../components/users/UserFormModal";
+import Icon from "../components/common/Icon";
 
 const EMPTY_FORM: UserFormValues = {
   name: "",
@@ -115,21 +116,24 @@ export default function UsersPage() {
 
   return (
     <div className="flex h-screen flex-col bg-[#f0f4f8]">
-      <div className="flex flex-shrink-0 border-b border-slate-200 bg-white px-6">
-        {([["usuarios", "👤 Usuarios"], ["grupos", "🏷️ Grupos"]] as const).map(([t, label]) => (
-          <button
-            key={t}
-            onClick={() => setMainTab(t)}
-            className="-mb-px cursor-pointer border-b-2 border-none bg-transparent px-5 py-3.5 font-sans text-sm transition-all"
-            style={{
-              borderBottomColor: mainTab === t ? "#00c2a8" : "transparent",
-              fontWeight: mainTab === t ? 700 : 500,
-              color: mainTab === t ? "#00c2a8" : "#6b7280",
-            }}
-          >
-            {label}
-          </button>
-        ))}
+      <div className="flex flex-shrink-0 border-b border-slate-200 bg-white px-2 sm:px-6">
+        {([["usuarios", "Usuarios", "users"], ["grupos", "Grupos", "tag"]] as const).map(([t, label, ic]) => {
+          const active = mainTab === t;
+          return (
+            <button
+              key={t}
+              onClick={() => setMainTab(t)}
+              className="-mb-px flex cursor-pointer items-center gap-2 border-b-2 border-none bg-transparent px-3.5 py-3.5 font-sans text-sm transition-all sm:px-5"
+              style={{
+                borderBottomColor: active ? "#00c2a8" : "transparent",
+                fontWeight: active ? 700 : 500,
+                color: active ? "#00c2a8" : "#6b7280",
+              }}
+            >
+              <Icon name={ic} size={16} /> {label}
+            </button>
+          );
+        })}
       </div>
 
       {mainTab === "grupos" ? (
@@ -138,13 +142,13 @@ export default function UsersPage() {
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-[1000px] px-6 py-8">
-            <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div className="mx-auto max-w-[1000px] px-4 py-6 sm:px-6 sm:py-8">
+            <div className="animate-fade-up mb-6 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h1 className="m-0 text-[22px] font-bold text-gray-900">
-                  👥 Gestión de Usuarios
+                <h1 className="m-0 text-xl font-extrabold tracking-tight text-slate-900 sm:text-2xl">
+                  Gestión de Usuarios
                 </h1>
-                <p className="mt-1 text-[13px] text-gray-500">
+                <p className="mt-1 text-[13px] text-slate-400">
                   {users.length} usuario{users.length !== 1 ? "s" : ""} registrado
                   {users.length !== 1 ? "s" : ""}
                 </p>
@@ -154,22 +158,23 @@ export default function UsersPage() {
                   setFormError("");
                   setShowNewUser(true);
                 }}
-                className="cursor-pointer rounded-lg border-none bg-[#00c2a8] px-5 py-2.5 text-[13px] font-semibold text-white"
+                className="inline-flex cursor-pointer items-center gap-2 rounded-lg border-none px-5 py-2.5 text-[13px] font-bold text-white shadow-[0_4px_14px_-4px_rgba(0,194,168,0.5)] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-6px_rgba(0,194,168,0.6)]"
+                style={{ background: "linear-gradient(135deg, #00c2a8 0%, #0891b2 100%)" }}
               >
-                ➕ Nuevo usuario
+                <Icon name="plus" size={16} /> Nuevo usuario
               </button>
             </div>
 
-            <div className="relative mb-5 max-w-[360px]">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                🔍
+            <div className="animate-fade-up relative mb-5 max-w-[360px]" style={{ animationDelay: "60ms" }}>
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                <Icon name="search" size={16} />
               </span>
               <input
                 type="text"
                 placeholder="Buscar por nombre o correo..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="box-border w-full rounded-lg border-[1.5px] border-slate-200 px-3 py-2.5 pl-9 text-sm text-gray-900 outline-none"
+                className="box-border w-full rounded-xl border-[1.5px] border-slate-200 bg-white px-3 py-2.5 pl-9 text-sm text-slate-900 outline-none transition focus:border-[#00c2a8] focus:ring-2 focus:ring-[#00c2a8]/15"
               />
             </div>
 
@@ -180,17 +185,24 @@ export default function UsersPage() {
             ) : errorMsg ? (
               <div className="p-10 text-center text-red-600">{errorMsg}</div>
             ) : filteredUsers.length === 0 ? (
-              <div className="rounded-2xl border-2 border-dashed border-slate-200 px-6 py-14 text-center text-gray-400">
-                <span className="mb-3 block text-5xl">👥</span>
-                <p className="text-[15px] font-semibold">No hay usuarios registrados</p>
-                <p className="text-[13px]">Crea el primer usuario con el botón de arriba</p>
+              <div className="animate-fade-up rounded-[20px] border-2 border-dashed border-slate-200 bg-white/60 px-6 py-16 text-center">
+                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#00c2a8]/10 text-[#00c2a8]">
+                  <Icon name="users" size={30} />
+                </div>
+                <p className="text-lg font-extrabold tracking-tight text-slate-800">
+                  No hay usuarios registrados
+                </p>
+                <p className="mt-1 text-[13px] text-slate-400">
+                  Crea el primer usuario con el botón de arriba
+                </p>
               </div>
             ) : (
               <div className="flex flex-col gap-2.5">
-                {filteredUsers.map((user) => (
+                {filteredUsers.map((user, i) => (
                   <UserListItem
                     key={user.id}
                     user={user}
+                    index={i}
                     onEdit={(u) => {
                       setFormError("");
                       setEditingUser(u);

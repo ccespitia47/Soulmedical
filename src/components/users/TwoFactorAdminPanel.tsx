@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { adminResetUser2faApi, type UserApiData } from "../../services/api";
+import Icon from "../common/Icon";
 
 type TwoFactorAdminPanelProps = {
   user: UserApiData;
@@ -47,20 +48,26 @@ export default function TwoFactorAdminPanel({
   return (
     <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-3.5">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-base">🔐</span>
+        <div className="flex items-center gap-2 text-[#0891b2]">
+          <Icon name="lock" size={15} />
           <span className="text-[13px] font-semibold text-gray-900">
             Doble factor de autenticación
           </span>
         </div>
         <span
-          className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+          className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
           style={{
             background: enabled ? "#d1fae5" : "#f3f4f6",
             color: enabled ? "#065f46" : "#6b7280",
           }}
         >
-          {enabled ? "✓ Activo" : "Sin configurar"}
+          {enabled ? (
+            <>
+              <Icon name="checkCircle" size={10} /> Activo
+            </>
+          ) : (
+            "Sin configurar"
+          )}
         </span>
       </div>
 
@@ -72,14 +79,15 @@ export default function TwoFactorAdminPanel({
 
       {result && (
         <div
-          className="mb-2 rounded-md border px-2.5 py-1.5 text-[11.5px]"
+          className="mb-2 flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11.5px]"
           style={{
             borderColor: result.kind === "ok" ? "#a7f3d0" : "#fecaca",
             background: result.kind === "ok" ? "#ecfdf5" : "#fef2f2",
             color: result.kind === "ok" ? "#065f46" : "#b91c1c",
           }}
         >
-          {result.kind === "ok" ? "✓" : "⚠️"} {result.message}
+          <Icon name={result.kind === "ok" ? "checkCircle" : "alert"} size={13} className="shrink-0" />
+          <span>{result.message}</span>
         </div>
       )}
 
@@ -88,9 +96,9 @@ export default function TwoFactorAdminPanel({
           type="button"
           onClick={() => setConfirming(true)}
           disabled={busy}
-          className="cursor-pointer rounded-md border-[1.5px] border-red-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border-[1.5px] border-red-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          🔄 Restablecer 2FA
+          <Icon name="refresh" size={13} /> Restablecer 2FA
         </button>
       )}
 

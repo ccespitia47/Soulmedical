@@ -280,8 +280,28 @@ export class EmailService {
     for (const r of recipients) {
       if (r.type === 'static' && r.email) {
         emails.add(r.email.trim().toLowerCase());
+      } else if (r.type === 'field' && r.widgetId) {
+        // Resolución EXACTA: toma el valor del widget con ese id. No vale el
+        // primer email del submission (ver findEmailInFormData, heurístico).
+        // Si el campo está vacío o no es un email válido, el destinatario se
+        // descarta silenciosamente — el envío sigue con los demás.
+        const raw = formData?.[r.widgetId];
+        if (typeof raw === 'string') {
+          const value = raw.trim();
+          if (value && EMAIL_REGEX.test(value)) {
+            emails.add(value.toLowerCase());
+          } else {
+            this.logger.warn(
+              `Recipient tipo 'field' widgetId=${r.widgetId} no resolvió a un email válido (valor="${value}")`,
+            );
+          }
+        }
       } else if (r.type === 'group' && r.group) {
         if (r.group === 'current_user') {
+          // LEGACY: heurístico "primer email del submission". Puede devolver el
+          // correo equivocado si el form tiene varios campos email (médico,
+          // cuidador, paciente). Para nuevos templates usar type='field' con el
+          // widgetId del campo "correo del paciente" en vez de este grupo.
           const formEmail = this.findEmailInFormData(formData);
           if (formEmail) emails.add(formEmail.trim().toLowerCase());
           else if (currentUserEmail) emails.add(currentUserEmail.trim().toLowerCase());

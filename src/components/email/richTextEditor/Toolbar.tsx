@@ -19,9 +19,17 @@ type ToolbarProps = {
 export default function Toolbar({ onCommand, onApplyColor, onInsertLink }: ToolbarProps) {
   return (
     <div className="flex flex-wrap gap-1 border-b border-slate-200 bg-gray-50 p-2">
+      {/* OJO: nada de preventDefault en mousedown. En un <select> la acción por
+          defecto del mousedown ES abrir el desplegable, así que cancelarla dejaba
+          el control muerto. No hace falta para conservar la selección: el editor
+          la guarda en savedSelection y execCommand la restaura. */}
       <select
-        onChange={(e) => onCommand("fontSize", e.target.value)}
-        onMouseDown={(e) => e.preventDefault()}
+        onChange={(e) => {
+          const size = e.target.value;
+          if (size) onCommand("fontSize", size);
+          // Volver a "Tamaño" permite repetir el mismo valor dos veces seguidas.
+          e.target.value = "";
+        }}
         title="Tamaño de fuente"
         className="h-9 min-w-[60px] cursor-pointer rounded-md border border-slate-200 bg-white px-2.5 text-xs text-gray-700"
       >

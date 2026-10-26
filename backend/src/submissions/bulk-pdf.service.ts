@@ -20,7 +20,9 @@ import { encryptedZip } from './zip-crypto';
 
 const MAX_PDFS = 500;
 const RENDER_CONCURRENCY = 3;
-const TTL_MINUTES = 2;
+// 10 min: igual que los reportes Excel. 2 min dejaba el ZIP vencido antes
+// de que el email cruzara los filtros de spam/antivirus corporativos.
+const TTL_MINUTES = 10;
 
 export async function renderInBatches<T, R>(
   items: T[],
@@ -78,10 +80,13 @@ export class BulkPdfService {
     // FormsService.findOne ya lanza NotFoundException si no existe / está inactivo.
     const form = await this.formsService.findOne(formId);
 
-    // Query submissions con snapshot
+    // Query submissions con snapshot. Excluye los eliminados por soft
+    // delete: si un registro fue eliminado desde el panel, no debe salir
+    // ni siquiera en la descarga masiva de PDFs.
     const query: Record<string, unknown> = {
       formId,
       templateSnapshot: { $ne: null },
+      deletedAt: null,
     };
     if (filters.from || filters.to) {
       const range: Record<string, Date> = {};

@@ -20,6 +20,22 @@ export function normalizeKey(label: string): string {
 }
 
 /**
+ * Asigna una key única agregando sufijo numérico determinístico cuando el
+ * mismo `base` ya fue usado antes. La primera aparición va sin sufijo
+ * (`cargo`), la segunda `cargo1`, la tercera `cargo2`, etc. — tal como el
+ * usuario pidió: "cargo, cargo 1, cargo 2".
+ *
+ * `used` se MUTA en cada llamada: contador por base. Debe compartirse entre
+ * buildPlaceholders y expandFormData usando el MISMO orden de widgets para
+ * que `data["cargo1"]` apunte efectivamente al segundo widget "Cargo".
+ */
+function uniqueBaseKey(base: string, used: Map<string, number>): string {
+  const current = used.get(base) ?? 0;
+  used.set(base, current + 1);
+  return current === 0 ? base : `${base}${current}`;
+}
+
+/**
  * Genera la lista de placeholders ${campo} disponibles a partir de los widgets
  * del formulario. Para subformularios (que contienen múltiples campos cada uno
  * con múltiples entradas) genera placeholders compuestos:
@@ -30,32 +46,54 @@ export function normalizeKey(label: string): string {
  *   ${miSubform.count}        → número de entradas
  */
 export function buildPlaceholders(
-  widgets: Pick<WidgetInstance, "type" | "label" | "config">[],
+  widgets: Pick<WidgetInstance, "type" | "label" | "config" | "placeholder">[],
 ): AppPlaceholder[] {
   const list: AppPlaceholder[] = [];
+  const used = new Map<string, number>();
+  // Contador por posición para enriquecer la descripción con "(#N)" cuando
+  // haya duplicados, así el admin puede distinguir qué widget es cuál en el
+  // mapper del PDF/Email aunque los labels sean idénticos.
+  const occurrenceByLabel = new Map<string, number>();
+
   for (const w of widgets) {
-    const base = normalizeKey(w.label);
-    if (!base) continue;
+    // Si el admin definió un placeholder manual, lo usamos (normalizado por
+    // consistencia). Si no, caemos a normalizeKey(label) con desambiguación
+    // por sufijo. El `used` map evita colisiones también entre manuales y
+    // automáticos (si alguien pone "cargo" manual y hay otro widget con
+    // label "Cargo", el segundo recibe `cargo1`).
+    const manual = (w.placeholder ?? "").trim();
+    const raw = manual ? normalizeKey(manual) : normalizeKey(w.label);
+    if (!raw) continue;
+    const base = uniqueBaseKey(raw, used);
+    const occ = (occurrenceByLabel.get(w.label) ?? 0) + 1;
+    occurrenceByLabel.set(w.label, occ);
+    const totalWithSameLabel = widgets.filter((x) => x.label === w.label).length;
+    const descSuffix = totalWithSameLabel > 1 ? ` (#${occ})` : "";
 
     if (w.type === "subform") {
       const fields = (w.config?.fields as SubformField[] | undefined) ?? [];
       list.push({
         placeholder: `\${${base}:tabla}`,
-        description: `${w.label} (tabla con todas las entradas)`,
+        description: `${w.label}${descSuffix} (tabla con todas las entradas)`,
         widgetType: w.type,
       });
+      // Para los subcampos del subform usamos un contador propio por subform
+      // para que `${base.cargo}` y `${base.cargo1}` desambigüen cuando hay
+      // dos SubformFields con el mismo label dentro del mismo subform.
+      const usedField = new Map<string, number>();
       for (const f of fields) {
-        const fk = normalizeKey(f.label);
-        if (!fk) continue;
+        const fRaw = normalizeKey(f.label);
+        if (!fRaw) continue;
+        const fk = uniqueBaseKey(fRaw, usedField);
         list.push({
           placeholder: `\${${base}.${fk}}`,
-          description: `${w.label} → ${f.label}`,
+          description: `${w.label}${descSuffix} → ${f.label}`,
           widgetType: w.type,
         });
       }
       list.push({
         placeholder: `\${${base}.count}`,
-        description: `${w.label} (número de entradas)`,
+        description: `${w.label}${descSuffix} (número de entradas)`,
         widgetType: w.type,
       });
       continue;
@@ -63,7 +101,7 @@ export function buildPlaceholders(
 
     list.push({
       placeholder: `\${${base}}`,
-      description: w.label,
+      description: `${w.label}${descSuffix}`,
       widgetType: w.type,
     });
   }
@@ -83,26 +121,36 @@ export function buildPlaceholders(
  *   - out["nombre"]          = JSON crudo (compat con uso previo)
  */
 export function expandFormData(
-  widgets: Pick<WidgetInstance, "id" | "type" | "label" | "config">[],
+  widgets: Pick<WidgetInstance, "id" | "type" | "label" | "config" | "placeholder">[],
   data: Record<string, unknown>,
   hiddenIds?: Set<string>,
 ): Record<string, string> {
   const out: Record<string, string> = {};
+  // Mismo contador que buildPlaceholders — iterando sobre los widgets en el
+  // MISMO orden la asignación queda sincronizada: el segundo widget "Cargo"
+  // produce placeholder `${cargo1}` en buildPlaceholders y aquí recibe la
+  // key `cargo1` → el mapper del PDF/Email encuentra el valor correcto.
+  const used = new Map<string, number>();
+
   for (const w of widgets) {
     if (hiddenIds?.has(w.id)) continue;
-    const base = normalizeKey(w.label);
-    if (!base) continue;
-    const raw = data[w.id];
+    const manual = (w.placeholder ?? "").trim();
+    const raw = manual ? normalizeKey(manual) : normalizeKey(w.label);
+    if (!raw) continue;
+    const base = uniqueBaseKey(raw, used);
+    const rawVal = data[w.id];
 
     if (w.type === "subform") {
       const fields = (w.config?.fields as SubformField[] | undefined) ?? [];
-      const entries = parseSubformEntries(raw);
-      out[base] = typeof raw === "string" ? raw : JSON.stringify(entries);
+      const entries = parseSubformEntries(rawVal);
+      out[base] = typeof rawVal === "string" ? rawVal : JSON.stringify(entries);
       out[`${base}:tabla`] = renderSubformTable(fields, entries);
       out[`${base}.count`] = String(entries.length);
+      const usedField = new Map<string, number>();
       for (const f of fields) {
-        const fk = normalizeKey(f.label);
-        if (!fk) continue;
+        const fRaw = normalizeKey(f.label);
+        if (!fRaw) continue;
+        const fk = uniqueBaseKey(fRaw, usedField);
         out[`${base}.${fk}`] = entries
           .map((e) => escapeHtml(String(e[f.id] ?? "")))
           .filter(Boolean)
@@ -111,12 +159,12 @@ export function expandFormData(
       continue;
     }
 
-    if (raw == null) {
+    if (rawVal == null) {
       out[base] = "";
-    } else if (typeof raw === "string") {
-      out[base] = raw;
+    } else if (typeof rawVal === "string") {
+      out[base] = rawVal;
     } else {
-      out[base] = JSON.stringify(raw);
+      out[base] = JSON.stringify(rawVal);
     }
   }
   return out;
@@ -210,4 +258,37 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+/**
+ * formData listo para el envío de email. Combina DOS familias de claves:
+ *
+ *   - por widgetId  → las usa el backend para resolver los destinatarios
+ *                     `type: 'field'` (`formData[recipient.widgetId]`).
+ *   - por label normalizado → las usan los `${placeholders}` del asunto y del
+ *                     cuerpo (lo que ya hacía `expandFormData`).
+ *
+ * Sin las primeras, un destinatario "campo del formulario" nunca resuelve y se
+ * descarta en silencio; si era el único en "Para", el envío falla entero con
+ * "No hay destinatarios válidos". El camino público (backend
+ * `forms.service.ts`) ya mandaba ambas — esto alinea el camino autenticado.
+ *
+ * Los widgets ocultos por reglas se omiten en AMBAS familias: si el campo no
+ * se mostró, su valor no debe acabar ni en el cuerpo ni como destinatario.
+ */
+export function buildEmailFormData(
+  widgets: Pick<WidgetInstance, "id" | "type" | "label" | "config" | "placeholder">[],
+  data: Record<string, unknown>,
+  hiddenIds?: Set<string>,
+): Record<string, string> {
+  const byWidgetId: Record<string, string> = {};
+  for (const w of widgets) {
+    if (hiddenIds?.has(w.id)) continue;
+    const raw = data[w.id];
+    if (raw == null) continue;
+    byWidgetId[w.id] = typeof raw === "string" ? raw : JSON.stringify(raw);
+  }
+  // Las claves por label van al final: ante una colisión improbable, mandan
+  // ellas (son las que alimentan los placeholders visibles).
+  return { ...byWidgetId, ...expandFormData(widgets, data, hiddenIds) };
 }

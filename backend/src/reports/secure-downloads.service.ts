@@ -100,6 +100,7 @@ export class SecureDownloadsService {
   ): Promise<{
     formName: string;
     expiresAt: Date;
+    remainingMs: number;
     totpAttempts: number;
     kind: SecureDownloadKind;
   }> {
@@ -110,9 +111,17 @@ export class SecureDownloadsService {
       expiresAt: { $gt: new Date() },
     });
     if (!doc) throw new NotFoundException('Enlace no válido');
+    // remainingMs se calcula server-side para que el countdown del frontend
+    // no dependa del reloj del navegador. Si el reloj del cliente difiere del
+    // reloj del servidor (clock skew), comparar directamente `expiresAt`
+    // contra `Date.now()` del navegador podía disparar "expirado" cuando el
+    // backend todavía aceptaba el token. Con remainingMs, el frontend arma
+    // el countdown contra su propio reloj: expiraLocal = Date.now() + remainingMs.
+    const remainingMs = Math.max(0, doc.expiresAt.getTime() - Date.now());
     return {
       formName: doc.formName,
       expiresAt: doc.expiresAt,
+      remainingMs,
       totpAttempts: doc.totpAttempts,
       kind: doc.kind,
     };

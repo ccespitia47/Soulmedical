@@ -1,4 +1,6 @@
 import type { TemplateItem, FolderItem } from "../../types/folder.types";
+import EntityIcon from "../common/EntityIcon";
+import Icon from "../common/Icon";
 
 type TemplateFolder = Pick<FolderItem, "id" | "name" | "icon" | "color">;
 
@@ -18,55 +20,65 @@ export default function TemplateFoldersList({
   onDeleteFolder,
 }: TemplateFoldersListProps) {
   return (
-    <div className="w-[220px] flex-shrink-0">
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <div className="border-b border-slate-200 px-4 py-3 text-[11px] font-bold uppercase tracking-[0.5px] text-gray-400">
+    <div className="w-full flex-shrink-0 lg:w-[240px]">
+      <div className="overflow-hidden rounded-[20px] border border-slate-200/80 bg-white shadow-[0_10px_30px_-18px_rgba(15,40,80,0.25)]">
+        <div className="border-b border-slate-100 px-4 py-3 text-[10.5px] font-bold uppercase tracking-[0.5px] text-gray-400">
           Carpetas
         </div>
 
-        <div
-          onClick={() => onSelect(null)}
-          className="flex cursor-pointer items-center gap-2 px-4 py-2.5"
-          style={{
-            background: selectedId === null ? "#e6faf7" : "transparent",
-            borderLeft: `3px solid ${selectedId === null ? "#00c2a8" : "transparent"}`,
-          }}
-        >
-          <span>📋</span>
-          <span
-            className="text-[13px]"
+        <div className="p-1.5">
+          <button
+            type="button"
+            onClick={() => onSelect(null)}
+            className="flex w-full cursor-pointer items-center gap-2.5 rounded-xl border-none px-3 py-2.5 text-left transition-colors"
             style={{
-              fontWeight: selectedId === null ? 700 : 500,
-              color: selectedId === null ? "#00c2a8" : "#374151",
+              background: selectedId === null ? "rgba(0,194,168,0.1)" : "transparent",
             }}
           >
-            Todas ({templates.length})
-          </span>
-        </div>
-
-        {folders.map((folder) => {
-          const count = templates.filter((t) => t.folderId === folder.id).length;
-          const isActive = selectedId === folder.id;
-          return (
-            <div
-              key={folder.id}
-              onClick={() => onSelect(folder.id)}
-              className="flex cursor-pointer items-center justify-between gap-2 px-4 py-2.5"
+            <span style={{ color: selectedId === null ? "#0891b2" : "#94a3b8" }}>
+              <Icon name="grid" size={16} />
+            </span>
+            <span
+              className="flex-1 text-[13px]"
               style={{
-                background: isActive ? "#e6faf7" : "transparent",
-                borderLeft: `3px solid ${isActive ? folder.color : "transparent"}`,
-              }}
-              onMouseOver={(e) => {
-                if (!isActive) e.currentTarget.style.background = "#f8fafc";
-              }}
-              onMouseOut={(e) => {
-                if (!isActive) e.currentTarget.style.background = "transparent";
+                fontWeight: selectedId === null ? 700 : 500,
+                color: selectedId === null ? "#0891b2" : "#374151",
               }}
             >
-              <div className="flex min-w-0 items-center gap-2">
-                <span className="text-base">{folder.icon}</span>
+              Todas
+            </span>
+            <span
+              className="rounded-full px-2 py-0.5 text-[10.5px] font-bold"
+              style={{
+                background: selectedId === null ? "rgba(0,194,168,0.15)" : "#f1f5f9",
+                color: selectedId === null ? "#0891b2" : "#64748b",
+              }}
+            >
+              {templates.length}
+            </span>
+          </button>
+
+          {folders.map((folder) => {
+            const count = templates.filter((t) => t.folderId === folder.id).length;
+            const isActive = selectedId === folder.id;
+            return (
+              <div
+                key={folder.id}
+                onClick={() => onSelect(folder.id)}
+                className="group flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2.5 transition-colors"
+                style={{ background: isActive ? `${folder.color}14` : "transparent" }}
+                onMouseOver={(e) => {
+                  if (!isActive) e.currentTarget.style.background = "#f1f5f9";
+                }}
+                onMouseOut={(e) => {
+                  if (!isActive) e.currentTarget.style.background = "transparent";
+                }}
+              >
+                <span className="flex flex-shrink-0" style={{ color: folder.color }}>
+                  <EntityIcon icon={folder.icon} size={16} />
+                </span>
                 <span
-                  className="overflow-hidden text-ellipsis whitespace-nowrap text-[13px]"
+                  className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[13px]"
                   style={{
                     fontWeight: isActive ? 700 : 500,
                     color: isActive ? folder.color : "#374151",
@@ -74,22 +86,29 @@ export default function TemplateFoldersList({
                 >
                   {folder.name}
                 </span>
-              </div>
-              <div className="flex flex-shrink-0 items-center gap-1.5">
-                <span className="text-[11px] text-gray-400">{count}</span>
+                <span
+                  className="flex-shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold"
+                  style={{
+                    background: isActive ? `${folder.color}22` : "#f1f5f9",
+                    color: isActive ? folder.color : "#64748b",
+                  }}
+                >
+                  {count}
+                </span>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     onDeleteFolder(folder);
                   }}
-                  className="cursor-pointer rounded border-none bg-transparent px-1 py-px text-[13px] text-gray-400 hover:text-red-500"
+                  aria-label="Eliminar carpeta"
+                  className="flex flex-shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-transparent p-1 text-slate-300 opacity-0 transition-all hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
                 >
-                  🗑️
+                  <Icon name="trash" size={14} />
                 </button>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );

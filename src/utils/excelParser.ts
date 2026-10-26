@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import JSZip from "jszip";
 
 export type CellStyle = {
@@ -18,29 +18,22 @@ export type CellData = {
   style: CellStyle;
 };
 
+export type ExcelColumn = {
+  letter: string;
+  width: number;
+};
+
+export type ExcelParsed = {
+  columns: ExcelColumn[];
+  rows: CellData[][];
+  rowHeights: number[];
+};
+
 export type EmbeddedImage = {
   b64: string;
   col: number;
   row: number;
 };
-
-export const COL_WIDTHS: Record<string, number> = {
-  A: 100, B: 150, C: 110, D: 115, E: 110,
-  F: 135, G: 170, H: 180, I: 185,
-};
-
-export const COL_LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H", "I"];
-
-export const MAPPABLE_ROWS = new Set([4, ...Array.from({ length: 18 }, (_, i) => i + 6)]);
-
-function excelSerialToDate(serial: number): string {
-  const d = new Date((serial - 25569) * 86400 * 1000);
-  return [
-    d.getUTCDate().toString().padStart(2, "0"),
-    (d.getUTCMonth() + 1).toString().padStart(2, "0"),
-    d.getUTCFullYear(),
-  ].join("-");
-}
 
 export async function extractImages(base64: string): Promise<EmbeddedImage[]> {
   try {
@@ -65,7 +58,7 @@ export async function extractImages(base64: string): Promise<EmbeddedImage[]> {
 
       const anchors = [
         ...xml.matchAll(
-          /<xdr:(?:oneCellAnchor|twoCellAnchor)>([\s\S]*?)<\/xdr:(?:oneCellAnchor|twoCellAnchor)>/g
+          /<xdr:(?:oneCellAnchor|twoCellAnchor)>([\s\S]*?)<\/xdr:(?:oneCellAnchor|twoCellAnchor)>/g,
         ),
       ];
 
@@ -94,66 +87,177 @@ export async function extractImages(base64: string): Promise<EmbeddedImage[]> {
   }
 }
 
-export function parseExcel(base64: string): CellData[][] {
-  const raw = base64.includes(",") ? base64.split(",")[1] : base64;
-  const wb = XLSX.read(raw, { type: "base64" });
-  const ws = wb.Sheets[wb.SheetNames[0]];
+// ─── Helpers de layout ────────────────────────────────────────────────────
 
-  const mergedMap: Record<string, { rowspan: number; colspan: number }> = {};
+function colLetter(col: number): string {
+  let s = "";
+  let n = col;
+  while (n > 0) {
+    const m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+/** Excel column width (chars) → px a Calibri 11 (≈7px por char). Mínimo 50. */
+function colWidthToPx(w: number | undefined): number {
+  if (typeof w !== "number") return 90;
+  return Math.max(50, Math.round(w * 7));
+}
+
+function stringifyCellValue(v: ExcelJS.CellValue): string {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
+    return String(v);
+  }
+  if (v instanceof Date) {
+    // Formato dd/mm/yyyy que Sara ya usa en los formatos.
+    return `${String(v.getUTCDate()).padStart(2, "0")}/${String(v.getUTCMonth() + 1).padStart(2, "0")}/${v.getUTCFullYear()}`;
+  }
+  const anyV = v as { richText?: Array<{ text?: string }>; text?: string; result?: unknown };
+  if (Array.isArray(anyV.richText)) {
+    return anyV.richText.map((r) => r.text ?? "").join("");
+  }
+  if (typeof anyV.text === "string") return anyV.text;
+  if (anyV.result !== undefined) return String(anyV.result);
+  return String(v);
+}
+
+function decodeRange(s: string): {
+  startRow: number;
+  startCol: number;
+  endRow: number;
+  endCol: number;
+} | null {
+  const m = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/i.exec(s);
+  if (!m) return null;
+  return {
+    startCol: decodeCol(m[1].toUpperCase()),
+    startRow: parseInt(m[2], 10),
+    endCol: decodeCol(m[3].toUpperCase()),
+    endRow: parseInt(m[4], 10),
+  };
+}
+
+export function decodeCol(letter: string): number {
+  let n = 0;
+  for (const ch of letter.toUpperCase()) n = n * 26 + (ch.charCodeAt(0) - 64);
+  return n;
+}
+
+// ─── parseExcel — nuevo, con exceljs y rango real ─────────────────────────
+
+/**
+ * Lee el Excel completo con estilos reales (fuentes, alineación, negritas)
+ * usando exceljs. Detecta el rango REAL escrito — ignora `!ref` cuando está
+ * inflado (algunos archivos guardan A1:Y995 aunque solo tengan L37 de
+ * contenido, y sin este límite se ven miles de columnas vacías).
+ *
+ * Devuelve `{columns, rows}` — la UI usa `columns` para armar el <colgroup>
+ * con anchos y letras reales del Excel, sin depender de constantes hardcoded.
+ */
+export async function parseExcel(base64: string): Promise<ExcelParsed> {
+  const raw = base64.includes(",") ? base64.split(",")[1] : base64;
+  const binary = atob(raw);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(bytes.buffer);
+  const ws = wb.worksheets[0];
+  if (!ws) return { columns: [], rows: [], rowHeights: [] };
+
+  const maxRow = Math.max(ws.actualRowCount, 1);
+  const maxCol = Math.max(ws.actualColumnCount, 1);
+
+  // ─── Merges ────────────────────────────────────────────────────────────
   const mergedSkip = new Set<string>();
-  for (const m of (ws["!merges"] as XLSX.Range[]) || []) {
-    const tl = XLSX.utils.encode_cell({ r: m.s.r, c: m.s.c });
-    mergedMap[tl] = { rowspan: m.e.r - m.s.r + 1, colspan: m.e.c - m.s.c + 1 };
-    for (let r = m.s.r; r <= m.e.r; r++)
-      for (let c = m.s.c; c <= m.e.c; c++) {
-        const coord = XLSX.utils.encode_cell({ r, c });
+  const mergedMap: Record<string, { rowspan: number; colspan: number }> = {};
+  const mergeStrings: string[] = (ws.model?.merges as string[]) ?? [];
+  for (const s of mergeStrings) {
+    const r = decodeRange(s);
+    if (!r) continue;
+    const tl = `${colLetter(r.startCol)}${r.startRow}`;
+    mergedMap[tl] = {
+      rowspan: r.endRow - r.startRow + 1,
+      colspan: r.endCol - r.startCol + 1,
+    };
+    for (let rr = r.startRow; rr <= r.endRow; rr++) {
+      for (let cc = r.startCol; cc <= r.endCol; cc++) {
+        const coord = `${colLetter(cc)}${rr}`;
         if (coord !== tl) mergedSkip.add(coord);
       }
+    }
   }
 
-  const range = XLSX.utils.decode_range(ws["!ref"] || "A1:I27");
-  const rows: CellData[][] = [];
+  // ─── Anchos reales por columna ────────────────────────────────────────
+  const columns: ExcelColumn[] = [];
+  for (let c = 1; c <= maxCol; c++) {
+    const col = ws.getColumn(c);
+    columns.push({ letter: colLetter(c), width: colWidthToPx(col.width) });
+  }
 
-  for (let r = range.s.r; r <= range.e.r; r++) {
+  // ─── Alturas reales por fila (Excel puntos → pixels ×1.33) ─────────────
+  // Sin esto, todas las filas se ven a la altura mínima 20px, lo que
+  // aplasta el formato vs. el original (headers de 30px, filas de contenido
+  // de 15-25px).
+  const rowHeights: number[] = [];
+  for (let r = 1; r <= maxRow; r++) {
+    const row = ws.getRow(r);
+    const px = row.height ? Math.round(row.height * 1.33) : 22;
+    rowHeights.push(Math.max(18, px));
+  }
+
+  // ─── Celdas ─────────────────────────────────────────────────────────────
+  const rows: CellData[][] = [];
+  for (let r = 1; r <= maxRow; r++) {
     const rowArr: CellData[] = [];
-    for (let c = range.s.c; c <= range.e.c; c++) {
-      const coord = XLSX.utils.encode_cell({ r, c });
+    for (let c = 1; c <= maxCol; c++) {
+      const coord = `${colLetter(c)}${r}`;
       if (mergedSkip.has(coord)) continue;
 
-      const cell = ws[coord];
-      const colLetter = XLSX.utils.encode_col(c);
-      const rowNum = r + 1;
+      const cell = ws.getCell(r, c);
       const merge = mergedMap[coord] || { rowspan: 1, colspan: 1 };
+      const font = cell.font ?? {};
+      const alignment = cell.alignment ?? {};
 
-      let value = "";
-      if (cell?.v !== undefined && cell.v !== null) {
-        if (typeof cell.v === "number" && cell.v > 40000 && cell.v < 60000 && cell.t === "n")
-          value = excelSerialToDate(cell.v);
-        else value = String(cell.v);
-      }
+      const value =
+        cell.value !== null && cell.value !== undefined
+          ? stringifyCellValue(cell.value)
+          : "";
 
-      const isBold = rowNum <= 5 || rowNum >= 24;
-      const isCenter =
-        (rowNum === 1 && colLetter === "C") ||
-        (rowNum === 5 && ["A", "G"].includes(colLetter)) ||
-        (rowNum >= 24 && ["A", "B", "C", "G"].includes(colLetter));
+      // Alignment: mapeamos horizontales de Excel → 3 opciones CSS.
+      const hAlign = alignment.horizontal;
+      const align: "left" | "center" | "right" =
+        hAlign === "center" || hAlign === "centerContinuous"
+          ? "center"
+          : hAlign === "right"
+            ? "right"
+            : "left";
+
+      // Regla de mappeable — la celda es mapeable cuando NO trae texto propio
+      // (es un campo del formato para rellenar). Antes esto estaba hardcoded
+      // a `MAPPABLE_ROWS = [4, 6..23]` que solo servía para un formato específico.
+      const isMappable = value.trim() === "";
 
       rowArr.push({
         coord,
-        col: colLetter,
-        row: rowNum,
+        col: colLetter(c),
+        row: r,
         value,
         rowspan: merge.rowspan,
         colspan: merge.colspan,
-        isMappable: MAPPABLE_ROWS.has(rowNum),
-        style: { align: isCenter ? "center" : "left", bold: isBold, wrapText: true },
+        isMappable,
+        style: {
+          align,
+          bold: !!font.bold,
+          wrapText: alignment.wrapText !== false,
+        },
       });
     }
     rows.push(rowArr);
   }
-  return rows;
-}
 
-export function decodeCol(letter: string): number {
-  return XLSX.utils.decode_col(letter);
+  return { columns, rows, rowHeights };
 }

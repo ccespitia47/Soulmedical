@@ -49,6 +49,7 @@ describe('TasksService.resendStep', () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
     );
     // sendStepEmail hace side-effects de red (EmailService); lo mockeamos
     // para aislar la lógica de throttle/ownership de resendStep. Es público

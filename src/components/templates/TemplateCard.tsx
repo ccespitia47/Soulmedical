@@ -1,4 +1,6 @@
 import type { TemplateItem, FolderItem } from "../../types/folder.types";
+import EntityIcon from "../common/EntityIcon";
+import Icon from "../common/Icon";
 
 type TemplateFolder = Pick<FolderItem, "id" | "name" | "icon" | "color">;
 
@@ -15,56 +17,58 @@ export default function TemplateCard({
   onUse,
   onDelete,
 }: TemplateCardProps) {
+  const accent = folder?.color ?? "#00c2a8";
   return (
-    <div
-      className="flex flex-col rounded-xl border border-slate-200 bg-white px-4 pb-3.5 pt-4 shadow-[0_1px_4px_rgba(0,0,0,0.04)] transition-shadow"
-      onMouseOver={(e) => {
-        e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.1)";
-      }}
-      onMouseOut={(e) => {
-        e.currentTarget.style.boxShadow = "0 1px 4px rgba(0,0,0,0.04)";
-      }}
-    >
-      <div className="mb-3 flex items-start justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[10px] bg-gradient-to-br from-emerald-50 to-sky-50 text-[22px]">
-            {template.icon}
+    <div className="group flex flex-col rounded-[20px] border border-slate-200/80 bg-white px-4 pb-4 pt-4 shadow-[0_1px_4px_rgba(15,40,80,0.06)] transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-[0_18px_38px_-16px_rgba(15,40,80,0.28)]">
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div
+            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl"
+            style={{ background: `${accent}14`, color: accent }}
+          >
+            <EntityIcon icon={template.icon} size={20} />
           </div>
-          <div>
-            <div className="text-sm font-bold text-gray-900">{template.name}</div>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-bold text-gray-900">{template.name}</div>
             {folder && (
-              <div className="mt-0.5 text-[11px] text-gray-400">
-                {folder.icon} {folder.name}
+              <div className="mt-0.5 flex items-center gap-1 text-[11px] text-gray-400">
+                <EntityIcon icon={folder.icon} size={12} />
+                <span className="truncate">{folder.name}</span>
               </div>
             )}
           </div>
         </div>
         <button
           onClick={onDelete}
-          className="cursor-pointer rounded border-none bg-transparent px-1 py-0.5 text-sm text-gray-400 hover:text-red-500"
+          aria-label="Eliminar plantilla"
+          className="flex flex-shrink-0 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent p-1.5 text-slate-300 transition-colors hover:bg-red-50 hover:text-red-500"
         >
-          🗑️
+          <Icon name="trash" size={15} />
         </button>
       </div>
 
       {template.description && (
-        <p className="m-0 mb-3 text-xs leading-relaxed text-gray-500">
+        <p className="m-0 mb-3 line-clamp-2 text-xs leading-relaxed text-gray-500">
           {template.description}
         </p>
       )}
 
-      <div className="mb-3.5 flex gap-2.5">
-        <span className="rounded-[20px] bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span
+          className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+          style={{ background: `${accent}14`, color: accent }}
+        >
+          <Icon name="fileText" size={11} />
           {template.widgets.length} campo{template.widgets.length !== 1 ? "s" : ""}
         </span>
-        <span className="text-[11px] text-gray-400">por {template.createdBy}</span>
+        <span className="truncate text-[11px] text-gray-400">por {template.createdBy}</span>
       </div>
 
       <button
         onClick={onUse}
-        className="mt-auto w-full cursor-pointer rounded-lg border-none bg-[#00c2a8] px-2 py-2 text-[13px] font-bold text-white shadow-[0_2px_6px_rgba(0,194,168,0.25)]"
+        className="mt-auto inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border-none bg-[linear-gradient(135deg,#00c2a8_0%,#0891b2_100%)] px-2 py-2.5 text-[13px] font-bold text-white shadow-[0_4px_14px_-4px_rgba(0,194,168,0.5)] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-6px_rgba(0,194,168,0.6)]"
       >
-        ✅ Usar plantilla
+        <Icon name="checkCircle" size={15} /> Usar plantilla
       </button>
     </div>
   );

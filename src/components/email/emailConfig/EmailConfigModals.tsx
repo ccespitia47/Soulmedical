@@ -1,4 +1,5 @@
 import PdfMapper from "../PdfMapper";
+import PdfPreview from "../PdfPreview";
 import ExcelMapper from "../ExcelMapper";
 import ExcelPreview from "../ExcelPreview";
 import PreviewModal from "./PreviewModal";
@@ -51,13 +52,20 @@ export default function EmailConfigModals({
           onClose={onCloseEmailPreview}
         />
       )}
-      {showPdfPreview && (
+      {showPdfPreview && config.pdfBase64 ? (
+        <PdfPreview
+          pdfBase64={config.pdfBase64}
+          mappings={config.pdfMappings || []}
+          availablePlaceholders={placeholders}
+          onClose={onClosePdfPreview}
+        />
+      ) : showPdfPreview ? (
         <PreviewModal
           title="📄 Preview - PDF"
           html={renderWithPlaceholders(config.pdfTemplate, placeholders)}
           onClose={onClosePdfPreview}
         />
-      )}
+      ) : null}
       {showPdfMapper && config.pdfBase64 && (
         <PdfMapper
           pdfBase64={config.pdfBase64}

@@ -5,6 +5,8 @@ import {
   toggleTaskShareLinkApi,
   type TaskDetailDto,
   type TaskRecipientDto,
+  type TaskScoreWidgetDto,
+  type TaskSubmissionDto,
 } from '../../services/api';
 import SubmissionsListView from './SubmissionsListView';
 import Icon from '../common/Icon';
@@ -133,7 +135,11 @@ export default function TaskInfoPanel({ detail, formName, onRefetch, onDelete }:
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+      <div
+        className={`grid grid-cols-2 gap-2.5 ${
+          detail.scoreWidgets.length > 0 ? 'sm:grid-cols-5' : 'sm:grid-cols-4'
+        }`}
+      >
         <StatChip icon="users" value={detail.recipients.length} label="Destinatarios" color="#334155" />
         <StatChip
           icon="checkCircle"
@@ -148,6 +154,14 @@ export default function TaskInfoPanel({ detail, formName, onRefetch, onDelete }:
           color="#b45309"
         />
         <StatChip icon="link" value={detail.externalCount} label="Externos" color="#0891b2" />
+        {detail.scoreWidgets.length > 0 && (
+          <StatChip
+            icon="award"
+            value={computeAverage(detail.submissions, detail.scoreWidgets[0].id)}
+            label={detail.scoreWidgets.length === 1 ? 'Promedio' : `Prom. ${detail.scoreWidgets[0].label}`}
+            color="#7c3aed"
+          />
+        )}
       </div>
 
       {/* Enlace compartible */}
@@ -222,7 +236,13 @@ export default function TaskInfoPanel({ detail, formName, onRefetch, onDelete }:
       </div>
 
       {/* Destinatarios */}
-      <RecipientsTable recipients={detail.recipients} resendBusy={resendBusy} onResend={handleResend} />
+      <RecipientsTable
+        recipients={detail.recipients}
+        resendBusy={resendBusy}
+        onResend={handleResend}
+        scoreWidgets={detail.scoreWidgets}
+        submissions={detail.submissions}
+      />
 
       {resendFeedback && (
         <div
@@ -335,7 +355,7 @@ function StatChip({
   color,
 }: {
   icon: string;
-  value: number;
+  value: number | string;
   label: string;
   color: string;
 }) {
@@ -350,14 +370,50 @@ function StatChip({
   );
 }
 
+/**
+ * Promedio de un widget de nota. Recorre las submissions de la tarea,
+ * parsea `data[widgetId]` como número (ignora vacíos o no-numéricos) y
+ * devuelve el promedio con 2 decimales, o "—" si no hay valores válidos.
+ */
+function computeAverage(submissions: TaskSubmissionDto[], widgetId: string): string {
+  const nums: number[] = [];
+  for (const s of submissions) {
+    const raw = s.data?.[widgetId];
+    if (raw == null || raw === '') continue;
+    const n = parseFloat(String(raw));
+    if (!Number.isNaN(n)) nums.push(n);
+  }
+  if (nums.length === 0) return '—';
+  const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+  return avg.toFixed(2);
+}
+
+/** Nota de un respondent concreto (busca su submission por email). */
+function scoreForRespondent(
+  submissions: TaskSubmissionDto[],
+  respondentEmail: string,
+  widgetId: string,
+): string {
+  const sub = submissions.find(
+    (s) => s.respondentEmail?.toLowerCase() === respondentEmail.toLowerCase(),
+  );
+  const raw = sub?.data?.[widgetId];
+  if (raw == null || raw === '') return '—';
+  return String(raw);
+}
+
 function RecipientsTable({
   recipients,
   resendBusy,
   onResend,
+  scoreWidgets,
+  submissions,
 }: {
   recipients: TaskRecipientDto[];
   resendBusy: number | null;
   onResend: (recipient: TaskRecipientDto) => void;
+  scoreWidgets: TaskScoreWidgetDto[];
+  submissions: TaskSubmissionDto[];
 }) {
   if (recipients.length === 0) {
     return (
@@ -376,6 +432,11 @@ function RecipientsTable({
               <th className="px-3.5 py-2.5">Destinatario</th>
               <th className="px-3.5 py-2.5">Estado</th>
               <th className="px-3.5 py-2.5">Completado</th>
+              {scoreWidgets.map((w) => (
+                <th key={w.id} className="px-3.5 py-2.5 text-right">
+                  {w.label}
+                </th>
+              ))}
               <th className="px-3.5 py-2.5 text-right">Acción</th>
             </tr>
           </thead>
@@ -389,7 +450,7 @@ function RecipientsTable({
                   : 'No disponible en este momento.'
                 : undefined;
               return (
-                <tr key={r.stepIndex} className="border-b border-slate-100 last:border-b-0">
+                <tr key={`${r.stepIndex}-${r.email}`} className="border-b border-slate-100 last:border-b-0">
                   <td className="px-3.5 py-2.5">
                     <div className="font-semibold text-gray-900">{r.name || r.email}</div>
                     {r.name && <div className="text-[11px] text-gray-400">{r.email}</div>}
@@ -405,6 +466,14 @@ function RecipientsTable({
                   <td className="px-3.5 py-2.5 whitespace-nowrap text-gray-500 tabular-nums">
                     {r.submittedAt ? formatDateTime(r.submittedAt) : '—'}
                   </td>
+                  {scoreWidgets.map((w) => (
+                    <td
+                      key={w.id}
+                      className="px-3.5 py-2.5 text-right font-semibold tabular-nums text-purple-700"
+                    >
+                      {scoreForRespondent(submissions, r.email, w.id)}
+                    </td>
+                  ))}
                   <td className="px-3.5 py-2.5 text-right">
                     {r.status !== 'completed' && (
                       <button

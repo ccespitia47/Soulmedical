@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { widgetRegistry } from "../components/widgets/registry";
+import { ShareSearchContext } from "../components/widgets/search/shareSearchContext";
 import { evaluateRules } from "../utils/formRules";
 import type { WidgetInstance, FormRule } from "../types/widget.types";
+import QuizReviewModal from "../components/form/QuizReviewModal";
+import { computeQuizReview } from "../lib/quizReview";
 
 // getAll cubre checkbox múltiples; para inputs únicos devuelve [valor].
 const collectFieldValue = (fd: FormData, name: string): string => {
@@ -61,14 +64,80 @@ export default function TaskSharePage() {
     [rules, fieldValues],
   );
 
-  const handleFormChange = (e: React.FormEvent<HTMLFormElement>) => {
-    if (state.kind !== "ready") return;
-    const fd = new FormData(e.currentTarget);
-    const next: Record<string, string> = {};
-    state.data.widgets.forEach((w) => {
-      next[w.id] = collectFieldValue(fd, w.id);
+  const handleFormChange = () => {
+    if (state.kind !== "ready" || !formRef.current) return;
+    // Postergamos 1 frame: los hidden inputs derivados (calc __result,
+    // quiz_question __points) los actualiza React tras el change. Leer
+    // inmediatamente devuelve valores viejos y el quiz_score marca todo
+    // como incorrecto.
+    const form = formRef.current;
+    requestAnimationFrame(() => {
+      if (!form.isConnected) return;
+      const fd = new FormData(form);
+      const next: Record<string, string> = {};
+      state.data.widgets.forEach((w) => {
+        next[w.id] = collectFieldValue(fd, w.id);
+      });
+      fd.forEach((v, k) => {
+        if (!(k in next)) next[k] = typeof v === "string" ? v : "";
+      });
+      setFieldValues(next);
     });
-    setFieldValues(next);
+  };
+
+  // Un widget (ej. search) puede pedir rellenar valores en OTROS widgets tras
+  // una selección (fieldMappings). Igual que FormPage.handleWidgetValues:
+  // seteamos el input destino con el setter nativo (compatible con React 19)
+  // y disparamos 'input' para que se entere. Sub-campos de subform usan el
+  // formato 'subformId:fieldId' vía CustomEvent 'subform:fill'.
+  const handleWidgetValues = (values: Record<string, string>) => {
+    const form = formRef.current;
+    if (!form) return;
+    const nativeInputSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    const nativeTextareaSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLTextAreaElement.prototype,
+      "value",
+    )?.set;
+    const nativeSelectSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLSelectElement.prototype,
+      "value",
+    )?.set;
+
+    const subformFills = new Map<string, Record<string, string>>();
+
+    for (const [name, value] of Object.entries(values)) {
+      if (name.includes(":")) {
+        const [subformId, fieldId] = name.split(":", 2);
+        if (!subformId || !fieldId) continue;
+        const bag = subformFills.get(subformId) ?? {};
+        bag[fieldId] = value;
+        subformFills.set(subformId, bag);
+        continue;
+      }
+      const el = form.elements.namedItem(name) as HTMLElement | RadioNodeList | null;
+      if (!el || el instanceof RadioNodeList) continue;
+      if (el instanceof HTMLInputElement && nativeInputSetter) {
+        nativeInputSetter.call(el, value);
+      } else if (el instanceof HTMLTextAreaElement && nativeTextareaSetter) {
+        nativeTextareaSetter.call(el, value);
+      } else if (el instanceof HTMLSelectElement && nativeSelectSetter) {
+        nativeSelectSetter.call(el, value);
+      } else {
+        continue;
+      }
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+    for (const [subformId, fill] of subformFills) {
+      window.dispatchEvent(
+        new CustomEvent("subform:fill", { detail: { subformId, values: fill } }),
+      );
+    }
+
+    handleFormChange();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -112,6 +181,22 @@ export default function TaskSharePage() {
     );
   }
   if (state.kind === "done") {
+    const review = computeQuizReview(state.data.widgets, fieldValues);
+    if (review.hasReview) {
+      return (
+        <QuizReviewModal
+          questions={review.questions}
+          fieldValues={fieldValues}
+          showCorrectness={review.showCorrectness}
+          scoresToShow={review.scoresToShow}
+          onClose={() => {
+            resetForm();
+            formRef.current?.reset();
+            setFieldValues({});
+          }}
+        />
+      );
+    }
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f0f4f8] p-5">
         <div className="max-w-md rounded-2xl bg-white p-8 text-center shadow-lg">
@@ -139,6 +224,7 @@ export default function TaskSharePage() {
           <h1 className="mb-6 border-b-2 border-[#00c2a8] pb-[18px] text-[22px] font-bold text-gray-900">
             {data.formName}
           </h1>
+          <ShareSearchContext.Provider value={token ? { token } : null}>
           <form ref={formRef} onSubmit={handleSubmit} onChange={handleFormChange}>
             <div className="flex flex-col gap-[18px]">
               {data.widgets.filter((w) => !hiddenIds.has(w.id)).map((widget) => {
@@ -154,7 +240,13 @@ export default function TaskSharePage() {
                 };
                 return (
                   <div key={widget.id} className="rounded-[10px] border border-slate-200 bg-gray-50 p-4">
-                    <RenderComponent widget={widgetWithPrefill} />
+                    <RenderComponent
+                      widget={widgetWithPrefill}
+                      onValue={handleWidgetValues}
+                      fieldValues={fieldValues}
+                      hiddenWidgetIds={hiddenIds}
+                      allWidgets={data.widgets}
+                    />
                   </div>
                 );
               })}
@@ -169,6 +261,7 @@ export default function TaskSharePage() {
               </button>
             </div>
           </form>
+          </ShareSearchContext.Provider>
         </div>
       </div>
     </div>

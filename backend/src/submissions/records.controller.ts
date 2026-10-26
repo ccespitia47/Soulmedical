@@ -8,8 +8,10 @@ import {
   Res,
   UseGuards,
   NotFoundException,
+  BadRequestException,
   Post,
   Body,
+  Delete,
   Logger,
 } from '@nestjs/common';
 import { Response } from 'express';
@@ -137,6 +139,52 @@ export class RecordsController {
       `attachment; filename="${encoded}"; filename*=UTF-8''${encoded}`,
     );
     res.send(buffer);
+  }
+
+  /**
+   * Elimina una submission. Requiere motivo (auditable). El motivo queda
+   * guardado en admin_actions.metadata.reason para el reporte de acciones.
+   *
+   * Nota de scope: hoy el borrado es un hard-delete (Mongo deleteOne). Si
+   * más adelante Sara pide "undo", conviene migrar a soft-delete con
+   * `deletedAt` + `deletedByReason` en la propia submission. La auditoría
+   * ya deja rastro del actor + motivo aunque el doc desaparezca.
+   */
+  @Delete('submissions/:id')
+  @RequirePermission(Permission.FORMS_DELETE)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  async deleteSubmission(
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+    @Request() req: AuthRequest,
+  ): Promise<{ ok: true }> {
+    const reason = (body?.reason ?? '').trim();
+    if (reason.length < 5) {
+      throw new BadRequestException(
+        'El motivo debe tener al menos 5 caracteres.',
+      );
+    }
+    if (reason.length > 300) {
+      throw new BadRequestException(
+        'El motivo no puede exceder 300 caracteres.',
+      );
+    }
+
+    const { formId, formName } = await this.recordsService.deleteOne(id, {
+      userId: req.user.id,
+      reason,
+    });
+
+    await this.auditService.log({
+      actor: actorFrom(req),
+      action: AdminActionType.SUBMISSION_DELETE,
+      targetType: AdminActionTargetType.SUBMISSION,
+      targetId: id,
+      targetName: formName,
+      metadata: { reason, formId, ip: req.ip ?? null },
+    });
+
+    return { ok: true };
   }
 
   @Post('forms/:formId/records/bulk-pdf')

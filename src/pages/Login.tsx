@@ -1,8 +1,22 @@
 import { useState } from "react";
+import { useReducedMotion } from "framer-motion";
 import type { AuthUser } from "../types/auth.types";
 import logo from "../assets/Logo_GrupoSoul.png";
 import AuthLayout from "../components/auth/AuthLayout";
 import LoginModal, { type AppOption } from "../components/auth/LoginModal";
+import { tiltMove, tiltReset } from "../lib/cardTilt";
+
+// Logos oscuros (wordmark completo) por app — viven en /public.
+const LOGOS: Record<AppOption["id"], string> = {
+  soulforms: "/soulforms-logo-dark.png",
+  consientify: "/consientify-logo-dark.png",
+};
+
+// Sombra de color del tilt en hover, a juego con el degradado de cada app.
+const CARD_GLOW: Record<AppOption["id"], string> = {
+  soulforms: "rgba(22,180,206,0.5)",
+  consientify: "rgba(190,56,151,0.5)",
+};
 
 type LoginProps = {
   onLogin: (user: AuthUser, app: AppOption["id"], token: string) => void;
@@ -14,63 +28,83 @@ const APPS: AppOption[] = [
   {
     id: "soulforms",
     name: "SoulForms",
-    description: "Gestión clínica de formularios",
+    description: "Gestión de Formularios",
     icon: "🏥",
-    gradient: "linear-gradient(135deg, #00c2a8 0%, #0891b2 100%)",
-    shadow: "rgba(0,194,168,0.35)",
-    accent: "#00c2a8",
+    gradient: "linear-gradient(135deg, #1CB4CE 0%, #127E96 100%)",
+    shadow: "rgba(22,166,192,0.35)",
+    accent: "#0F7C90",
   },
   {
     id: "consientify",
     name: "Consientify",
     description: "Gestión de consentimientos",
     icon: "📋",
-    gradient: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
-    shadow: "rgba(99,102,241,0.35)",
-    accent: "#6366f1",
+    gradient: "linear-gradient(135deg, #BE3897 0%, #8A2570 100%)",
+    shadow: "rgba(166,46,138,0.32)",
+    accent: "#A62E8A",
   },
 ];
 
 export default function Login({ onLogin, onGoRegister, onGoForgot }: LoginProps) {
   const [selectedApp, setSelectedApp] = useState<AppOption["id"] | null>(null);
   const activeApp = APPS.find((a) => a.id === selectedApp);
+  const reduce = useReducedMotion();
+
+  // El modal entra desde el lado de la tarjeta que lo abrió: la columna
+  // izquierda (índice 0) empuja desde la izquierda; la derecha, desde la derecha.
+  const modalDirection: "left" | "right" =
+    APPS.findIndex((a) => a.id === selectedApp) === 0 ? "left" : "right";
 
   return (
-    <AuthLayout maxWidth="lg">
-      <div className="mb-8 text-center">
+    <AuthLayout maxWidth="lg" variant="light" bgImage="/background.png">
+      <div className="animate-fade-up mb-9 text-center">
         <img
           src={logo}
           alt="Grupo Soul"
-          className="mx-auto mb-3 h-12 object-contain opacity-95 brightness-0 invert"
+          className="mx-auto mb-5 h-11 object-contain"
         />
-        <h1 className="m-0 text-[26px] font-extrabold tracking-tight text-white [text-shadow:0_2px_12px_rgba(0,0,0,0.25)]">
+        <h1 className="m-0 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
           Grupo Soul
         </h1>
-        <p className="mt-1 text-[13px] text-white/75">
+        <p className="mx-auto mt-2.5 max-w-[340px] text-[15px] leading-relaxed text-slate-500">
           Selecciona la aplicación a la que deseas ingresar
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        {APPS.map((app) => (
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        {APPS.map((app, i) => (
           <button
             key={app.id}
             onClick={() => setSelectedApp(app.id)}
-            className="group flex flex-col items-center gap-3.5 rounded-[20px] border border-white/70 bg-white/[0.88] p-6 text-center shadow-[0_24px_60px_rgba(0,40,80,0.22)] backdrop-blur-2xl transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_32px_80px_rgba(0,40,80,0.28)]"
+            onMouseMove={reduce ? undefined : (e) => tiltMove(e, CARD_GLOW[app.id])}
+            onMouseLeave={reduce ? undefined : tiltReset}
+            style={{
+              animationDelay: `${120 + i * 90}ms`,
+              background: "#0F1623",
+              transformStyle: "preserve-3d",
+            }}
+            className="group animate-fade-up relative flex flex-col items-center gap-5 rounded-[20px] border border-white/10 p-7 text-center shadow-[0_22px_54px_-16px_rgba(15,25,50,0.55)] transition-all duration-300 ease-out"
           >
-            <div
-              className="flex h-16 w-16 items-center justify-center rounded-[18px] text-3xl"
-              style={{ background: app.gradient, boxShadow: `0 8px 24px ${app.shadow}` }}
-            >
-              {app.icon}
+            {/* Brillo radial que sigue al cursor (posición via --mx/--my). */}
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-0 rounded-[20px] opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+              style={{
+                background:
+                  "radial-gradient(circle at var(--mx,50%) var(--my,50%), rgba(255,255,255,0.28), transparent 55%)",
+              }}
+            />
+            <img
+              src={LOGOS[app.id]}
+              alt={app.name}
+              className="relative z-10 w-full max-w-[240px] object-contain transition-transform duration-300 ease-out group-hover:scale-105"
+            />
+            <div className="relative z-10 text-[13px] font-semibold leading-relaxed text-slate-300">
+              {app.description}
             </div>
-            <div>
-              <div className="mb-1 text-lg font-extrabold text-slate-900">{app.name}</div>
-              <div className="text-xs leading-snug text-slate-500">{app.description}</div>
-            </div>
             <div
-              className="w-full rounded-[10px] py-2.5 text-[13px] font-bold text-white"
-              style={{ background: app.gradient, boxShadow: `0 4px 12px ${app.shadow}` }}
+              className="relative z-10 mt-1 w-full rounded-xl py-3 text-sm font-bold text-white shadow-[0_6px_16px_-6px_var(--tw-shadow-color)] transition-all duration-300 ease-out group-hover:-translate-y-0.5 group-hover:shadow-[0_12px_26px_-8px_var(--tw-shadow-color)]"
+              style={{ background: app.gradient, ["--tw-shadow-color" as string]: app.shadow }}
             >
               Ingresar →
             </div>
@@ -78,13 +112,14 @@ export default function Login({ onLogin, onGoRegister, onGoForgot }: LoginProps)
         ))}
       </div>
 
-      <p className="mt-6 text-center text-xs text-white/55">
+      <p className="animate-fade-up mt-7 text-center text-xs text-slate-400" style={{ animationDelay: "320ms" }}>
         © {new Date().getFullYear()} Grupo Soul · Todos los derechos reservados
       </p>
 
       {activeApp && (
         <LoginModal
           app={activeApp}
+          direction={modalDirection}
           onClose={() => setSelectedApp(null)}
           onLogin={onLogin}
           onGoForgot={onGoForgot}

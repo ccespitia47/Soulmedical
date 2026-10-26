@@ -5,6 +5,7 @@ import type { TemplateItem } from "../types/folder.types";
 import { FOLDER_COLORS, FOLDER_ICONS } from "../types/folder.types";
 import ConfirmModal from "../components/common/ConfirmModal";
 import EntityFormModal from "../components/common/EntityFormModal";
+import Icon from "../components/common/Icon";
 import TemplateFoldersList from "../components/templates/TemplateFoldersList";
 import TemplateCard from "../components/templates/TemplateCard";
 import UseTemplateModal from "../components/templates/UseTemplateModal";
@@ -58,26 +59,35 @@ export default function TemplatesPage({ onUseTemplate }: TemplatesPageProps) {
   };
 
   return (
-    <div className="mx-auto max-w-[1200px] px-8 pb-10 pt-8">
-      <div className="mb-7 flex items-center justify-between">
-        <div>
-          <h1 className="m-0 text-2xl font-extrabold text-gray-900">📑 Plantillas</h1>
-          <p className="mt-1 text-[13px] text-gray-500">
-            Reutiliza formularios guardados como plantilla en cualquier proyecto
-          </p>
+    <div className="mx-auto max-w-[1200px] px-4 pb-10 pt-6 sm:px-8 sm:pt-8">
+      <div className="animate-fade-up mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3 sm:gap-3.5">
+          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#00c2a8_0%,#0891b2_100%)] text-white shadow-[0_8px_20px_-6px_rgba(0,194,168,0.55)] sm:h-12 sm:w-12">
+            <Icon name="templates" size={22} />
+          </div>
+          <div className="min-w-0">
+            <h1 className="m-0 text-[20px] font-extrabold tracking-tight text-slate-900 sm:text-[24px]">
+              Plantillas
+            </h1>
+            <p className="mt-0.5 text-[12.5px] text-gray-500 sm:text-[13px]">
+              Reutiliza formularios guardados como plantilla en cualquier proyecto.
+            </p>
+          </div>
         </div>
         <button
           onClick={() => setShowCreateFolder(true)}
-          className="cursor-pointer rounded-[10px] border-none bg-[#00c2a8] px-[18px] py-2.5 text-[13px] font-bold text-white shadow-[0_2px_8px_rgba(0,194,168,0.3)]"
+          className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border-none bg-[linear-gradient(135deg,#00c2a8_0%,#0891b2_100%)] px-4 py-2.5 text-[13px] font-bold text-white shadow-[0_4px_14px_-4px_rgba(0,194,168,0.5)] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-6px_rgba(0,194,168,0.6)]"
         >
-          + Nueva carpeta
+          <Icon name="plus" size={16} /> Nueva carpeta
         </button>
       </div>
 
       {templateFolders.length === 0 ? (
-        <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-white px-5 py-20 text-center">
-          <span className="mb-4 block text-[64px]">📑</span>
-          <h2 className="m-0 mb-2.5 text-xl font-bold text-gray-700">
+        <div className="animate-fade-up rounded-[20px] border-2 border-dashed border-slate-200 bg-white/60 px-5 py-20 text-center">
+          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#00c2a8]/10 text-[#00c2a8]">
+            <Icon name="templates" size={32} />
+          </div>
+          <h2 className="m-0 mb-2 text-xl font-extrabold tracking-tight text-slate-800">
             No hay carpetas de plantillas
           </h2>
           <p className="m-0 mb-6 text-sm leading-relaxed text-gray-400">
@@ -87,13 +97,13 @@ export default function TemplatesPage({ onUseTemplate }: TemplatesPageProps) {
           </p>
           <button
             onClick={() => setShowCreateFolder(true)}
-            className="cursor-pointer rounded-[10px] border-none bg-[#00c2a8] px-6 py-3 text-sm font-bold text-white"
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border-none bg-[linear-gradient(135deg,#00c2a8_0%,#0891b2_100%)] px-5 py-3 text-sm font-bold text-white shadow-[0_4px_14px_-4px_rgba(0,194,168,0.5)] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-6px_rgba(0,194,168,0.6)]"
           >
-            + Crear primera carpeta
+            <Icon name="plus" size={16} /> Crear primera carpeta
           </button>
         </div>
       ) : (
-        <div className="flex items-start gap-6">
+        <div className="flex flex-col items-start gap-4 lg:flex-row lg:gap-6">
           <TemplateFoldersList
             folders={templateFolders}
             templates={templates}
@@ -104,21 +114,23 @@ export default function TemplatesPage({ onUseTemplate }: TemplatesPageProps) {
             }
           />
 
-          <div className="flex-1">
+          <div className="min-w-0 flex-1 self-stretch">
             {filteredTemplates.length === 0 ? (
-              <div className="rounded-xl border-2 border-dashed border-slate-200 bg-white px-5 py-14 text-center">
-                <span className="mb-3 block text-5xl">📑</span>
-                <p className="m-0 text-sm text-gray-400">
+              <div className="animate-fade-up rounded-[20px] border-2 border-dashed border-slate-200 bg-white/60 px-5 py-16 text-center">
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+                  <Icon name="templates" size={26} />
+                </div>
+                <p className="m-0 text-[15px] font-bold text-slate-700">
                   {selectedFolderId
                     ? "Esta carpeta no tiene plantillas aún"
                     : "No hay plantillas guardadas"}
                 </p>
-                <p className="m-0 mt-2 text-xs text-slate-300">
-                  Ve al Builder y usa el botón "📑 Plantilla" para guardar un formulario
+                <p className="m-0 mt-1.5 text-xs text-gray-400">
+                  Ve al Builder y usa el botón "Plantilla" para guardar un formulario.
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
                 {filteredTemplates.map((template) => {
                   const folder = templateFolders.find((f) => f.id === template.folderId);
                   return (
@@ -145,7 +157,7 @@ export default function TemplatesPage({ onUseTemplate }: TemplatesPageProps) {
 
       {showCreateFolder && (
         <EntityFormModal
-          title="📁 Nueva carpeta de plantillas"
+          title="Nueva carpeta de plantillas"
           submitLabel="Crear carpeta"
           placeholder="Ej: Formularios clínicos"
           name={folderName}

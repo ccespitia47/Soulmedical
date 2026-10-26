@@ -8,6 +8,7 @@ import {
 import { ROLE_AVATARS, sanitizePermissions, type AuthUser } from "../types/auth.types";
 import TwoFactorSetupPanel from "../components/auth/TwoFactorSetupPanel";
 import TwoFactorCodePanel from "../components/auth/TwoFactorCodePanel";
+import Icon from "../components/common/Icon";
 
 type ConsientifyLoginProps = {
   onLoginSuccess: (user: AuthUser, token: string) => void;
@@ -16,7 +17,6 @@ type ConsientifyLoginProps = {
 
 const SKY_GRADIENT = "linear-gradient(135deg, #7dd3fc 0%, #0284c7 100%)";
 const SKY_SHADOW = "rgba(2,132,199,0.35)";
-const SKY_ACCENT = "#0284c7";
 
 type Step =
   | { kind: "credentials" }
@@ -78,40 +78,41 @@ export default function ConsientifyLogin({
     }
   };
 
+  // Tarjeta oscura con el color del logo de Consientify.
+  const fieldAccent = "#38bdf8";
   const inputBase =
-    "w-full rounded-[10px] border-[1.5px] border-slate-200 bg-slate-50 px-[14px] py-3 pl-[42px] text-sm text-slate-900 outline-none transition focus:border-current focus:bg-white";
+    "w-full rounded-[10px] border-[1.5px] border-white/15 bg-white/[0.05] px-[14px] py-3 pl-[42px] text-sm text-white placeholder:text-slate-500 outline-none transition focus:border-current focus:bg-white/[0.09]";
 
   return (
-    <AuthLayout maxWidth="sm">
-      <div className="w-full rounded-[20px] bg-white px-9 pb-8 pt-9 shadow-[0_24px_60px_rgba(2,40,80,0.3)]">
-        <div className="mb-6 flex flex-col items-center text-center">
-          <div
-            className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl text-[30px]"
-            style={{ background: SKY_GRADIENT, boxShadow: `0 6px 20px ${SKY_SHADOW}` }}
-          >
-            📋
-          </div>
-          <h1 className="m-0 text-[26px] font-extrabold tracking-tight text-slate-900">
-            Consientify
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {step.kind === "credentials"
-              ? "Gestión de consentimientos informados"
-              : step.kind === "2fa_setup"
-                ? "Activa el doble factor para continuar"
-                : "Verifica tu identidad"}
-          </p>
+    <AuthLayout maxWidth="sm" variant="light" bgImage="/background.png">
+      <div
+        className="animate-modal-in w-full overflow-hidden rounded-[20px] px-9 pb-8 pt-9 shadow-[0_28px_70px_-18px_rgba(15,25,50,0.55)]"
+        style={{ background: "#0F1623" }}
+      >
+        <div className="mb-1 flex items-center justify-center">
+          <img
+            src="/consientify-logo-dark.png"
+            alt="Consientify"
+            className="h-14 w-auto max-w-[250px] object-contain"
+          />
         </div>
+        <p className="mb-6 text-center text-[13px] font-medium text-slate-400">
+          {step.kind === "credentials"
+            ? "Gestión de consentimientos informados"
+            : step.kind === "2fa_setup"
+              ? "Activa el doble factor para continuar"
+              : "Verifica tu identidad"}
+        </p>
 
         {step.kind === "credentials" && (
           <>
             <div className="mb-[14px]">
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.4px] text-gray-700">
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.4px] text-slate-200">
                 Correo electrónico
               </label>
-              <div className="relative" style={{ color: SKY_ACCENT }}>
-                <div className="absolute left-[14px] top-1/2 -translate-y-1/2 text-base">
-                  ✉️
+              <div className="relative" style={{ color: fieldAccent }}>
+                <div className="absolute left-[13px] top-1/2 -translate-y-1/2">
+                  <Icon name="mail" size={18} />
                 </div>
                 <input
                   type="email"
@@ -126,12 +127,12 @@ export default function ConsientifyLogin({
             </div>
 
             <div className="mb-5">
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.4px] text-gray-700">
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.4px] text-slate-200">
                 Contraseña
               </label>
-              <div className="relative" style={{ color: SKY_ACCENT }}>
-                <div className="absolute left-[14px] top-1/2 -translate-y-1/2 text-base">
-                  🔒
+              <div className="relative" style={{ color: fieldAccent }}>
+                <div className="absolute left-[13px] top-1/2 -translate-y-1/2">
+                  <Icon name="lock" size={18} />
                 </div>
                 <input
                   type={showPassword ? "text" : "password"}
@@ -144,16 +145,16 @@ export default function ConsientifyLogin({
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 text-base text-slate-400"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 transition hover:text-slate-200"
                 >
-                  {showPassword ? "🙈" : "👁️"}
+                  <Icon name={showPassword ? "eyeOff" : "eye"} size={18} />
                 </button>
               </div>
             </div>
 
             {error && (
-              <div className="mb-4 flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-[14px] py-2.5 text-sm text-red-600">
-                ⚠️ {error}
+              <div className="mb-4 flex items-center gap-1.5 rounded-lg border border-red-400/30 bg-red-500/10 px-[14px] py-2.5 text-sm text-red-300">
+                <Icon name="alert" size={16} className="shrink-0" /> {error}
               </div>
             )}
 
@@ -181,7 +182,7 @@ export default function ConsientifyLogin({
                 type="button"
                 onClick={onGoForgot}
                 className="p-1 text-xs font-semibold"
-                style={{ color: SKY_ACCENT }}
+                style={{ color: fieldAccent }}
               >
                 ¿Olvidaste tu contraseña?
               </button>
@@ -192,9 +193,10 @@ export default function ConsientifyLogin({
         {step.kind === "2fa_setup" && (
           <TwoFactorSetupPanel
             setupToken={step.setupToken}
-            accent={SKY_ACCENT}
+            accent={fieldAccent}
             gradient={SKY_GRADIENT}
             shadow={SKY_SHADOW}
+            dark
             onSuccess={handle2FASuccess}
             onCancel={() => setStep({ kind: "credentials" })}
           />
@@ -203,9 +205,10 @@ export default function ConsientifyLogin({
         {step.kind === "2fa_verify" && (
           <TwoFactorCodePanel
             pendingToken={step.pendingToken}
-            accent={SKY_ACCENT}
+            accent={fieldAccent}
             gradient={SKY_GRADIENT}
             shadow={SKY_SHADOW}
+            dark
             onSuccess={handle2FASuccess}
             onCancel={() => setStep({ kind: "credentials" })}
           />

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useFolderStore } from "../../store/useFolderStore";
 import type { TemplateItem } from "../../types/folder.types";
+import EntityIcon from "../common/EntityIcon";
 
 type UseTemplateModalProps = {
   template: TemplateItem;
@@ -46,8 +47,9 @@ export default function UseTemplateModal({
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-5">
       <div className="w-full max-w-[420px] rounded-2xl bg-white p-6 shadow-[0_20px_60px_rgba(0,0,0,0.2)]">
-        <h2 className="m-0 mb-1.5 text-lg font-bold text-gray-900">
-          {template.icon} Usar plantilla
+        <h2 className="m-0 mb-1.5 flex items-center gap-2 text-lg font-bold text-gray-900">
+          <span className="text-emerald-600"><EntityIcon icon={template.icon} size={18} /></span>
+          Usar plantilla
         </h2>
         <p className="m-0 mb-5 text-[13px] text-gray-500">
           Se creará un nuevo formulario basado en <strong>{template.name}</strong>
@@ -79,7 +81,7 @@ export default function UseTemplateModal({
           >
             {folders.map((f) => (
               <option key={f.id} value={f.id}>
-                {f.icon} {f.name}
+                {f.name}
               </option>
             ))}
           </select>

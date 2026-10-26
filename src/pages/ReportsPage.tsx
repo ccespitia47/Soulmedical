@@ -8,6 +8,9 @@ import type { WidgetInstance } from "../types/widget.types";
 import RecordsTable from "../components/reports/RecordsTable";
 import TaskDownloadsPanel from "../components/reports/TaskDownloadsPanel";
 import ExcelFieldSelector from "../components/reports/ExcelFieldSelector";
+// Reusamos RecordsTable en la vista de Excel para que Sara pueda buscar,
+// filtrar y eliminar registros desde ambas pestañas sin duplicar UI ni
+// lógica. El delete/refresh vive dentro del propio RecordsTable.
 import Icon from "../components/common/Icon";
 import SelectMenu, { type SelectOption } from "../components/common/SelectMenu";
 
@@ -16,7 +19,7 @@ type Tab = "excel" | "records" | "downloads-per-task";
 export default function ReportsPage() {
   const { projects, selectedProjectId, selectProject, loadProjects } =
     useProjectStore();
-  const { folders, loadFolders } = useFolderStore();
+  const { folders, loadFolders, loadFormDetails } = useFolderStore();
   const currentUser = useAuthStore((s) => s.currentUser);
 
   const [tab, setTab] = useState<Tab>("excel");
@@ -44,6 +47,18 @@ export default function ReportsPage() {
     () => selectedFolder?.forms.find((f) => f.id === selectedFormId) ?? null,
     [selectedFolder, selectedFormId],
   );
+
+  // loadFolders trae los forms en "modo resumen" (sin widgets); sin hidratar
+  // el detalle, selectedForm.widgets = [] → fields = [] → selectedFieldIds
+  // vacío → el botón "Solicitar reporte" queda deshabilitado y Excel por
+  // tarea exporta sin columnas. Al elegir un form, pedimos su detalle
+  // completo si todavía no tiene widgets cargados. Idempotente.
+  useEffect(() => {
+    if (!selectedFolderId || !selectedFormId || !selectedForm) return;
+    if (!selectedForm.widgets || selectedForm.widgets.length === 0) {
+      void loadFormDetails(selectedFolderId, selectedFormId);
+    }
+  }, [selectedFolderId, selectedFormId, selectedForm, loadFormDetails]);
 
   // Memo estable de widgets: sin esto el `?? []` en el JSX crea un array
   // nuevo cada render, disparando useMemo/useEffect en los hijos
@@ -323,6 +338,17 @@ function ExcelReportPanel({
           <Icon name="send" size={15} />
           {busy ? "Enviando…" : "Solicitar reporte"}
         </button>
+      </div>
+
+      {/* Tabla de registros bajo el selector: filtros de fecha, buscador
+          (por ID exacto o por valor de campo) y eliminación con motivo.
+          Reutiliza el mismo componente que la pestaña "Registros y PDFs". */}
+      <div className="mt-6 border-t border-slate-200 pt-6">
+        <div className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-slate-700">
+          <Icon name="fileText" size={16} className="text-[#00c2a8]" />
+          Registros del formulario
+        </div>
+        <RecordsTable formId={selectedForm.id} formName={selectedForm.name} />
       </div>
     </div>
   );

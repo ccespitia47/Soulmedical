@@ -98,6 +98,19 @@ export function writeClipboard(data: WidgetClipboard): void {
   }
 }
 
+/**
+ * Limpia el clipboard — el usuario decidió no pegar más. Dispara el evento
+ * custom para que useClipboardWidget re-renderice y oculte el botón.
+ */
+export function clearClipboard(): void {
+  try {
+    localStorage.removeItem(CLIPBOARD_KEY);
+    window.dispatchEvent(new Event("soulforms-clipboard-changed"));
+  } catch {
+    /* ignore */
+  }
+}
+
 export function readClipboard(): WidgetClipboard | null {
   try {
     const raw = localStorage.getItem(CLIPBOARD_KEY);

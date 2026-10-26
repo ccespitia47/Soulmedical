@@ -10,6 +10,11 @@ export const SelectWidget: WidgetDefinition = {
   defaultConfig: {
     placeholder: "Selecciona una opción",
     options: ["Opción 1", "Opción 2", "Opción 3"],
+    defaultValue: "",
+    sortAlphabetically: false,
+    multiple: false,
+    expand: false,
+    rememberEntry: false,
   },
   preview: Preview,
   properties: Properties,

@@ -91,15 +91,17 @@ export const PROJECT_COLORS = [
   { id: "indigo", value: "#6366f1", label: "Indigo"  },
 ];
 
+// `id` es ahora una clave de icono SVG (ver components/common/Icon.tsx).
+// Los proyectos creados antes guardan un emoji; EntityIcon los mapea.
 export const PROJECT_ICONS = [
-  { id: "🏢", label: "Empresa"      },
-  { id: "💰", label: "Finanzas"     },
-  { id: "📊", label: "Reportes"     },
-  { id: "🏥", label: "Salud"        },
-  { id: "👥", label: "Personas"     },
-  { id: "⚙️", label: "Operaciones"  },
-  { id: "📦", label: "Inventario"   },
-  { id: "🎯", label: "Objetivos"    },
+  { id: "building", label: "Empresa"      },
+  { id: "wallet",   label: "Finanzas"     },
+  { id: "chart",    label: "Reportes"     },
+  { id: "health",   label: "Salud"        },
+  { id: "users",    label: "Personas"     },
+  { id: "settings", label: "Operaciones"  },
+  { id: "package",  label: "Inventario"   },
+  { id: "target",   label: "Objetivos"    },
 ];
 
 export const FOLDER_COLORS = [
@@ -112,12 +114,12 @@ export const FOLDER_COLORS = [
 ];
 
 export const FOLDER_ICONS = [
-  { id: "📁", label: "Carpeta"     },
-  { id: "📋", label: "Formulario"  },
-  { id: "👥", label: "Personas"    },
-  { id: "🏥", label: "Salud"       },
-  { id: "📊", label: "Reportes"    },
-  { id: "⚙️", label: "Configuración"},
-  { id: "🎯", label: "Objetivos"   },
-  { id: "📝", label: "Notas"       },
+  { id: "folder",    label: "Carpeta"      },
+  { id: "clipboard", label: "Formulario"   },
+  { id: "users",     label: "Personas"     },
+  { id: "health",    label: "Salud"        },
+  { id: "chart",     label: "Reportes"     },
+  { id: "settings",  label: "Configuración"},
+  { id: "target",    label: "Objetivos"    },
+  { id: "fileText",  label: "Notas"        },
 ];

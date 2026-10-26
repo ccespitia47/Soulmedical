@@ -4,10 +4,15 @@ import type {
   SubformRule,
   SubformRuleOperator,
 } from "../subform.types";
-import { OPERATORS_WITH_VALUE, OPERATOR_LABELS } from "./constants";
+import Icon from "../../../common/Icon";
+import {
+  HAS_VALUE_OPTIONS,
+  OPERATORS_WITH_VALUE,
+  OPERATOR_LABELS,
+} from "./constants";
 
 const SMALL_SELECT_CLASS =
-  "cursor-pointer rounded-[7px] border-[1.5px] border-slate-200 bg-white px-2 py-1 font-sans text-xs text-gray-900 outline-none";
+  "cursor-pointer rounded-[7px] border-[1.5px] border-slate-200 bg-white px-2 py-1 font-sans text-xs text-slate-900 outline-none focus:border-[#00c2a8]";
 
 function ConditionRow({
   condition,
@@ -58,7 +63,21 @@ function ConditionRow({
       </select>
 
       {needsValue &&
-        (options.length > 0 ? (
+        (condition.operator === "has_value" ? (
+          <select
+            value={condition.value}
+            onChange={(e) => onUpdate({ value: e.target.value })}
+            className={SMALL_SELECT_CLASS}
+            style={{ flex: "0 0 140px" }}
+          >
+            <option value="">-- Selecciona --</option>
+            {HAS_VALUE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        ) : options.length > 0 ? (
           <select
             value={condition.value}
             onChange={(e) => onUpdate({ value: e.target.value })}
@@ -84,9 +103,10 @@ function ConditionRow({
 
       <button
         onClick={onRemove}
-        className="cursor-pointer border-none bg-transparent text-sm text-gray-400"
+        aria-label="Eliminar condición"
+        className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
       >
-        ✕
+        <Icon name="x" size={13} />
       </button>
     </div>
   );
@@ -111,14 +131,19 @@ function TargetSelector({
           <button
             key={f.id}
             onClick={() => onToggle(f.id)}
-            className="cursor-pointer rounded-[20px] border-[1.5px] px-3 py-1 text-xs font-semibold"
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border-[1.5px] px-3 py-1 text-xs font-semibold transition-colors"
             style={{
-              background: selected ? accentBg : "#f3f4f6",
+              background: selected ? accentBg : "#f8fafc",
               borderColor: selected ? accent : "#e2e8f0",
-              color: selected ? accent : "#6b7280",
+              color: selected ? accent : "#64748b",
             }}
           >
-            {selected ? (rule.action === "show" ? "👁 " : "🙈 ") : ""}
+            {selected && (
+              <Icon
+                name={rule.action === "show" ? "eye" : "eyeOff"}
+                size={12}
+              />
+            )}
             {f.label}
           </button>
         );
@@ -176,13 +201,23 @@ export default function SubformRuleCard({
     });
   };
 
+  const isShow = rule.action === "show";
+  const actionAccent = isShow ? "#00c2a8" : "#ef4444";
+  const actionBg = isShow ? "#e6faf7" : "#fef2f2";
+
   return (
-    <div className="mb-2.5 overflow-hidden rounded-[10px] border-[1.5px] border-slate-200">
+    <div className="mb-2.5 overflow-hidden rounded-[10px] border-[1.5px] border-slate-200 bg-white">
       <div
         onClick={onToggleExpanded}
-        className="flex cursor-pointer items-center gap-2.5 bg-slate-50 px-3.5 py-2.5"
+        className="flex cursor-pointer items-center gap-2.5 border-b border-slate-100 bg-slate-50 px-3.5 py-2.5"
       >
-        <span className="text-xs">{expanded ? "▼" : "▶"}</span>
+        <span className="flex h-5 w-5 items-center justify-center text-slate-400">
+          <Icon
+            name="chevronRight"
+            size={12}
+            className={expanded ? "rotate-90 transition-transform" : "transition-transform"}
+          />
+        </span>
         <input
           value={rule.name}
           onChange={(e) => {
@@ -190,18 +225,16 @@ export default function SubformRuleCard({
             onUpdate({ name: e.target.value });
           }}
           onClick={(e) => e.stopPropagation()}
-          className="flex-1 border-none bg-transparent font-sans text-[13px] font-bold text-gray-900 outline-none"
+          className="flex-1 border-none bg-transparent font-sans text-[13px] font-bold text-slate-900 outline-none"
         />
         <span
-          className="rounded-[20px] px-2 py-0.5 text-[10px] font-bold"
-          style={{
-            background: rule.action === "show" ? "#e6faf7" : "#fef2f2",
-            color: rule.action === "show" ? "#00c2a8" : "#ef4444",
-          }}
+          className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold"
+          style={{ background: actionBg, color: actionAccent }}
         >
-          {rule.action === "show" ? "👁 Mostrar" : "🙈 Ocultar"}
+          <Icon name={isShow ? "eye" : "eyeOff"} size={11} />
+          {isShow ? "Mostrar" : "Ocultar"}
         </span>
-        <span className="text-[11px] text-gray-400">
+        <span className="text-[11px] text-slate-400">
           {rule.targetFieldIds.length} campos
         </span>
         <button
@@ -209,9 +242,10 @@ export default function SubformRuleCard({
             e.stopPropagation();
             onRemove();
           }}
-          className="cursor-pointer border-none bg-transparent p-0.5 text-sm text-red-300"
+          aria-label="Eliminar regla"
+          className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border-none bg-transparent p-0 text-slate-300 transition-colors hover:bg-red-50 hover:text-red-500"
         >
-          🗑️
+          <Icon name="trash" size={14} />
         </button>
       </div>
 
@@ -220,7 +254,7 @@ export default function SubformRuleCard({
           {/* Condiciones */}
           <div className="mb-3.5">
             <div className="mb-2 flex items-center gap-2">
-              <span className="text-xs font-bold text-gray-700">Cuando</span>
+              <span className="text-xs font-bold text-slate-700">Cuando</span>
               <select
                 value={rule.matchType}
                 onChange={(e) =>
@@ -231,11 +265,11 @@ export default function SubformRuleCard({
                 <option value="all">TODAS</option>
                 <option value="any">ALGUNA</option>
               </select>
-              <span className="text-xs text-gray-500">de estas condiciones:</span>
+              <span className="text-xs text-slate-500">de estas condiciones:</span>
             </div>
 
             {rule.conditions.length === 0 && (
-              <div className="rounded-[7px] bg-slate-50 px-3 py-2 text-xs text-gray-400">
+              <div className="rounded-[7px] bg-slate-50 px-3 py-2 text-xs text-slate-500">
                 Sin condiciones — la regla siempre se aplica
               </div>
             )}
@@ -253,15 +287,15 @@ export default function SubformRuleCard({
             <button
               onClick={addCondition}
               disabled={fields.length === 0}
-              className="mt-1 cursor-pointer rounded-md border-[1.5px] border-dashed border-[#00c2a8] bg-transparent px-3 py-1 text-[11px] font-bold text-[#00c2a8] disabled:cursor-not-allowed"
+              className="mt-1 inline-flex cursor-pointer items-center gap-1 rounded-md border-[1.5px] border-dashed border-[#00c2a8] bg-transparent px-3 py-1 text-[11px] font-bold text-[#0891b2] transition-colors hover:bg-[#e6faf7] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              + Condición
+              <Icon name="plus" size={11} /> Condición
             </button>
           </div>
 
           {/* Acción */}
           <div className="mb-3.5">
-            <span className="mr-2.5 text-xs font-bold text-gray-700">Acción</span>
+            <span className="mr-2.5 text-xs font-bold text-slate-700">Acción</span>
             <div className="inline-flex gap-1 rounded-lg bg-slate-100 p-[3px]">
               {(["show", "hide"] as const).map((a) => {
                 const active = rule.action === a;
@@ -269,17 +303,18 @@ export default function SubformRuleCard({
                   <button
                     key={a}
                     onClick={() => onUpdate({ action: a })}
-                    className="cursor-pointer rounded-md border-none px-3.5 py-1 text-xs font-bold"
+                    className="inline-flex cursor-pointer items-center gap-1 rounded-md border-none px-3 py-1 text-xs font-bold transition-colors"
                     style={{
                       background: active
                         ? a === "show"
                           ? "#00c2a8"
                           : "#ef4444"
                         : "transparent",
-                      color: active ? "#fff" : "#6b7280",
+                      color: active ? "#fff" : "#64748b",
                     }}
                   >
-                    {a === "show" ? "👁 Mostrar" : "🙈 Ocultar"}
+                    <Icon name={a === "show" ? "eye" : "eyeOff"} size={12} />
+                    {a === "show" ? "Mostrar" : "Ocultar"}
                   </button>
                 );
               })}
@@ -288,7 +323,7 @@ export default function SubformRuleCard({
 
           {/* Campos afectados */}
           <div>
-            <span className="mb-2 block text-xs font-bold text-gray-700">
+            <span className="mb-2 block text-xs font-bold text-slate-700">
               Campos afectados
             </span>
             <TargetSelector

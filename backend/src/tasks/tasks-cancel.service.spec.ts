@@ -34,6 +34,7 @@ describe('TasksService.cancel', () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
     );
     return { service, taskModel };
   }

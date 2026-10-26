@@ -1,18 +1,14 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ExcelFieldMapping as ExcelMapping } from "../../types/email-template.types";
-import {
-  parseExcel,
-  extractImages,
-  type CellData,
-  type EmbeddedImage,
-} from "../../utils/excelParser";
+import { extractImages, type EmbeddedImage } from "../../utils/excelParser";
+import { fetchExcelPreview } from "../../services/excelPreview";
 import ExcelMapperHeader from "./excelMapper/ExcelMapperHeader";
 import LogoUploader from "./excelMapper/LogoUploader";
 import PlaceholdersList, {
   PlaceholderInstruction,
   type PlaceholderItem,
 } from "./excelMapper/PlaceholdersList";
-import ExcelTable from "./excelMapper/ExcelTable";
+import ExcelHtmlTable from "./excelMapper/ExcelHtmlTable";
 import ExcelMapperFooter from "./excelMapper/ExcelMapperFooter";
 
 export type { ExcelFieldMapping as ExcelMapping } from "../../types/email-template.types";
@@ -32,29 +28,39 @@ export default function ExcelMapper({
   onSave,
   onClose,
 }: ExcelMapperProps) {
-  const [rows, setRows] = useState<CellData[][]>([]);
+  const [previewHtml, setPreviewHtml] = useState<string>("");
+  const [previewCss, setPreviewCss] = useState<string>("");
   const [mappings, setMappings] = useState<Record<string, ExcelMapping>>({});
   const [selectedPlaceholder, setSelectedPlaceholder] = useState<PlaceholderItem | null>(null);
-  const [hoveredCell, setHoveredCell] = useState<string | null>(null);
-  const [embeddedImages, setEmbeddedImages] = useState<EmbeddedImage[]>([]);
+  const [, setEmbeddedImages] = useState<EmbeddedImage[]>([]);
   const [customLogo, setCustomLogo] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
-      try {
-        setRows(parseExcel(excelBase64));
-        const map: Record<string, ExcelMapping> = {};
-        for (const m of existingMappings) map[m.coord] = m;
-        setMappings(map);
-        setEmbeddedImages(await extractImages(excelBase64));
-      } catch (e) {
-        setError("No se pudo leer el archivo Excel.");
-        console.error(e);
-      } finally {
+      setLoading(true);
+      setError(null);
+      // Preload los mappings existentes para dibujarlos apenas llegue el HTML.
+      const map: Record<string, ExcelMapping> = {};
+      for (const m of existingMappings) map[m.coord] = m;
+      setMappings(map);
+
+      // La conversión LibreOffice → HTML se hace en el backend y puede
+      // tardar 2-5s la primera vez (spawn del proceso). Después cachea.
+      const result = await fetchExcelPreview(excelBase64);
+      if (result.error) {
+        setError(result.error);
         setLoading(false);
+        return;
       }
+      setPreviewHtml(result.html);
+      setPreviewCss(result.css);
+
+      // Imágenes embebidas del .xlsx — las usa el LogoUploader para saber
+      // dónde colocar el logo custom (misma lógica de antes).
+      setEmbeddedImages(await extractImages(excelBase64));
+      setLoading(false);
     };
     load();
   }, [excelBase64, existingMappings]);
@@ -65,28 +71,35 @@ export default function ExcelMapper({
     reader.readAsDataURL(file);
   };
 
-  const handleCellClick = (cell: CellData) => {
-    if (!cell.isMappable || !selectedPlaceholder) return;
-    setMappings((prev) => ({
-      ...prev,
-      [cell.coord]: {
-        coord: cell.coord,
-        placeholder: selectedPlaceholder.placeholder,
-        description: selectedPlaceholder.description,
-      },
-    }));
-    const idx = availablePlaceholders.indexOf(selectedPlaceholder);
-    if (idx < availablePlaceholders.length - 1)
-      setSelectedPlaceholder(availablePlaceholders[idx + 1]);
-  };
+  const handleCellClick = useCallback(
+    (coord: string, isMappable: boolean) => {
+      if (!isMappable || !selectedPlaceholder) return;
+      // Si esta celda ya estaba mapeada, ignoramos — el usuario usa el
+      // botón ✕ del badge para quitar.
+      if (mappings[coord]) return;
+      setMappings((prev) => ({
+        ...prev,
+        [coord]: {
+          coord,
+          placeholder: selectedPlaceholder.placeholder,
+          description: selectedPlaceholder.description,
+        },
+      }));
+      const idx = availablePlaceholders.indexOf(selectedPlaceholder);
+      if (idx >= 0 && idx < availablePlaceholders.length - 1) {
+        setSelectedPlaceholder(availablePlaceholders[idx + 1]);
+      }
+    },
+    [availablePlaceholders, mappings, selectedPlaceholder],
+  );
 
-  const removeMapping = (coord: string) => {
+  const removeMapping = useCallback((coord: string) => {
     setMappings((prev) => {
       const c = { ...prev };
       delete c[coord];
       return c;
     });
-  };
+  }, []);
 
   const handleSave = () => {
     onSave(Object.values(mappings), customLogo ?? undefined);
@@ -118,7 +131,7 @@ export default function ExcelMapper({
           <div className="flex-1 overflow-auto bg-slate-50 px-4 py-3.5">
             {loading && (
               <div className="flex h-[200px] items-center justify-center gap-2 text-slate-500">
-                <span className="text-xl">⏳</span> Cargando Excel...
+                <span className="text-xl">⏳</span> Convirtiendo Excel con LibreOffice…
               </div>
             )}
             {error && (
@@ -126,18 +139,36 @@ export default function ExcelMapper({
                 ❌ {error}
               </div>
             )}
-            {!loading && !error && rows.length > 0 && (
-              <ExcelTable
-                rows={rows}
-                mappings={mappings}
-                selectedPlaceholder={selectedPlaceholder}
-                hoveredCell={hoveredCell}
-                customLogo={customLogo}
-                embeddedImages={embeddedImages}
-                onHover={setHoveredCell}
-                onCellClick={handleCellClick}
-                onRemoveMapping={removeMapping}
-              />
+            {!loading && !error && previewHtml && (
+              <>
+                <div className="mb-2 flex items-center gap-3 text-[11px] text-slate-500">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-dashed border-blue-500" />
+                    Celda mapeable (hover)
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-emerald-500 bg-emerald-100" />
+                    Ya mapeada
+                  </span>
+                </div>
+                <ExcelHtmlTable
+                  html={previewHtml}
+                  css={previewCss}
+                  mappings={mappings}
+                  selectedPlaceholder={selectedPlaceholder}
+                  customLogo={customLogo}
+                  onCellClick={handleCellClick}
+                  onRemoveMapping={removeMapping}
+                />
+                <div className="mt-2.5 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+                  <span>💡</span>
+                  <span>
+                    La vista muestra el formato original del Excel (fuentes, bordes,
+                    logo). Seleccioná un placeholder del panel izquierdo y hacé click
+                    en la celda donde debe aparecer.
+                  </span>
+                </div>
+              </>
             )}
           </div>
         </div>
