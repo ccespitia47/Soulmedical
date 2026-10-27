@@ -19,6 +19,10 @@ const TRIGGER_TYPES = [
   "phone",
   "date",
   "subform",
+  // `search` dispara condiciones apuntando a una columna de la fila
+  // seleccionada (ej. "Id Paciente.nombres es Margarita"). RuleConditionRow
+  // detecta el type y renderiza el dropdown de columna.
+  "search",
 ];
 const UNTARGETABLE_TYPES: string[] = [];
 
@@ -147,16 +151,20 @@ export default function RuleEditor({
               </div>
             )}
 
-            {rule.conditions.map((cond, idx) => (
-              <RuleConditionRow
-                key={idx}
-                condition={cond}
-                triggerWidgets={triggerWidgets}
-                getOptions={getOptions}
-                onUpdate={(changes) => updateCondition(idx, changes)}
-                onRemove={() => removeCondition(idx)}
-              />
-            ))}
+            {rule.conditions.map((cond, idx) => {
+              const triggerWidget = triggerWidgets.find((w) => w.id === cond.widgetId);
+              return (
+                <RuleConditionRow
+                  key={idx}
+                  condition={cond}
+                  triggerWidget={triggerWidget}
+                  triggerWidgets={triggerWidgets}
+                  getOptions={getOptions}
+                  onUpdate={(changes) => updateCondition(idx, changes)}
+                  onRemove={() => removeCondition(idx)}
+                />
+              );
+            })}
 
             <button
               onClick={addCondition}

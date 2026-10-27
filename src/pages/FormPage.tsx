@@ -5,7 +5,7 @@ import { useUsersStore } from "../store/useUsersStore";
 import { useAuthStore } from "../store/useAuthStore";
 import { sendFormEmail, type EmailAttachment } from "../services/emailService";
 import { resolveLookupRecipients } from "../utils/resolveLookupRecipients";
-import { evaluateRules } from "../utils/formRules";
+import { evaluateRules, extractRowsFromValues } from "../utils/formRules";
 import { htmlToPdfBase64 } from "../utils/pdfExporter";
 import { fetchRenderedPdfFile } from "../services/pdfPreview";
 import { fetchRenderedPdf } from "../services/excelPreview";
@@ -56,7 +56,11 @@ export default function FormPage({
   const [emailError, setEmailError] = useState<string | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
 
-  const hiddenWidgetIds = evaluateRules(rules, fieldValues);
+  const hiddenWidgetIds = evaluateRules(
+    rules,
+    fieldValues,
+    extractRowsFromValues(fieldValues),
+  );
 
   useEffect(() => {
     if (!currentUser?.id) return;
@@ -83,6 +87,15 @@ export default function FormPage({
     const values: Record<string, string> = {};
     widgets.forEach((w) => {
       values[w.id] = String(fd.get(w.id) ?? "");
+      // Widgets `search` emiten también `${id}__row` con la fila completa
+      // seleccionada (JSON). Lo necesitan las reglas con columna (ej.
+      // "Id Paciente.nombres es Margarita") y la validación de destinatarios
+      // tipo field+column. Sin esta clave en fieldValues, extractRowsFromValues
+      // devuelve {} y las condiciones por columna siempre fallan.
+      if (w.type === "search") {
+        const row = fd.get(`${w.id}__row`);
+        if (typeof row === "string" && row) values[`${w.id}__row`] = row;
+      }
     });
     setFieldValues(values);
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { widgetRegistry } from "../components/widgets/registry";
-import { evaluateRules } from "../utils/formRules";
+import { evaluateRules, extractRowsFromValues } from "../utils/formRules";
 import { generateExcelHtml } from "../utils/excelToHtml";
 import { htmlToPdfBase64 } from "../utils/pdfExporter";
 import { expandFormData, renderFilename } from "../utils/placeholders";
@@ -239,7 +239,12 @@ export default function TaskPage() {
   }, [token]);
 
   const hiddenIds = useMemo(
-    () => evaluateRules(task?.rules ?? [], fieldValues),
+    () =>
+      evaluateRules(
+        task?.rules ?? [],
+        fieldValues,
+        extractRowsFromValues(fieldValues),
+      ),
     [task?.rules, fieldValues],
   );
 

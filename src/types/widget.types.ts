@@ -2,12 +2,31 @@ import type React from "react";
 
 // ─── Reglas condicionales ──────────────────────────────────────────────────────
 
-export type RuleOperator = "equals" | "not_equals" | "contains" | "not_empty" | "is_empty" | "has_value";
+export type RuleOperator =
+  | "equals"
+  | "not_equals"
+  | "contains"
+  | "starts_with"
+  | "ends_with"
+  | "not_empty"
+  | "is_empty"
+  | "has_value";
 
 export type RuleCondition = {
   widgetId: string;   // Campo que dispara la condición
   operator: RuleOperator;
   value: string;      // Valor a comparar (vacío para is_empty / not_empty)
+  /**
+   * Nombre de la columna a evaluar DENTRO de la fila seleccionada por un
+   * widget `search` (que guarda la fila completa como JSON bajo la clave
+   * `${widgetId}__row`). Si está presente, el motor compara `row[column]`
+   * en vez del valor principal del widget — así se puede escribir una
+   * condición como "Id Paciente.nombres es Margarita".
+   *
+   * Para widgets que no sean `search`, o para condiciones genéricas que
+   * sigan evaluando el valor principal, dejar `undefined`.
+   */
+  column?: string;
 };
 
 export type RuleAction = "show" | "hide";

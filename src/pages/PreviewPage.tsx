@@ -2,64 +2,10 @@ import { useState, useRef } from "react";
 import { useBuilderStore } from "../store/useBuilderStore";
 import { useFolderStore } from "../store/useFolderStore";
 import { widgetRegistry } from "../components/widgets/registry";
-import type { FormRule } from "../types/widget.types";
 import QuizReviewModal from "../components/form/QuizReviewModal";
 import Icon from "../components/common/Icon";
 import { computeQuizReview } from "../lib/quizReview";
-
-// ─── Motor de reglas (igual que FormPage) ─────────────────────────────────────
-function evaluateRules(rules: FormRule[], values: Record<string, string>): Set<string> {
-  const hidden = new Set<string>();
-
-  for (const rule of rules) {
-    let conditionMet: boolean;
-    if (rule.conditions.length === 0) {
-      conditionMet = true;
-    } else {
-      const results = rule.conditions.map((cond) => {
-        const val = (values[cond.widgetId] ?? "").toLowerCase().trim();
-        const target = (cond.value ?? "").toLowerCase().trim();
-        switch (cond.operator) {
-          case "equals":     return val === target;
-          case "not_equals": return val !== target;
-          case "contains":   return val.includes(target);
-          case "not_empty":  return val !== "";
-          case "is_empty":   return val === "";
-          default:           return false;
-        }
-      });
-      conditionMet = rule.matchType === "all" ? results.every(Boolean) : results.some(Boolean);
-    }
-    if (conditionMet) {
-      if (rule.action === "hide") rule.targetWidgetIds.forEach(id => hidden.add(id));
-    } else {
-      if (rule.action === "show") rule.targetWidgetIds.forEach(id => hidden.add(id));
-    }
-  }
-
-  // show tiene prioridad
-  for (const rule of rules) {
-    if (rule.action !== "show") continue;
-    const results = rule.conditions.map((cond) => {
-      const val = (values[cond.widgetId] ?? "").toLowerCase().trim();
-      const target = (cond.value ?? "").toLowerCase().trim();
-      switch (cond.operator) {
-        case "equals":     return val === target;
-        case "not_equals": return val !== target;
-        case "contains":   return val.includes(target);
-        case "not_empty":  return val !== "";
-        case "is_empty":   return val === "";
-        default:           return false;
-      }
-    });
-    const met = rule.conditions.length === 0 || (
-      rule.matchType === "all" ? results.every(Boolean) : results.some(Boolean)
-    );
-    if (met) rule.targetWidgetIds.forEach(id => hidden.delete(id));
-  }
-
-  return hidden;
-}
+import { evaluateRules, extractRowsFromValues } from "../utils/formRules";
 
 export default function PreviewPage({ onClose }: { onClose: () => void }) {
   const { widgets, currentFormId } = useBuilderStore();
@@ -75,7 +21,11 @@ export default function PreviewPage({ onClose }: { onClose: () => void }) {
     ? folders.flatMap((f) => f.forms).find((fm) => fm.id === currentFormId)
     : undefined;
   const rules = currentForm?.rules ?? [];
-  const hiddenWidgetIds = evaluateRules(rules, fieldValues);
+  const hiddenWidgetIds = evaluateRules(
+    rules,
+    fieldValues,
+    extractRowsFromValues(fieldValues),
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { widgetRegistry } from "../components/widgets/registry";
 import { ShareSearchContext } from "../components/widgets/search/shareSearchContext";
-import { evaluateRules } from "../utils/formRules";
+import { evaluateRules, extractRowsFromValues } from "../utils/formRules";
 import type { WidgetInstance, FormRule } from "../types/widget.types";
 import QuizReviewModal from "../components/form/QuizReviewModal";
 import { computeQuizReview } from "../lib/quizReview";
@@ -60,7 +60,7 @@ export default function TaskSharePage() {
       ? state.data.rules
       : [];
   const hiddenIds = useMemo(
-    () => evaluateRules(rules, fieldValues),
+    () => evaluateRules(rules, fieldValues, extractRowsFromValues(fieldValues)),
     [rules, fieldValues],
   );
 

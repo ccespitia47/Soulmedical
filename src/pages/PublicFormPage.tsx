@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { widgetRegistry } from "../components/widgets/registry";
-import { evaluateRules } from "../utils/formRules";
+import { evaluateRules, extractRowsFromValues } from "../utils/formRules";
 import type { FormRule, WidgetInstance } from "../types/widget.types";
 import QuizReviewModal from "../components/form/QuizReviewModal";
 import { computeQuizReview } from "../lib/quizReview";
@@ -190,7 +190,12 @@ export default function PublicFormPage() {
   // ── Lógica del formulario ────────────────────────────────────────────────
 
   const hiddenIds = useMemo(
-    () => evaluateRules(form?.rules ?? [], fieldValues),
+    () =>
+      evaluateRules(
+        form?.rules ?? [],
+        fieldValues,
+        extractRowsFromValues(fieldValues),
+      ),
     [form?.rules, fieldValues],
   );
 
