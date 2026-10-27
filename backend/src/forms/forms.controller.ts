@@ -123,14 +123,18 @@ export class FormsController {
   @Post()
   async create(@Body() dto: CreateFormDto, @Request() req: AuthRequest) {
     // Si se crea un formulario vía API key, bloqueamos definir emailTemplate
-    // desde el inicio: la plantilla de correo decide a quién llega el PDF del
-    // paciente, y no debe salir de una integración (mismo criterio que PATCH).
+    // ni emailTemplates desde el inicio: la plantilla de correo decide a
+    // quién llega el PDF del paciente, y no debe salir de una integración
+    // (mismo criterio que PATCH). `emailTemplates` es el array nuevo multi
+    // configuraciones; está igual de expuesto a la misma clase de abuso
+    // (bccRecipients static con correo externo) y por eso se bloquea aquí.
     if (
-      (dto as { emailTemplate?: unknown }).emailTemplate !== undefined &&
+      ((dto as { emailTemplate?: unknown }).emailTemplate !== undefined ||
+        (dto as { emailTemplates?: unknown }).emailTemplates !== undefined) &&
       req.user.authSource === 'api_key'
     ) {
       throw new ForbiddenException(
-        'La plantilla de correo (emailTemplate) debe configurarse desde la app, no vía API key.',
+        'Las plantillas de correo (emailTemplate / emailTemplates) deben configurarse desde la app, no vía API key.',
       );
     }
     return this.formsService.create(dto, req.user.id);
@@ -165,13 +169,18 @@ export class FormsController {
     @Body() dto: UpdateFormDto,
     @Request() req: AuthRequest,
   ) {
-    // emailTemplate rige quién recibe el PDF firmado del paciente. Si una
-    // API key fugada pudiera editarlo, podría agregar un bccRecipients static
-    // con un correo externo y recibir copia oculta de todos los consentimientos
-    // (nombre, documento, firma) — una fuga reportable bajo Ley 1581. Solo JWT.
-    if (dto.emailTemplate !== undefined && req.user.authSource === 'api_key') {
+    // emailTemplate / emailTemplates rigen quién recibe el PDF firmado del
+    // paciente. Si una API key fugada pudiera editarlos, podría agregar un
+    // bccRecipients static con un correo externo y recibir copia oculta de
+    // todos los consentimientos (nombre, documento, firma) — una fuga
+    // reportable bajo Ley 1581. Solo JWT puede tocar ambas rutas (singular
+    // legacy y array nuevo multi configuraciones).
+    if (
+      (dto.emailTemplate !== undefined || dto.emailTemplates !== undefined) &&
+      req.user.authSource === 'api_key'
+    ) {
       throw new ForbiddenException(
-        'La edición de la plantilla de correo (emailTemplate) requiere sesión de usuario, no se permite vía API key.',
+        'La edición de las plantillas de correo (emailTemplate / emailTemplates) requiere sesión de usuario, no se permite vía API key.',
       );
     }
 
@@ -181,6 +190,7 @@ export class FormsController {
     if (dto.name !== undefined && dto.name !== before?.name)
       changedFields.push('name');
     if (dto.emailTemplate !== undefined) changedFields.push('emailTemplate');
+    if (dto.emailTemplates !== undefined) changedFields.push('emailTemplates');
     if (dto.schema !== undefined) changedFields.push('schema');
     await this.auditService.log({
       actor: actorFrom(req),

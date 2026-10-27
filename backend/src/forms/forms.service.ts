@@ -905,8 +905,13 @@ export class FormsService implements OnModuleInit {
     if (dto.emailTemplates !== undefined) {
       // Guarda el array nuevo. Si viene vacío lo persistimos igual (es la
       // forma del admin de decir "sin notificaciones"); el dispatch luego
-      // ve 0 configs habilitadas y no manda nada.
+      // ve 0 configs habilitadas y no manda nada. `markModified` es
+      // defensivo: con tipos Mixed (`[Object]`) Mongoose no siempre
+      // detecta el reassign si la referencia nueva tiene la misma shape
+      // que la vieja (típicamente seguro, pero no documentado como
+      // garantía), y el costo del markModified es cero.
       form.emailTemplates = dto.emailTemplates as Record<string, unknown>[];
+      form.markModified('emailTemplates');
     }
     if (dto.schema !== undefined) {
       (form as any).schema = dto.schema;
