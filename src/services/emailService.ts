@@ -23,6 +23,9 @@ export type SendEmailPayload = {
   currentUser?: AuthUser;
   /** PDFs ya generados en el cliente, listos para reenviar a Graph. */
   attachments?: EmailAttachment[];
+  /** Mapa recipient.id → email (ya resuelto en el navegador para
+   * destinatarios tipo 'lookup' que apuntan a un Google Sheet aparte). */
+  resolvedRecipients?: Record<string, string>;
 };
 
 function replacePlaceholders(text: string, data: Record<string, string>): string {
@@ -35,6 +38,7 @@ export async function sendFormEmail({
   users,
   currentUser,
   attachments = [],
+  resolvedRecipients = {},
 }: SendEmailPayload): Promise<{ success: boolean; message: string; recipients?: number }> {
   if (!template.enabled) {
     return { success: false, message: "Email no habilitado para este formulario" };
@@ -55,6 +59,7 @@ export async function sendFormEmail({
     currentUserEmail: currentUser?.email ?? null,
     formData,
     attachments,
+    resolvedRecipients,
   };
 
   // El endpoint /api/email/send requiere JWT (hardening de seguridad):

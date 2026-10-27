@@ -37,24 +37,28 @@ export class EmailService {
     const users = payload.users ?? [];
     const currentUserEmail = payload.currentUserEmail ?? null;
     const formData = payload.formData ?? {};
+    const resolved = payload.resolvedRecipients ?? {};
 
     const toList = this.resolveRecipients(
       payload.toRecipients,
       users,
       currentUserEmail,
       formData,
+      resolved,
     );
     const ccList = this.resolveRecipients(
       payload.ccRecipients ?? [],
       users,
       currentUserEmail,
       formData,
+      resolved,
     );
     const bccList = this.resolveRecipients(
       payload.bccRecipients ?? [],
       users,
       currentUserEmail,
       formData,
+      resolved,
     );
 
     if (toList.length === 0) {
@@ -274,27 +278,60 @@ export class EmailService {
     users: EmailUserRef[],
     currentUserEmail: string | null,
     formData: Record<string, string>,
+    resolved: Record<string, string> = {},
   ): { emailAddress: { address: string } }[] {
     const emails = new Set<string>();
 
     for (const r of recipients) {
       if (r.type === 'static' && r.email) {
         emails.add(r.email.trim().toLowerCase());
+      } else if (r.type === 'lookup') {
+        // El navegador ya resolvió este destinatario contra el Sheet y
+        // envió el email como `resolvedRecipients[r.id]`. Si no viene o
+        // no es válido, se registra warning y se descarta.
+        const resolvedEmail = r.id ? resolved[r.id] : undefined;
+        if (resolvedEmail && EMAIL_REGEX.test(resolvedEmail.trim())) {
+          emails.add(resolvedEmail.trim().toLowerCase());
+        } else {
+          this.logger.warn(
+            `Recipient 'lookup' id=${r.id ?? '?'} widgetId=${r.widgetId} no fue resuelto por el cliente o es inválido`,
+          );
+        }
       } else if (r.type === 'field' && r.widgetId) {
         // Resolución EXACTA: toma el valor del widget con ese id. No vale el
         // primer email del submission (ver findEmailInFormData, heurístico).
-        // Si el campo está vacío o no es un email válido, el destinatario se
-        // descarta silenciosamente — el envío sigue con los demás.
-        const raw = formData?.[r.widgetId];
-        if (typeof raw === 'string') {
-          const value = raw.trim();
-          if (value && EMAIL_REGEX.test(value)) {
-            emails.add(value.toLowerCase());
-          } else {
-            this.logger.warn(
-              `Recipient tipo 'field' widgetId=${r.widgetId} no resolvió a un email válido (valor="${value}")`,
-            );
+        //
+        // Cuando el recipient define `column`, el widget es una búsqueda:
+        // el frontend serializa la fila seleccionada en
+        // `formData[widgetId + '__row']` (JSON). Leemos esa fila y tomamos
+        // `row[column]` como email. Esto habilita destinatarios como
+        // "ciudadDepartamento.email2" sin que haya un widget por cada columna.
+        let value = '';
+        if (r.column) {
+          const rowRaw = formData?.[`${r.widgetId}__row`];
+          if (typeof rowRaw === 'string' && rowRaw) {
+            try {
+              const row = JSON.parse(rowRaw) as Record<string, unknown>;
+              const colVal = row?.[r.column];
+              if (typeof colVal === 'string') value = colVal.trim();
+              else if (typeof colVal === 'number') value = String(colVal);
+            } catch (err) {
+              this.logger.warn(
+                `Recipient field widgetId=${r.widgetId} column=${r.column}: fila JSON inválida (${err instanceof Error ? err.message : err})`,
+              );
+            }
           }
+        } else {
+          const raw = formData?.[r.widgetId];
+          if (typeof raw === 'string') value = raw.trim();
+        }
+
+        if (value && EMAIL_REGEX.test(value)) {
+          emails.add(value.toLowerCase());
+        } else {
+          this.logger.warn(
+            `Recipient 'field' widgetId=${r.widgetId}${r.column ? `.${r.column}` : ''} no resolvió a un email válido (valor="${value}")`,
+          );
         }
       } else if (r.type === 'group' && r.group) {
         if (r.group === 'current_user') {

@@ -365,6 +365,11 @@ export class FormsService implements OnModuleInit {
 
     const formData = (body.data as Record<string, string>) ?? {};
     const userEmail = (body.email as string) ?? '';
+    // Lookups externos (chips tipo 'lookup' en el template de email) los
+    // resuelve el navegador — nos manda el mapa `{recipientId: email}`.
+    // Lo propagamos al emailService.
+    const resolvedRecipients =
+      (body.resolvedRecipients as Record<string, string>) ?? {};
 
     // Persiste la submission en Mongo — sin esto los envíos del enlace
     // público NUNCA aparecían en el reporte "Registros y PDFs" ni en el
@@ -410,6 +415,7 @@ export class FormsService implements OnModuleInit {
       submissionDoc,
       formData,
       userEmail,
+      resolvedRecipients,
     }).catch((err) => {
       this.logger.error(
         `[submitPublic] Fallo async enviando emails del form ${id}: ${
@@ -433,8 +439,9 @@ export class FormsService implements OnModuleInit {
     submissionDoc: { templateSnapshot: string | null; data: Record<string, unknown> };
     formData: Record<string, string>;
     userEmail: string;
+    resolvedRecipients?: Record<string, string>;
   }): Promise<void> {
-    const { form, submissionDoc, formData, userEmail } = input;
+    const { form, submissionDoc, formData, userEmail, resolvedRecipients } = input;
 
     const pdfAttachment = await this.tryBuildSubmissionPdf(form, submissionDoc);
 
@@ -506,6 +513,7 @@ export class FormsService implements OnModuleInit {
           senderName: template.senderName,
           formData: labeledFormData,
           attachments: pdfAttachment ? [pdfAttachment] : [],
+          resolvedRecipients,
         });
       } catch (err) {
         this.logger.error(

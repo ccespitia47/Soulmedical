@@ -281,6 +281,15 @@ export default function TaskPage() {
       // mandamos su valor para no pisar el del paso real cuando llegue.
       if (!isWidgetVisibleForStep(w, task.stepOrder)) return;
       data[w.id] = collectFieldValue(fd, w.id);
+      // Widgets `search`: también enviamos la fila completa seleccionada
+      // (JSON) bajo `${widgetId}__row` para que el backend pueda resolver
+      // destinatarios tipo "field" con `column`.
+      if (w.type === "search") {
+        const row = fd.get(`${w.id}__row`);
+        if (typeof row === "string" && row) {
+          data[`${w.id}__row`] = row;
+        }
+      }
     });
 
     // Validación explícita de required. HTML5 no valida inputs hidden
@@ -297,6 +306,45 @@ export default function TaskPage() {
       const value = (data[w.id] ?? "").trim();
       if (!value) missing.push(w.label);
     });
+
+    // Validar destinatarios de email tipo "field": el widget que da el
+    // email debe estar diligenciado para saber a quién mandar.
+    const taskTemplate = task.emailTemplate;
+    if (taskTemplate?.enabled) {
+      const allRecipients = [
+        ...(taskTemplate.toRecipients ?? []),
+        ...(taskTemplate.ccRecipients ?? []),
+        ...(taskTemplate.bccRecipients ?? []),
+      ];
+      for (const r of allRecipients) {
+        if (r.type !== "field" || !r.widgetId) continue;
+        const w = task.widgets.find((x) => x.id === r.widgetId);
+        if (!w || hiddenIds.has(w.id)) continue;
+        if (!isWidgetVisibleForStep(w, task.stepOrder)) continue;
+        if (r.column) {
+          const rowRaw = fd.get(`${r.widgetId}__row`);
+          let ok = false;
+          if (typeof rowRaw === "string" && rowRaw) {
+            try {
+              const row = JSON.parse(rowRaw) as Record<string, unknown>;
+              const v = row[r.column];
+              ok =
+                (typeof v === "string" && v.trim() !== "") ||
+                (typeof v === "number" && !Number.isNaN(v));
+            } catch { ok = false; }
+          }
+          if (!ok) {
+            missing.push(`Destinatario: ${w.label} (falta seleccionar en el buscador para obtener ${r.column})`);
+          }
+        } else {
+          const v = (data[r.widgetId] ?? "").trim();
+          if (!v) {
+            missing.push(`Destinatario: ${w.label} (está vacío)`);
+          }
+        }
+      }
+    }
+
     if (missing.length > 0) {
       setMissingFields(missing);
       return;

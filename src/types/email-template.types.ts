@@ -17,7 +17,7 @@ export type PdfFieldMapping = {
 
 // ─── Destinatarios ────────────────────────────────────────────────────────────
 
-export type RecipientType = "static" | "group" | "field";
+export type RecipientType = "static" | "group" | "field" | "lookup";
 
 export type EmailRecipient = {
   id: string;
@@ -27,12 +27,26 @@ export type EmailRecipient = {
   // type === "group": todos los usuarios de ese rol
   group?: string; // "admin" | "coordinator" | "user" | nombre de grupo custom
   groupLabel?: string; // Etiqueta visible: "Administradores", "Coordinadores", etc.
-  // type === "field": apunta a un widget específico del formulario (su valor
-  // es el correo del destinatario). Reemplaza al grupo heurístico
-  // "current_user" que podía enviar el PDF al correo equivocado si el form
-  // tenía varios campos email (médico, cuidador, paciente).
+  // type === "field": apunta a un widget específico del formulario.
+  // - Si solo widgetId: el VALOR directo del widget se usa como email
+  //   (sirve para text/email/select que ya contienen el correo).
+  // - Si widgetId + column: el widget es una búsqueda (search). Se lee la
+  //   fila que el usuario seleccionó (serializada en formData[widgetId+'__row'])
+  //   y se toma `row[column]` como email. Permite, por ejemplo,
+  //   "ciudadDepartamento.email", "ciudadDepartamento.email2", etc.
   widgetId?: string;
   widgetLabel?: string; // Etiqueta visible: "Correo del paciente"
+  column?: string;      // Nombre de columna de la fuente (solo widgets search)
+  // type === "lookup": lookup externo en un Google Sheet aparte.
+  // - El widget `widgetId` (desplegable, texto, search, lo que sea) aporta
+  //   el valor de match (ej. "Bogotá").
+  // - El navegador fetchea `sheetUrl`, busca la fila donde
+  //   row[matchColumn] === valorDelWidget y extrae row[emailColumn].
+  // - Como el backend no habla con Sheets, el navegador resuelve y manda
+  //   `resolvedRecipients[recipient.id]` al endpoint de submit.
+  sheetUrl?: string;
+  matchColumn?: string;
+  emailColumn?: string;
 };
 
 export type EmailTemplate = {

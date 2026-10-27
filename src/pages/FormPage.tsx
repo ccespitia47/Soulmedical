@@ -4,6 +4,7 @@ import { useFolderStore } from "../store/useFolderStore";
 import { useUsersStore } from "../store/useUsersStore";
 import { useAuthStore } from "../store/useAuthStore";
 import { sendFormEmail, type EmailAttachment } from "../services/emailService";
+import { resolveLookupRecipients } from "../utils/resolveLookupRecipients";
 import { evaluateRules } from "../utils/formRules";
 import { htmlToPdfBase64 } from "../utils/pdfExporter";
 import { fetchRenderedPdfFile } from "../services/pdfPreview";
@@ -174,6 +175,48 @@ export default function FormPage({
           missing.push(widget.label);
       }
     });
+
+    // Validar destinatarios de email tipo "field": si el admin eligió un
+    // widget del formulario (o una columna de un search) como destinatario,
+    // ese widget debe tener valor al momento de enviar — sino no sabemos a
+    // quién mandar. Regla acordada: fallar y avisar al usuario.
+    const folderNow = folders.find((f) => f.id === folderId);
+    const formConfigNow = folderNow?.forms.find((fm) => fm.id === formId);
+    const tplNow = formConfigNow?.emailTemplate;
+    if (tplNow?.enabled) {
+      const allRecipients = [
+        ...(tplNow.toRecipients ?? []),
+        ...(tplNow.ccRecipients ?? []),
+        ...(tplNow.bccRecipients ?? []),
+      ];
+      for (const r of allRecipients) {
+        if (r.type !== "field" || !r.widgetId) continue;
+        const w = widgets.find((x) => x.id === r.widgetId);
+        if (!w || hiddenWidgetIds.has(w.id)) continue;
+        if (r.column) {
+          const rowRaw = formData.get(`${r.widgetId}__row`);
+          let ok = false;
+          if (typeof rowRaw === "string" && rowRaw) {
+            try {
+              const row = JSON.parse(rowRaw) as Record<string, unknown>;
+              const v = row[r.column];
+              ok =
+                (typeof v === "string" && v.trim() !== "") ||
+                (typeof v === "number" && !Number.isNaN(v));
+            } catch { ok = false; }
+          }
+          if (!ok) {
+            missing.push(`Destinatario: ${w.label} (falta seleccionar en el buscador para obtener ${r.column})`);
+          }
+        } else {
+          const v = formData.get(r.widgetId);
+          if (!v || (typeof v === "string" && !v.trim())) {
+            missing.push(`Destinatario: ${w.label} (está vacío)`);
+          }
+        }
+      }
+    }
+
     if (missing.length > 0) {
       setMissingFields(missing);
       return;
@@ -191,6 +234,16 @@ export default function FormPage({
         try { data[widget.id] = JSON.parse(str); return; } catch { /* string */ }
       }
       data[widget.id] = str;
+      // Para widgets `search`: también enviamos la fila completa seleccionada
+      // (serializada como JSON) bajo la clave `${widgetId}__row`. El backend
+      // la usa para resolver destinatarios tipo "field" con `column` (ej.
+      // "ciudadDepartamento.email2") sin tener que recrear la fuente.
+      if (widget.type === "search") {
+        const row = formData.get(`${widget.id}__row`);
+        if (typeof row === "string" && row) {
+          data[`${widget.id}__row`] = row;
+        }
+      }
     });
 
     // ── Capturar nombre sugerido del PDF ────────────────────────────────────
@@ -336,12 +389,20 @@ export default function FormPage({
           }
         }
 
+        // Resolver destinatarios tipo "lookup" (contra Google Sheets externo).
+        // El navegador hace el fetch — el backend no habla con Sheets.
+        const resolvedRecipients = await resolveLookupRecipients(
+          template,
+          data,
+        );
+
         await sendFormEmail({
           template,
           formData: buildEmailFormData(widgets, data, hiddenWidgetIds),
           users,
           currentUser: currentUser ?? undefined,
           attachments,
+          resolvedRecipients,
         });
         setEmailStatus("sent");
       } catch (err) {

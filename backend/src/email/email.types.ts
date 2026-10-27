@@ -1,11 +1,30 @@
 export type EmailRecipient =
-  | { type: 'static'; email: string }
-  | { type: 'group'; group: string; groupLabel?: string }
-  // 'field' apunta a un widget específico del formulario (su valor es el correo
-  // del destinatario). Reemplaza al grupo heurístico 'current_user', que tomaba
-  // el PRIMER valor del submission con forma de email y podía mandar el PDF al
-  // correo del médico/cuidador si venía antes que el del paciente.
-  | { type: 'field'; widgetId: string; widgetLabel?: string };
+  | { type: 'static'; id?: string; email: string }
+  | { type: 'group'; id?: string; group: string; groupLabel?: string }
+  // 'field' apunta a un widget del formulario.
+  // - Sin `column`: el valor directo del widget es el email (text/email/select).
+  // - Con `column`: el widget es una búsqueda (search); el frontend serializa
+  //   la fila seleccionada en `formData[widgetId+'__row']` y acá se lee
+  //   `row[column]` para obtener el email (ej. `ciudadDepartamento.email2`).
+  | {
+      type: 'field';
+      id?: string;
+      widgetId: string;
+      widgetLabel?: string;
+      column?: string;
+    }
+  // 'lookup' es un lookup externo contra un Google Sheet aparte.
+  // El backend no fetchea el Sheet; el navegador resuelve el valor y lo
+  // envía en `resolvedRecipients[recipient.id]` al endpoint de submit.
+  | {
+      type: 'lookup';
+      id?: string;
+      widgetId: string;
+      widgetLabel?: string;
+      sheetUrl: string;
+      matchColumn: string;
+      emailColumn: string;
+    };
 
 export type EmailUserRef = {
   id: number;
@@ -35,6 +54,10 @@ export type SendEmailPayload = {
   formData?: Record<string, string>;
   /** PDFs ya generados en el cliente. */
   attachments?: EmailAttachment[];
+  /** Mapa de recipient.id → email (ya resuelto en el navegador). Se usa
+   *  para destinatarios tipo 'lookup' que el backend no puede resolver
+   *  solo (no habla con Google Sheets). Cada key es `recipient.id`. */
+  resolvedRecipients?: Record<string, string>;
 };
 
 export type SendPasswordResetPayload = {

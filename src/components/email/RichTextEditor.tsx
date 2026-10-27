@@ -5,6 +5,12 @@ type RichTextEditorProps = {
   value: string;
   onChange: (html: string) => void;
   placeholder?: string;
+  /** Si se pasa, la ✕ roja de la toolbar limpia TODO el contenido (no solo
+   *  el formato). Útil para email body: botón "limpiar plantilla". */
+  onClearAll?: () => void;
+  /** Si se pasa, aparece un botón "Plantilla" al lado de la ✕ en la toolbar
+   *  para cargar la plantilla por defecto. */
+  onLoadTemplate?: () => void;
 };
 
 /**
@@ -29,6 +35,8 @@ export default function RichTextEditor({
   value,
   onChange,
   placeholder,
+  onClearAll,
+  onLoadTemplate,
 }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const isUpdatingRef = useRef(false);
@@ -104,6 +112,8 @@ export default function RichTextEditor({
         onCommand={execCommand}
         onApplyColor={applyColor}
         onInsertLink={handleInsertLink}
+        onClearAll={onClearAll}
+        onLoadTemplate={onLoadTemplate}
       />
       <div
         ref={editorRef}

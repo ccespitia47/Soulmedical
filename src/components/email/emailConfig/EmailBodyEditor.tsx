@@ -111,28 +111,19 @@ export default function EmailBodyEditor({
           </h3>
         </div>
         <div className="flex gap-1.5">
-          <button type="button" onClick={onLoadTemplate} className={`${BTN_BASE} bg-blue-500 text-white`}>
-            📄 Cargar plantilla
-          </button>
-          {value && (
-            <button
-              type="button"
-              onClick={onClear}
-              className={`${BTN_BASE} border border-red-200 bg-red-50 text-red-500`}
-            >
-              🗑️ Borrar
-            </button>
-          )}
-          <button type="button" onClick={onPreview} className={`${BTN_BASE} bg-violet-500 text-white`}>
-            👁️ Preview
-          </button>
+          {/* Plantilla y Borrar se movieron a la toolbar del editor (al lado
+              de la ✕) para que el header quede limpio. */}
           <button
             type="button"
             onClick={onToggleCodeMode}
-            className={`${BTN_BASE} text-white`}
-            style={{ background: codeMode ? "#10b981" : "#f59e0b" }}
+            title={codeMode ? "Volver al modo visual" : "Editar HTML directamente"}
+            className={`${BTN_BASE} font-mono text-white`}
+            style={{ background: codeMode ? "#10b981" : "#334155" }}
           >
-            {codeMode ? "📝 Modo Visual" : "💻 Ver Código"}
+            {codeMode ? "📝 Visual" : "</> HTML"}
+          </button>
+          <button type="button" onClick={onPreview} className={`${BTN_BASE} bg-violet-500 text-white`}>
+            👁️ Preview
           </button>
         </div>
       </div>
@@ -154,6 +145,8 @@ export default function EmailBodyEditor({
             value={value}
             onChange={onChange}
             placeholder="Escribe el contenido del email aquí..."
+            onClearAll={onClear}
+            onLoadTemplate={onLoadTemplate}
           />
         </div>
       )}

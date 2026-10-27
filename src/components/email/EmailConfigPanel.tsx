@@ -65,16 +65,29 @@ export default function EmailConfigPanel({
   // — así el usuario puede mapear los datos dentro del subform al PDF/email.
   const widgetPlaceholders = buildPlaceholders(widgets);
 
-  // Campos email del formulario, para que el admin pueda apuntar un destinatario
-  // a un widget EXACTO ("Correo del paciente") en vez del grupo heurístico
-  // "current_user" que agarraba el primer email del submission.
+  // Campos del formulario elegibles como fuente para el lookup externo.
+  // Al clickear uno en el dropdown de destinatarios, se abre el modal de
+  // Lookup Config con ese widget preseleccionado — ahí se configura la
+  // URL del Google Sheet, columna de match y columnas de correo. UNA entry
+  // por widget (no una por columna, aunque sea search), porque la elección
+  // de columnas pasa al modal.
+  const ELIGIBLE_FIELD_TYPES = new Set([
+    "email",
+    "text",
+    "select",
+    "phone",
+    "number",
+    "search",
+    "radio",
+    "date",
+  ]);
   const emailFields = widgets
-    .filter((w) => w.type === "email")
+    .filter((w) => ELIGIBLE_FIELD_TYPES.has(w.type))
     .map((w) => ({
       id: w.id,
       label:
-        (w.config?.label as string | undefined) ??
-        (w.config?.placeholder as string | undefined) ??
+        w.label ||
+        (w.config?.placeholder as string | undefined) ||
         w.id,
     }));
 
@@ -140,6 +153,7 @@ export default function EmailConfigPanel({
                 bccRecipients={config.bccRecipients ?? []}
                 allUsers={users}
                 emailFields={emailFields}
+                widgets={widgets}
                 hasToError={hasToError}
                 showCcBcc={showCcBcc}
                 onToggleCcBcc={() => setShowCcBcc(!showCcBcc)}

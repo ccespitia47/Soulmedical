@@ -66,6 +66,11 @@ export default function SearchRender({ widget, onValue }: WidgetRenderProps) {
     typeof widget.config.defaultValue === "string" ? widget.config.defaultValue : "";
   const [selectedValue, setSelectedValue] = useState(initialValue);
   const [selectedDisplay, setSelectedDisplay] = useState(initialValue);
+  // Guardamos la fila COMPLETA seleccionada. Se emite como hidden input con
+  // nombre `${widget.id}__row` para que el backend (email.service) pueda
+  // resolver recipients tipo `field` con `column` especificada
+  // (ej. "ciudadDepartamento.email2" → row["email2"]).
+  const [selectedRow, setSelectedRow] = useState<Row | null>(null);
 
   const minChars = config.minChars ?? 2;
   const columns = config.displayColumns ?? [];
@@ -87,6 +92,7 @@ export default function SearchRender({ widget, onValue }: WidgetRenderProps) {
     const value = display;
     setSelectedDisplay(display);
     setSelectedValue(value);
+    setSelectedRow(row);
     setShowModal(false);
 
     // Rellenar otros campos (widgets top-level + sub-campos de subforms).
@@ -112,6 +118,7 @@ export default function SearchRender({ widget, onValue }: WidgetRenderProps) {
     e.stopPropagation();
     setSelectedValue("");
     setSelectedDisplay("");
+    setSelectedRow(null);
     if (onValue) onValue({ [widget.id]: "" });
   };
 
@@ -124,6 +131,13 @@ export default function SearchRender({ widget, onValue }: WidgetRenderProps) {
 
       {/* Input oculto para el submit del formulario */}
       <input type="hidden" name={widget.id} value={selectedValue} />
+      {/* Fila completa seleccionada (JSON) — permite a Email config apuntar
+          destinatarios a columnas específicas de la fuente (ej. email2, email3). */}
+      <input
+        type="hidden"
+        name={`${widget.id}__row`}
+        value={selectedRow ? JSON.stringify(selectedRow) : ""}
+      />
 
       {/* Trigger: al hacer clic abre el modal de búsqueda. */}
       <button

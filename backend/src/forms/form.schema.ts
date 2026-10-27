@@ -14,8 +14,18 @@ export class Form {
   @Prop({ type: Object, default: { widgets: [] } })
   schema: Record<string, unknown>;
 
+  // LEGACY: configuración singular de email. Se mantiene para compat con
+  // formularios creados antes de que `emailTemplates[]` existiera. Al leer,
+  // si `emailTemplates` está vacío pero `emailTemplate` existe, el singular
+  // se trata como la primera y única configuración.
   @Prop({ type: Object, default: null })
   emailTemplate: Record<string, unknown> | null;
+
+  // Múltiples configuraciones de email por formulario. Cada entry es
+  // autónoma (sus propios destinatarios, cuerpo, asunto, PDF). Al enviar
+  // el formulario se disparan todas en paralelo.
+  @Prop({ type: [Object], default: [] })
+  emailTemplates: Record<string, unknown>[];
 
   @Prop({ default: 1 })
   version: number;

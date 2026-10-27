@@ -1,8 +1,11 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { EmailRecipient } from "../../../types/email-template.types";
+import type { WidgetInstance } from "../../../types/widget.types";
 import { ROLE_LABELS } from "../../../types/auth.types";
 import { randomUUID } from "../../../utils/uuid";
 import ExcelEmailUploader from "../../common/ExcelEmailUploader";
+import AvailableFieldsModal from "./AvailableFieldsModal";
+import LookupConfigModal from "./LookupConfigModal";
 
 export type RecipientUser = {
   id: number;
@@ -12,13 +15,14 @@ export type RecipientUser = {
   active: boolean;
 };
 
-// Un widget tipo email del form actual, pasado desde EmailConfigPanel.
-// Se ofrece como destinatario "campo del formulario" — más seguro que el
-// grupo legacy "current_user" porque apunta a un widgetId exacto en vez de
-// agarrar el primer email del submission.
+// Un widget (o widget+columna de un search) ofrecido como destinatario.
+// - column undefined: toma el valor directo del widget (text/email/select).
+// - column definida: el widget es un search; se lee row[column] de la fila
+//   seleccionada por el usuario (ej. "ciudadDepartamento.email2").
 export type EmailFieldOption = {
-  id: string;      // widget.id
-  label: string;   // widget.label o placeholder (fallback)
+  id: string;        // widget.id
+  label: string;     // "ciudadDepartamento.email2" si hay column; sino widget.label
+  column?: string;   // nombre de columna (solo widgets search)
 };
 
 export const AVAILABLE_GROUPS = [
@@ -35,6 +39,10 @@ type RecipientsInputProps = {
   recipients: EmailRecipient[];
   allUsers: RecipientUser[];
   emailFields?: EmailFieldOption[];
+  /** Widgets completos del formulario — necesario para el modal "Ver campos
+   * disponibles" que carga columnas reales de los Sheets de los widgets
+   * search. Opcional por compat; si no se pasa, el botón no aparece. */
+  widgets?: WidgetInstance[];
   hasError?: boolean;
   onChange: (r: EmailRecipient[]) => void;
 };
@@ -57,6 +65,14 @@ function tagMeta(r: EmailRecipient) {
       label: r.widgetLabel ?? r.widgetId ?? "",
     };
   }
+  if (r.type === "lookup") {
+    return {
+      color: "#0891b2",
+      bg: "#0891b218",
+      icon: "🔗",
+      label: r.widgetLabel ?? `${r.widgetId}.${r.emailColumn ?? ""}`,
+    };
+  }
   return { color: "#374151", bg: "#f3f4f6", icon: "✉️", label: r.email ?? "" };
 }
 
@@ -70,17 +86,33 @@ export default function RecipientsInput({
   recipients,
   allUsers,
   emailFields = [],
+  widgets,
   hasError,
   onChange,
 }: RecipientsInputProps) {
   const [inputValue, setInputValue] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showFieldsModal, setShowFieldsModal] = useState(false);
+  // Si !== null, el modal de lookup externo se abre con ese widget preseleccionado.
+  const [lookupPreselectWidgetId, setLookupPreselectWidgetId] = useState<string | null>(null);
+  // Ref actualizada con los recipients. Evita stale closure cuando el admin
+  // agrega un segundo lookup (el callback captura la lista vieja y pisa).
+  const recipientsRef = useRef(recipients);
+  useEffect(() => {
+    recipientsRef.current = recipients;
+  }, [recipients]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const query = inputValue.trim().toLowerCase();
   const alreadyGroupIds = recipients.filter((r) => r.type === "group").map((r) => r.group);
   const alreadyEmails = recipients.filter((r) => r.type === "static").map((r) => r.email);
-  const alreadyFieldIds = recipients.filter((r) => r.type === "field").map((r) => r.widgetId);
+  // Dedupe: la clave compuesta (widgetId + column) distingue "widget.email"
+  // de "widget.email2" como opciones distintas en el dropdown.
+  const alreadyFieldKeys = new Set(
+    recipients
+      .filter((r) => r.type === "field")
+      .map((r) => `${r.widgetId}::${r.column ?? ""}`),
+  );
 
   const groupSuggestions = AVAILABLE_GROUPS.filter(
     (g) =>
@@ -89,7 +121,7 @@ export default function RecipientsInput({
   );
   const fieldSuggestions = emailFields.filter(
     (f) =>
-      !alreadyFieldIds.includes(f.id) &&
+      !alreadyFieldKeys.has(`${f.id}::${f.column ?? ""}`) &&
       (query === "" || f.label.toLowerCase().includes(query))
   );
   const userSuggestions = allUsers.filter(
@@ -115,12 +147,13 @@ export default function RecipientsInput({
   };
 
   const addField = (field: EmailFieldOption) => {
-    onChange([
-      ...recipients,
-      { id: randomUUID(), type: "field", widgetId: field.id, widgetLabel: field.label },
-    ]);
+    // Al elegir un widget del dropdown, abrimos directamente el modal de
+    // lookup externo con ese widget preseleccionado. Es el flujo normal:
+    // el admin elige "Ciudad" → le aparece el modal para que configure el
+    // Google Sheet, columna de match y columnas de correo.
     setInputValue("");
-    inputRef.current?.focus();
+    setShowDropdown(false);
+    setLookupPreselectWidgetId(field.id);
   };
 
   const addStatic = (email: string) => {
@@ -327,6 +360,16 @@ export default function RecipientsInput({
         <span>
           Escribe un correo y presiona Enter · Busca usuarios por nombre · Selecciona grupos del menú
         </span>
+        {widgets && widgets.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowFieldsModal(true)}
+            className="cursor-pointer rounded-md border border-[#00c2a8]/30 bg-[#00c2a8]/5 px-2 py-1 text-[11px] font-semibold text-[#0891b2] hover:bg-[#00c2a8]/10"
+            title="Ver todos los campos del formulario y columnas disponibles"
+          >
+            🔎 Ver campos
+          </button>
+        )}
         <ExcelEmailUploader
           existingEmails={recipients
             .filter((r) => r.type === "static")
@@ -343,6 +386,24 @@ export default function RecipientsInput({
           compact
         />
       </div>
+
+      {showFieldsModal && widgets && (
+        <AvailableFieldsModal
+          widgets={widgets}
+          recipients={recipients}
+          onChange={onChange}
+          onClose={() => setShowFieldsModal(false)}
+        />
+      )}
+
+      {lookupPreselectWidgetId && widgets && (
+        <LookupConfigModal
+          widgets={widgets}
+          initialWidgetId={lookupPreselectWidgetId}
+          onAdd={(newOnes) => onChange([...recipientsRef.current, ...newOnes])}
+          onClose={() => setLookupPreselectWidgetId(null)}
+        />
+      )}
     </div>
   );
 }

@@ -14,9 +14,19 @@ type ToolbarProps = {
   onCommand: (command: string, value?: string) => void;
   onApplyColor: (type: "text" | "background", color: string) => void;
   onInsertLink: () => void;
+  /** Limpia TODO el contenido del editor (no solo el formato). */
+  onClearAll?: () => void;
+  /** Inserta la plantilla por defecto del cuerpo del email. */
+  onLoadTemplate?: () => void;
 };
 
-export default function Toolbar({ onCommand, onApplyColor, onInsertLink }: ToolbarProps) {
+export default function Toolbar({
+  onCommand,
+  onApplyColor,
+  onInsertLink,
+  onClearAll,
+  onLoadTemplate,
+}: ToolbarProps) {
   return (
     <div className="flex flex-wrap gap-1 border-b border-slate-200 bg-gray-50 p-2">
       {/* OJO: nada de preventDefault en mousedown. En un <select> la acción por
@@ -101,13 +111,23 @@ export default function Toolbar({ onCommand, onApplyColor, onInsertLink }: Toolb
       <ToolbarButton title="Insertar enlace" onClick={onInsertLink}>
         🔗
       </ToolbarButton>
-      <ToolbarButton
-        title="Limpiar formato"
-        onClick={() => onCommand("removeFormat")}
-        variant="danger"
-      >
-        ✕
-      </ToolbarButton>
+      {onClearAll && (
+        <ToolbarButton
+          title="Limpiar TODO el contenido del email"
+          onClick={onClearAll}
+          variant="danger"
+        >
+          ✕
+        </ToolbarButton>
+      )}
+      {onLoadTemplate && (
+        <ToolbarButton
+          title="Cargar plantilla por defecto"
+          onClick={onLoadTemplate}
+        >
+          📄 Plantilla
+        </ToolbarButton>
+      )}
     </div>
   );
 }
