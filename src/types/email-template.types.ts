@@ -50,8 +50,18 @@ export type EmailRecipient = {
 };
 
 export type EmailTemplate = {
+  // Identificador estable de ESTA configuración dentro del array
+  // `FormItem.emailTemplates`. Lo asigna el frontend al crearla; para
+  // formularios viejos (singular legacy) se sintetiza al hidratar.
+  // Permite al backend recibir attachments taggeados por template y
+  // enrutarlos al dispatch correcto (ver flujo de tasks).
+  id?: string;
   enabled: boolean;
   subject: string;
+  // Etiqueta visible de ESTA notificación en la UI del admin — "Operaciones",
+  // "Aseguradora", etc. No llega al correo final; solo sirve para distinguir
+  // paneles cuando hay varias configuraciones en el mismo formulario.
+  label?: string;
   // Remitente
   senderName?: string;      // Nombre visible del remitente: "Grupo Soul - SoulForms"
   replyTo?: string;         // Correo de respuesta (opcional)

@@ -179,11 +179,19 @@ export default function FormPage({
     // Validar destinatarios de email tipo "field": si el admin eligió un
     // widget del formulario (o una columna de un search) como destinatario,
     // ese widget debe tener valor al momento de enviar — sino no sabemos a
-    // quién mandar. Regla acordada: fallar y avisar al usuario.
+    // quién mandar. Regla acordada: fallar y avisar al usuario. Con multi-
+    // templates, chequeamos TODAS las configs habilitadas (una falla en
+    // cualquiera basta para bloquear el envío).
     const folderNow = folders.find((f) => f.id === folderId);
     const formConfigNow = folderNow?.forms.find((fm) => fm.id === formId);
-    const tplNow = formConfigNow?.emailTemplate;
-    if (tplNow?.enabled) {
+    const templatesNow =
+      formConfigNow?.emailTemplates && formConfigNow.emailTemplates.length > 0
+        ? formConfigNow.emailTemplates
+        : formConfigNow?.emailTemplate
+        ? [formConfigNow.emailTemplate]
+        : [];
+    for (const tplNow of templatesNow) {
+      if (!tplNow.enabled) continue;
       const allRecipients = [
         ...(tplNow.toRecipients ?? []),
         ...(tplNow.ccRecipients ?? []),
@@ -253,14 +261,24 @@ export default function FormPage({
     // borde de red (validado por regex estricta en el DTO).
     const folder = folders.find((f) => f.id === folderId);
     const formConfig = folder?.forms.find((fm) => fm.id === formId);
-    const template = formConfig?.emailTemplate;
-
+    // Fuente de verdad: array nuevo `emailTemplates`. Si está vacío
+    // caemos al singular legacy para no romper formularios no migrados.
+    const templates =
+      formConfig?.emailTemplates && formConfig.emailTemplates.length > 0
+        ? formConfig.emailTemplates
+        : formConfig?.emailTemplate
+        ? [formConfig.emailTemplate]
+        : [];
+    // El pdfFilename sugerido para la UI de "Mis envíos" lo tomamos del
+    // primer template con pdfTemplate — mantiene la UX histórica.
     let pdfFilename: string | undefined;
-
-    if (template?.attachPDF && template?.pdfTemplate?.trim()) {
+    const firstWithPdf = templates.find(
+      (t) => t.attachPDF && t.pdfTemplate?.trim(),
+    );
+    if (firstWithPdf) {
       try {
         const labeledDataForSnapshot = expandFormData(widgets, data, hiddenWidgetIds);
-        pdfFilename = renderFilename(template.pdfFilename, labeledDataForSnapshot);
+        pdfFilename = renderFilename(firstWithPdf.pdfFilename, labeledDataForSnapshot);
       } catch (e) {
         console.warn("No se pudo derivar el nombre sugerido del PDF:", e);
       }
@@ -273,138 +291,142 @@ export default function FormPage({
 
     if (currentUser?.id) deleteDraft(currentUser.id, folderId, formId);
 
-    if (template?.enabled) {
+    const enabledTemplates = templates.filter((t) => t.enabled);
+    if (enabledTemplates.length > 0) {
       setEmailStatus("sending");
       try {
         const labeledData = expandFormData(widgets, data, hiddenWidgetIds);
-        const attachments: EmailAttachment[] = [];
+        // Dispara UN envío por cada notificación habilitada. Cada una
+        // trae su propio asunto, cuerpo, destinatarios y PDF (si
+        // corresponde). Se envían en secuencia para que un fallo en una
+        // no corte las demás; los errores se agregan y se reportan al
+        // final para que el modal muestre un estado único al usuario.
+        const errors: string[] = [];
+        for (const template of enabledTemplates) {
+          const attachments: EmailAttachment[] = [];
 
-        // Excel mapeado → PDF (mismo pipeline que el enlace público:
-        // backend con LibreOffice + fillXlsx + convertBufferToPdf).
-        //
-        // Antes acá se generaba localmente con html2canvas + jsPDF sobre un
-        // HTML "aproximado" del Excel, que salía visualmente distinto al
-        // formato real. Ahora pega al endpoint /forms/excel/render-pdf que
-        // ya usa el Preview del admin y produce un PDF pixel-perfect con
-        // los mismos fixes de alignment / firma anclada / merges detectados.
-        if (template.excelBase64 && (template.excelMappings?.length ?? 0) > 0) {
-          try {
-            const result = await fetchRenderedPdf({
-              excelBase64: template.excelBase64,
-              mappings: template.excelMappings!.map((m) => ({
-                coord: m.coord,
-                placeholder: m.placeholder,
-              })),
-              values: labeledData,
-              customLogoBase64: template.excelLogoBase64,
-              filename:
-                template.excelFilename?.replace(/\.xlsx?$/i, "") ?? "formulario",
-            });
-            if (result.blob) {
-              const base64 = await blobToBase64(result.blob);
-              // Usa el pdfFilename configurado (con placeholders interpolados
-              // por renderFilename) para que el adjunto llegue con el mismo
-              // nombre que se configuró en Config → Email. Fallback a
-              // excelFilename → "formulario.pdf" si no hay pdfFilename.
-              const configuredName = renderFilename(template.pdfFilename, labeledData);
-              const attachmentName =
-                configuredName && configuredName !== "formulario.pdf"
-                  ? configuredName
-                  : template.excelFilename?.replace(/\.xlsx?$/i, ".pdf") ??
-                    "formulario.pdf";
-              attachments.push({
-                name: attachmentName,
-                contentType: "application/pdf",
-                contentBytes: base64,
+          // Excel mapeado → PDF (backend con LibreOffice + fillXlsx).
+          if (template.excelBase64 && (template.excelMappings?.length ?? 0) > 0) {
+            try {
+              const result = await fetchRenderedPdf({
+                excelBase64: template.excelBase64,
+                mappings: template.excelMappings!.map((m) => ({
+                  coord: m.coord,
+                  placeholder: m.placeholder,
+                })),
+                values: labeledData,
+                customLogoBase64: template.excelLogoBase64,
+                filename:
+                  template.excelFilename?.replace(/\.xlsx?$/i, "") ?? "formulario",
               });
-            } else if (result.error) {
-              console.error("Error generando PDF del Excel:", result.error);
+              if (result.blob) {
+                const base64 = await blobToBase64(result.blob);
+                const configuredName = renderFilename(template.pdfFilename, labeledData);
+                const attachmentName =
+                  configuredName && configuredName !== "formulario.pdf"
+                    ? configuredName
+                    : template.excelFilename?.replace(/\.xlsx?$/i, ".pdf") ??
+                      "formulario.pdf";
+                attachments.push({
+                  name: attachmentName,
+                  contentType: "application/pdf",
+                  contentBytes: base64,
+                });
+              } else if (result.error) {
+                console.error("Error generando PDF del Excel:", result.error);
+              }
+            } catch (e) {
+              console.error("Error generando PDF del Excel:", e);
             }
-          } catch (e) {
-            console.error("Error generando PDF del Excel:", e);
           }
-        }
 
-        // PDF subido + mappings → PDF con overlay de texto en las coordenadas
-        // mapeadas. Se llena en el backend con pdf-lib (mismo endpoint que usa
-        // el modal Preview). Devuelve un PDF binario listo para adjuntar.
-        if (template.pdfBase64 && (template.pdfMappings?.length ?? 0) > 0) {
-          try {
-            // El mapper guarda placeholders en formato ${key}; el backend
-            // acepta cualquiera de las dos formas pero mandamos ambas por
-            // compatibilidad con distintos guardados.
-            const values: Record<string, string> = {};
-            for (const [k, v] of Object.entries(labeledData)) {
-              values[k] = v;
-              values[`\${${k}}`] = v;
+          // PDF subido + mappings → overlay con pdf-lib.
+          if (template.pdfBase64 && (template.pdfMappings?.length ?? 0) > 0) {
+            try {
+              const values: Record<string, string> = {};
+              for (const [k, v] of Object.entries(labeledData)) {
+                values[k] = v;
+                values[`\${${k}}`] = v;
+              }
+              const result = await fetchRenderedPdfFile({
+                pdfBase64: template.pdfBase64,
+                mappings: template.pdfMappings!.map((m) => ({
+                  placeholder: m.placeholder,
+                  x: m.x,
+                  y: m.y,
+                  page: m.page,
+                  fontSize: m.fontSize,
+                })),
+                values,
+                filename: "formulario",
+              });
+              if (result.blob) {
+                const base64 = await blobToBase64(result.blob);
+                attachments.push({
+                  name: renderFilename(template.pdfFilename, labeledData),
+                  contentType: "application/pdf",
+                  contentBytes: base64,
+                });
+              } else if (result.error) {
+                console.error("Error rellenando PDF:", result.error);
+              }
+            } catch (e) {
+              console.error("Error generando PDF con mappings:", e);
             }
-            const result = await fetchRenderedPdfFile({
-              pdfBase64: template.pdfBase64,
-              mappings: template.pdfMappings!.map((m) => ({
-                placeholder: m.placeholder,
-                x: m.x,
-                y: m.y,
-                page: m.page,
-                fontSize: m.fontSize,
-              })),
-              values,
-              filename: "formulario",
-            });
-            if (result.blob) {
-              const base64 = await blobToBase64(result.blob);
+          }
+
+          // HTML template → PDF (fallback).
+          if (template.attachPDF && template.pdfTemplate?.trim()) {
+            try {
+              const filled = template.pdfTemplate.replace(
+                /\$\{([^}]+)\}/g,
+                (_, key) => {
+                  const raw = labeledData[key] ?? "";
+                  if (raw.startsWith("data:image/")) {
+                    return `<img src="${raw}" style="max-height:80px;max-width:100%;object-fit:contain;display:block;">`;
+                  }
+                  return raw;
+                },
+              );
+              const base64 = await htmlToPdfBase64(filled);
               attachments.push({
                 name: renderFilename(template.pdfFilename, labeledData),
                 contentType: "application/pdf",
                 contentBytes: base64,
               });
-            } else if (result.error) {
-              console.error("Error rellenando PDF:", result.error);
+            } catch (e) {
+              console.error("Error generando PDF del template HTML:", e);
             }
-          } catch (e) {
-            console.error("Error generando PDF con mappings:", e);
           }
-        }
 
-        // HTML template → PDF
-        if (template.attachPDF && template.pdfTemplate?.trim()) {
+          // Resolver destinatarios tipo "lookup" (contra Google Sheets externo).
+          // Se calcula por template porque cada uno tiene sus propios
+          // widget-ids de match / columnas de email.
+          const resolvedRecipients = await resolveLookupRecipients(template, data);
+
           try {
-            const filled = template.pdfTemplate.replace(
-              /\$\{([^}]+)\}/g,
-              (_, key) => {
-                const raw = labeledData[key] ?? "";
-                if (raw.startsWith("data:image/")) {
-                  return `<img src="${raw}" style="max-height:80px;max-width:100%;object-fit:contain;display:block;">`;
-                }
-                return raw;
-              },
-            );
-            const base64 = await htmlToPdfBase64(filled);
-            attachments.push({
-              name: renderFilename(template.pdfFilename, labeledData),
-              contentType: "application/pdf",
-              contentBytes: base64,
+            await sendFormEmail({
+              template,
+              formData: buildEmailFormData(widgets, data, hiddenWidgetIds),
+              users,
+              currentUser: currentUser ?? undefined,
+              attachments,
+              resolvedRecipients,
             });
-          } catch (e) {
-            console.error("Error generando PDF del template HTML:", e);
+          } catch (err) {
+            console.error(
+              `Error enviando email de la notificación "${template.label || template.id || "sin nombre"}":`,
+              err,
+            );
+            errors.push(err instanceof Error ? err.message : String(err));
           }
         }
-
-        // Resolver destinatarios tipo "lookup" (contra Google Sheets externo).
-        // El navegador hace el fetch — el backend no habla con Sheets.
-        const resolvedRecipients = await resolveLookupRecipients(
-          template,
-          data,
-        );
-
-        await sendFormEmail({
-          template,
-          formData: buildEmailFormData(widgets, data, hiddenWidgetIds),
-          users,
-          currentUser: currentUser ?? undefined,
-          attachments,
-          resolvedRecipients,
-        });
-        setEmailStatus("sent");
+        if (errors.length > 0) {
+          setEmailStatus("error");
+          setEmailError(errors.join(" · "));
+        } else {
+          setEmailStatus("sent");
+        }
       } catch (err) {
         console.error("Error enviando email:", err);
         setEmailStatus("error");

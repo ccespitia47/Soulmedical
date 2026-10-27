@@ -207,6 +207,12 @@ export default function CreateTaskModal({
             folders
               .find((f) => f.id === folderId)
               ?.forms.find((fm) => fm.id === formId)?.emailTemplate ?? null,
+          // Snapshot del array nuevo para que la tarea dispare N emails
+          // al completarse. El backend cae al singular si viene vacío.
+          emailTemplates:
+            folders
+              .find((f) => f.id === folderId)
+              ?.forms.find((fm) => fm.id === formId)?.emailTemplates ?? [],
           title,
           description,
           prefilledData: finalPrefilled,

@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsUUID, IsOptional, IsObject } from 'class-validator';
+import { IsString, IsNotEmpty, IsUUID, IsOptional, IsObject, IsArray } from 'class-validator';
 
 export class CreateFormDto {
   @IsString()
@@ -15,4 +15,8 @@ export class CreateFormDto {
   @IsObject()
   @IsOptional()
   emailTemplate?: object;
+
+  @IsArray()
+  @IsOptional()
+  emailTemplates?: Record<string, unknown>[];
 }

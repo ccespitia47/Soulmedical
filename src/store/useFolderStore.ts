@@ -18,6 +18,18 @@ import {
 } from "../services/api";
 
 function mapForm(f: FormApiData): FormItem {
+  const singular = (f.emailTemplate ?? undefined) as EmailTemplate | undefined;
+  const arrayRaw = (f.emailTemplates ?? []) as EmailTemplate[];
+  // Si el backend ya guardó el array nuevo, lo usamos. Si no, pero hay
+  // un singular legacy, lo envolvemos en array con un id sintético para
+  // que la UI y los sends siempre trabajen contra `emailTemplates`.
+  const emailTemplates: EmailTemplate[] | undefined =
+    arrayRaw.length > 0
+      ? arrayRaw.map((t, i) => ({ ...t, id: t.id ?? `tpl-${i}` }))
+      : singular
+      ? [{ ...singular, id: singular.id ?? "legacy-0" }]
+      : undefined;
+
   return {
     id: f.id,
     name: f.name,
@@ -25,7 +37,8 @@ function mapForm(f: FormApiData): FormItem {
     updatedAt: new Date(f.updatedAt).toLocaleDateString("es-CO"),
     widgets: (f.schema?.widgets ?? []) as WidgetInstance[],
     rules: (f.schema?.rules ?? []) as FormRule[],
-    emailTemplate: (f.emailTemplate ?? undefined) as EmailTemplate | undefined,
+    emailTemplate: singular,
+    emailTemplates,
     isPublic: f.isPublic ?? false,
     sendConfirmationEmail: f.sendConfirmationEmail ?? true,
     requiresEmailVerification: f.requiresEmailVerification ?? false,
@@ -57,6 +70,7 @@ function mapFormSummary(f: FormSummaryData): FormItem {
     widgets: [],
     rules: [],
     emailTemplate: undefined,
+    emailTemplates: undefined,
     isPublic: false,
     sendConfirmationEmail: true,
     requiresEmailVerification: false,
@@ -96,6 +110,17 @@ interface FolderState {
   saveFormWidgets: (folderId: string, formId: string, widgets: WidgetInstance[]) => Promise<void>;
   saveFormRules: (folderId: string, formId: string, rules: FormRule[]) => Promise<void>;
   updateFormEmailTemplate: (folderId: string, formId: string, emailTemplate: EmailTemplate) => Promise<void>;
+  /**
+   * Guarda el array completo de configuraciones de email de un formulario.
+   * Mantiene en paralelo `emailTemplate` singular (primera entry, o la
+   * primera habilitada) para que lectores legacy no se rompan. En el
+   * backend el array nuevo es la fuente de verdad cuando no está vacío.
+   */
+  updateFormEmailTemplates: (
+    folderId: string,
+    formId: string,
+    emailTemplates: EmailTemplate[],
+  ) => Promise<void>;
   /** Actualiza solo en memoria los flags de compartir; el PATCH al backend lo hace ShareFormModal. */
   setFormShareFlags: (
     folderId: string,
@@ -230,6 +255,7 @@ export const useFolderStore = create<FolderState>()((set, get) => ({
           folderId: newFolder.id,
           schema: { widgets: form.widgets ?? [] },
           emailTemplate: form.emailTemplate as object | undefined,
+          emailTemplates: form.emailTemplates as unknown as object[] | undefined,
         });
         return data ? mapForm(data) : null;
       })
@@ -261,6 +287,10 @@ export const useFolderStore = create<FolderState>()((set, get) => ({
   // "addForm + setTimeout + saveFormWidgets" que dependía de adivinar
   // cuánto tarda el API en responder.
   addFormFromTemplate: async (folderId, name, widgets, rules, emailTemplate) => {
+    // Para plantillas creadas antes de los multi-templates seguimos
+    // recibiendo UN solo `emailTemplate`. Lo pasamos tal cual al endpoint;
+    // el mapForm luego lo envuelve en `emailTemplates: [singular]` para
+    // la UI nueva.
     const { data, error } = await createFormApi({
       name,
       folderId,
@@ -323,6 +353,7 @@ export const useFolderStore = create<FolderState>()((set, get) => ({
       folderId,
       schema: { widgets: form.widgets ?? [], rules: form.rules ?? [] },
       emailTemplate: form.emailTemplate as object | undefined,
+      emailTemplates: form.emailTemplates as unknown as object[] | undefined,
     });
     if (data) {
       set((state) => ({
@@ -432,6 +463,40 @@ export const useFolderStore = create<FolderState>()((set, get) => ({
     }
   },
 
+  updateFormEmailTemplates: async (folderId, formId, emailTemplates) => {
+    // Elegimos el "representante" singular que escribimos al campo legacy
+    // `emailTemplate`: la primera habilitada, o la primera a secas. Así los
+    // flujos viejos (snapshot de tareas, lecturas en controllers viejos)
+    // siguen viendo UNA configuración consistente mientras el array nuevo
+    // es la fuente de verdad para los flujos nuevos.
+    const representative =
+      emailTemplates.find((t) => t.enabled) ?? emailTemplates[0] ?? null;
+    const { data } = await updateFormApi(formId, {
+      emailTemplate: (representative ?? {}) as object,
+      emailTemplates: emailTemplates as unknown as object[],
+    });
+    if (data) {
+      set((state) => ({
+        folders: state.folders.map((f) =>
+          f.id === folderId
+            ? {
+                ...f,
+                forms: f.forms.map((fm) =>
+                  fm.id === formId
+                    ? {
+                        ...fm,
+                        emailTemplate: representative ?? undefined,
+                        emailTemplates,
+                      }
+                    : fm,
+                ),
+              }
+            : f,
+        ),
+      }));
+    }
+  },
+
   // Operaciones de versionado locales (TODO: persistir en backend).
   publishForm: (folderId, formId, publishedBy, note) => {
     set((state) => ({
@@ -449,6 +514,7 @@ export const useFolderStore = create<FolderState>()((set, get) => ({
               publishedBy,
               widgets: fm.widgets ?? [],
               emailTemplate: fm.emailTemplate,
+              emailTemplates: fm.emailTemplates,
               note,
             };
             return {
@@ -456,6 +522,7 @@ export const useFolderStore = create<FolderState>()((set, get) => ({
               status: "published" as const,
               publishedWidgets: fm.widgets ?? [],
               publishedEmailTemplate: fm.emailTemplate,
+              publishedEmailTemplates: fm.emailTemplates,
               versions: [...versions, newVersion],
               currentVersion: nextNumber,
             };
@@ -479,8 +546,10 @@ export const useFolderStore = create<FolderState>()((set, get) => ({
               ...fm,
               widgets: version.widgets,
               emailTemplate: version.emailTemplate,
+              emailTemplates: version.emailTemplates,
               publishedWidgets: version.widgets,
               publishedEmailTemplate: version.emailTemplate,
+              publishedEmailTemplates: version.emailTemplates,
               currentVersion: versionNumber,
             };
           }),

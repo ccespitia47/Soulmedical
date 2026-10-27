@@ -59,6 +59,8 @@ export class TasksController {
       emailTemplate:
         (body.emailTemplate as Record<string, unknown> | null | undefined) ??
         null,
+      emailTemplates:
+        (body.emailTemplates as Record<string, unknown>[] | undefined) ?? [],
       generateShareLink: body.generateShareLink === true,
       oneShotLink: body.oneShotLink === true,
     };
@@ -251,7 +253,12 @@ export class TasksController {
       recipientEmail: step.recipientEmail,
       // Solo enviamos el template al último paso: el cliente genera el PDF
       // y lo manda como attachment al submit. Pasos intermedios no lo necesitan.
+      // Multi-templates: también mandamos el array nuevo cuando existe.
       emailTemplate: isLastStep ? task.emailTemplate ?? null : null,
+      emailTemplates: isLastStep
+        ? ((task as unknown as { emailTemplates?: Record<string, unknown>[] })
+            .emailTemplates ?? [])
+        : [],
       // Datos acumulados de los pasos previos para que el PDF del último
       // paso incluya todo el historial.
       previousStepsData: this.tasksService.collectPreviousStepsData(

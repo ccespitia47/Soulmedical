@@ -475,19 +475,18 @@ export class FormsService implements OnModuleInit {
 
     // Email de notificación al completarse el formulario público.
     //
-    // Se dispara si CUALQUIERA de estos dos flags está en true:
-    //   - form.sendConfirmationEmail (toggle rápido del modal Compartir)
-    //   - form.emailTemplate.enabled (toggle detallado de Config → Email)
+    // Fuente de verdad: el array `form.emailTemplates`. Si está vacío pero
+    // existe un `form.emailTemplate` singular (form viejo, no migrado), lo
+    // envolvemos en array con una entry para no cambiar el comportamiento
+    // histórico. Cada entry habilitada dispara UN email independiente —
+    // así Sara puede tener "Operaciones" con PDF A y "Aseguradora" con
+    // PDF B saliendo del mismo submit.
     //
-    // Ambos apuntan al mismo comportamiento: enviar a los toRecipients
-    // configurados en el emailTemplate del form, con el PDF adjunto. El
-    // toggle del modal Share funciona como ATAJO del emailTemplate.enabled
-    // sin obligar a Sara a entrar a la Config detallada por cada form.
-    //
-    // El email a un supuesto "usuario final" (que requería un widget email
-    // en el form) NO se envía porque los formularios de Sara no tienen
-    // ese campo — el flujo real es siempre al equipo interno.
-    const template = (form.emailTemplate ?? {}) as {
+    // El toggle rápido `form.sendConfirmationEmail` del modal Share actúa
+    // como atajo: fuerza el envío de la primera entry habilitada (o la
+    // primera a secas si todas vienen con enabled=false).
+    type Tpl = {
+      id?: string;
       enabled?: boolean;
       subject?: string;
       emailBody?: string;
@@ -495,35 +494,96 @@ export class FormsService implements OnModuleInit {
       ccRecipients?: EmailRecipient[];
       bccRecipients?: EmailRecipient[];
       senderName?: string;
+      // Metadata de PDF por template. Si cualquiera de estos está presente
+      // generamos el PDF específico de esta notificación.
+      pdfBase64?: string;
+      pdfMappings?: Array<{ placeholder: string; x: number; y: number; page: number; fontSize?: number }>;
+      excelBase64?: string;
+      excelMappings?: Array<{ coord: string; placeholder: string }>;
+      excelLogoBase64?: string;
+      excelFilename?: string;
+      attachPDF?: boolean;
+      pdfTemplate?: string;
+      pdfFilename?: string;
     };
-    const wantsToSend = form.sendConfirmationEmail === true || template.enabled === true;
-    const hasRecipients = (template.toRecipients?.length ?? 0) > 0;
 
-    if (wantsToSend && hasRecipients) {
+    const arrayField = (form as unknown as { emailTemplates?: Tpl[] }).emailTemplates;
+    const singular = (form.emailTemplate ?? null) as Tpl | null;
+    const rawTemplates: Tpl[] =
+      arrayField && arrayField.length > 0 ? arrayField : singular ? [singular] : [];
+
+    // Elegimos qué configs disparar. Reglas:
+    //  - Si al menos una tiene `enabled:true`, se disparan sólo esas.
+    //  - Si ninguna la tiene pero `sendConfirmationEmail` está activo
+    //    (shortcut del modal Share), disparamos la primera config a secas
+    //    para preservar la UX histórica.
+    const enabledOnes = rawTemplates.filter((t) => t.enabled === true);
+    const shortcutFirstOnly =
+      enabledOnes.length === 0 &&
+      form.sendConfirmationEmail === true &&
+      rawTemplates.length > 0
+        ? [rawTemplates[0]]
+        : [];
+    const configsToDispatch =
+      enabledOnes.length > 0 ? enabledOnes : shortcutFirstOnly;
+
+    // Cachear el PDF del submitPublic para la config "legacy" (la que
+    // usa el pdfTemplate del form). Lo pre-construimos una vez y se
+    // reutiliza para evitar renderizar Puppeteer N veces si no cambia.
+    for (const t of configsToDispatch) {
+      const hasRecipients = (t.toRecipients?.length ?? 0) > 0;
+      if (!hasRecipients) {
+        this.logger.warn(
+          `[submitPublic] Form ${form._id} config "${t.id ?? 'legacy'}" sin toRecipients — email omitido.`,
+        );
+        continue;
+      }
+
+      // Attachment por template: si la config tiene pdfBase64/excelBase64/
+      // pdfTemplate propios, armamos UN PDF específico para ella. Si no,
+      // caemos al PDF genérico del form (pdfAttachment ya construido arriba
+      // sobre form.emailTemplate singular) para no romper el flujo legacy.
+      const hasOwnPdfSource =
+        !!(t.excelBase64 && (t.excelMappings?.length ?? 0) > 0) ||
+        !!(t.pdfBase64 && (t.pdfMappings?.length ?? 0) > 0) ||
+        !!(t.attachPDF && t.pdfTemplate && t.pdfTemplate.trim().length > 0);
+
+      let attachmentForThis: import('../email/email.types').EmailAttachment | null = pdfAttachment;
+      if (hasOwnPdfSource) {
+        try {
+          attachmentForThis = await this.tryBuildSubmissionPdfForTemplate(
+            form,
+            submissionDoc,
+            t,
+          );
+        } catch (err) {
+          this.logger.error(
+            `[submitPublic] Error armando PDF de la config "${t.id ?? 'legacy'}": ${err instanceof Error ? err.message : err}`,
+          );
+          attachmentForThis = null;
+        }
+      }
+
       try {
         await this.emailService.sendEmail({
-          subject: interpolate(template.subject || `Nuevo envío: ${form.name}`),
+          subject: interpolate(t.subject || `Nuevo envío: ${form.name}`),
           emailBody: interpolate(
-            template.emailBody ||
+            t.emailBody ||
               `<p>Nuevo envío del formulario <strong>${form.name}</strong></p>`,
           ),
-          toRecipients: (template.toRecipients ?? []) as EmailRecipient[],
-          ccRecipients: (template.ccRecipients ?? []) as EmailRecipient[],
-          bccRecipients: (template.bccRecipients ?? []) as EmailRecipient[],
-          senderName: template.senderName,
+          toRecipients: (t.toRecipients ?? []) as EmailRecipient[],
+          ccRecipients: (t.ccRecipients ?? []) as EmailRecipient[],
+          bccRecipients: (t.bccRecipients ?? []) as EmailRecipient[],
+          senderName: t.senderName,
           formData: labeledFormData,
-          attachments: pdfAttachment ? [pdfAttachment] : [],
+          attachments: attachmentForThis ? [attachmentForThis] : [],
           resolvedRecipients,
         });
       } catch (err) {
         this.logger.error(
-          `[submitPublic] Error enviando email: ${err instanceof Error ? err.message : err}`,
+          `[submitPublic] Error enviando email de la config "${t.id ?? 'legacy'}": ${err instanceof Error ? err.message : err}`,
         );
       }
-    } else if (wantsToSend && !hasRecipients) {
-      this.logger.warn(
-        `[submitPublic] Form ${form._id} tiene sendConfirmationEmail:true pero no hay toRecipients configurados — email no enviado.`,
-      );
     }
 
     // `userEmail` queda sin uso en este flow — se conserva el parámetro por
@@ -553,11 +613,37 @@ export class FormsService implements OnModuleInit {
    * Devuelve null si no hay nada que renderizar o si el render falla —
    * los emails se envían igual sin adjunto para no bloquear el flujo.
    */
+  /**
+   * Variante de tryBuildSubmissionPdf parametrizada por template. El flujo
+   * multi-notificación la usa para generar UN PDF específico por cada
+   * configuración de email del form.
+   *
+   * - Las fuentes de PDF (excelBase64, pdfBase64, pdfTemplate) se leen del
+   *   `template` argumento, no de form.emailTemplate singular.
+   * - Para Path 3 (HTML + Puppeteer) se usa `template.pdfTemplate` como
+   *   snapshot in-memory; si está vacío cae al `submissionDoc.templateSnapshot`
+   *   histórico (el del form.emailTemplate singular) para preservar compat.
+   */
+  private async tryBuildSubmissionPdfForTemplate(
+    form: FormDocument,
+    submissionDoc: { templateSnapshot: string | null; data: Record<string, unknown> },
+    tpl: Record<string, unknown>,
+  ): Promise<import('../email/email.types').EmailAttachment | null> {
+    const synthetic = {
+      templateSnapshot:
+        (tpl.pdfTemplate as string | undefined)?.trim() ||
+        submissionDoc.templateSnapshot,
+      data: submissionDoc.data,
+    };
+    return this.tryBuildSubmissionPdf(form, synthetic, tpl);
+  }
+
   private async tryBuildSubmissionPdf(
     form: FormDocument,
     submissionDoc: { templateSnapshot: string | null; data: Record<string, unknown> },
+    overrideTemplate?: Record<string, unknown>,
   ): Promise<import('../email/email.types').EmailAttachment | null> {
-    const template = (form.emailTemplate ?? {}) as {
+    const template = (overrideTemplate ?? form.emailTemplate ?? {}) as {
       excelBase64?: string;
       excelMappings?: Array<{ coord: string; placeholder: string }>;
       excelLogoBase64?: string;
@@ -569,6 +655,7 @@ export class FormsService implements OnModuleInit {
         page: number;
         fontSize?: number;
       }>;
+      pdfFilename?: string;
     };
     // Los "values" mapean placeholder → valor. IMPORTANTE: los mappings
     // se guardan con placeholders derivados del LABEL del widget
@@ -620,10 +707,9 @@ export class FormsService implements OnModuleInit {
 
     // Nombre del PDF adjunto: usa el pdfFilename configurado (con placeholders
     // interpolados) para que llegue con el mismo formato que Sara configuró en
-    // Config → Email. Antes acá se ponía solo `form.name.pdf`, ignorando ese
-    // ajuste y dando distinto resultado que el flujo autenticado.
-    const templateForName = (form.emailTemplate ?? {}) as { pdfFilename?: string };
-    const configuredName = (templateForName.pdfFilename ?? '').trim();
+    // Config → Email. Multi-templates: cada config puede traer su propio
+    // pdfFilename; si no, caemos al del template efectivo.
+    const configuredName = (template.pdfFilename ?? '').trim();
     const renderedName = configuredName
       ? configuredName.replace(/\$\{([^}]+)\}/g, (_, k) => labeledValues[k] ?? '')
       : `${form.name}.pdf`;
@@ -816,6 +902,12 @@ export class FormsService implements OnModuleInit {
     if (dto.name !== undefined) form.name = dto.name;
     if (dto.emailTemplate !== undefined)
       form.emailTemplate = dto.emailTemplate as Record<string, unknown>;
+    if (dto.emailTemplates !== undefined) {
+      // Guarda el array nuevo. Si viene vacío lo persistimos igual (es la
+      // forma del admin de decir "sin notificaciones"); el dispatch luego
+      // ve 0 configs habilitadas y no manda nada.
+      form.emailTemplates = dto.emailTemplates as Record<string, unknown>[];
+    }
     if (dto.schema !== undefined) {
       (form as any).schema = dto.schema;
       form.version += 1;

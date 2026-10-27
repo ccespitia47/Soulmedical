@@ -20,6 +20,10 @@ export class CreateTaskDto {
   widgets?: Record<string, unknown>[];
   rules?: Record<string, unknown>[];
   emailTemplate?: Record<string, unknown> | null;
+  // Snapshot del array multi-template. Si viene con items, es la fuente
+  // de verdad; `emailTemplate` singular queda como fallback para tareas
+  // creadas desde forms viejos todavía no migrados.
+  emailTemplates?: Record<string, unknown>[];
 
   @IsBoolean()
   @IsOptional()
@@ -34,6 +38,13 @@ export type SubmitAttachment = {
   name: string;
   contentType: string;
   contentBytes: string;
+  // Opcional: id de la configuración de email a la que pertenece este
+  // adjunto. Cuando la tarea tiene multiples templates, cada uno genera
+  // su propio PDF; esto permite enrutar cada attachment al dispatch
+  // correcto en sendCompletionEmail. Si viene undefined, el adjunto se
+  // comparte con todas las configuraciones (compat con cliente viejo
+  // single-template).
+  templateId?: string;
 };
 
 export class SubmitTaskStepDto {

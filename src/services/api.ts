@@ -522,6 +522,10 @@ export type FormApiData = {
   folderId: string;
   schema: { widgets: unknown[]; rules?: unknown[] };
   emailTemplate: unknown | null;
+  // Múltiples configuraciones de email. Si viene con items, se trata
+  // como la fuente de verdad; `emailTemplate` singular queda como fallback
+  // para formularios viejos que todavía no se migraron.
+  emailTemplates?: unknown[] | null;
   isPublic?: boolean;
   sendConfirmationEmail?: boolean;
   requiresEmailVerification?: boolean;
@@ -541,11 +545,25 @@ export async function getFormByIdApi(formId: string) {
   return request<FormApiData>(`/forms/${formId}`);
 }
 
-export async function createFormApi(dto: { name: string; folderId: string; schema?: object; emailTemplate?: object }) {
+export async function createFormApi(dto: {
+  name: string;
+  folderId: string;
+  schema?: object;
+  emailTemplate?: object;
+  emailTemplates?: object[];
+}) {
   return request<FormApiData>('/forms', { method: 'POST', body: JSON.stringify(dto) });
 }
 
-export async function updateFormApi(id: string, dto: { name?: string; schema?: object; emailTemplate?: object }) {
+export async function updateFormApi(
+  id: string,
+  dto: {
+    name?: string;
+    schema?: object;
+    emailTemplate?: object;
+    emailTemplates?: object[];
+  },
+) {
   return request<FormApiData>(`/forms/${id}`, { method: 'PATCH', body: JSON.stringify(dto) });
 }
 

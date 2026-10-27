@@ -126,11 +126,17 @@ export class Task {
   @Prop({ type: Array, default: [] })
   rules: Record<string, unknown>[];
 
-  // Snapshot del emailTemplate del form al momento de crear la tarea.
-  // Se usa al completar el último paso para enviar el correo con PDF
-  // a los destinatarios definidos en el template.
+  // LEGACY: snapshot singular del emailTemplate del form al crear la tarea.
+  // Se mantiene para tareas creadas antes de que `emailTemplates[]` existiera.
   @Prop({ type: Object, default: null })
   emailTemplate: Record<string, unknown> | null;
+
+  // Snapshot de las N configuraciones de email del form al crear la tarea.
+  // Al completar el último paso, cada entry habilitada dispara UN email
+  // propio (ver tasks.service.sendCompletionEmail). Fuente de verdad cuando
+  // no está vacío; si está vacío se cae al `emailTemplate` singular.
+  @Prop({ type: [Object], default: [] })
+  emailTemplates: Record<string, unknown>[];
 
   @Prop({ type: [TaskStepSchema], default: [] })
   steps: TaskStep[];

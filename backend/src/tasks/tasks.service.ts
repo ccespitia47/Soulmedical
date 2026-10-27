@@ -187,6 +187,7 @@ export class TasksService {
       widgets: dto.widgets ?? [],
       rules: dto.rules ?? [],
       emailTemplate: dto.emailTemplate ?? null,
+      emailTemplates: dto.emailTemplates ?? [],
       steps,
       status: 'in_progress',
       currentStepIndex: 0,
@@ -1541,53 +1542,73 @@ export class TasksService {
 
   private async sendCompletionEmail(
     task: TaskDocument,
-    attachments: EmailAttachment[],
+    attachments: Array<EmailAttachment & { templateId?: string }>,
   ): Promise<void> {
-    const template = (task.emailTemplate ?? null) as
-      | (Record<string, unknown> & {
-          enabled?: boolean;
-          subject?: string;
-          emailBody?: string;
-          senderName?: string;
-          replyTo?: string;
-          toRecipients?: EmailRecipient[];
-          ccRecipients?: EmailRecipient[];
-          bccRecipients?: EmailRecipient[];
-        })
-      | null;
+    type Tpl = Record<string, unknown> & {
+      id?: string;
+      enabled?: boolean;
+      subject?: string;
+      emailBody?: string;
+      senderName?: string;
+      replyTo?: string;
+      toRecipients?: EmailRecipient[];
+      ccRecipients?: EmailRecipient[];
+      bccRecipients?: EmailRecipient[];
+    };
+
+    // Fuente de verdad: array nuevo. Fallback: singular legacy.
+    const arr =
+      (task as unknown as { emailTemplates?: Tpl[] }).emailTemplates ?? [];
+    const singular = (task.emailTemplate ?? null) as Tpl | null;
+    const rawTemplates: Tpl[] = arr.length > 0 ? arr : singular ? [singular] : [];
+    const enabledTemplates = rawTemplates.filter((t) => t.enabled === true);
 
     const finalData = task.finalData ?? {};
 
-    // Si el form tiene template activo, lo respetamos (asunto, cuerpo,
-    // destinatarios). Si no, mandamos un email mínimo a todos los participantes.
-    if (template && template.enabled) {
+    // Si hay al menos una config habilitada, disparamos UN email por cada
+    // una (cada una con sus propios destinatarios, cuerpo, asunto y PDF).
+    // Si no hay ninguna, caemos al email simple a todos los participantes.
+    if (enabledTemplates.length > 0) {
       const placeholders = this.buildLabeledData(task, finalData);
-      const subject = this.renderPlaceholders(
-        template.subject || `✅ Completada: ${task.title}`,
-        placeholders,
-      );
-      const body = this.renderPlaceholders(
-        template.emailBody || '',
-        placeholders,
-      );
 
-      try {
-        await this.emailService.sendEmail({
-          subject,
-          emailBody: body,
-          senderName: template.senderName || 'SoulForms — Tareas',
-          replyTo: template.replyTo,
-          toRecipients: template.toRecipients ?? [],
-          ccRecipients: template.ccRecipients ?? [],
-          bccRecipients: template.bccRecipients ?? [],
-          formData: finalData,
-          attachments,
-        });
-      } catch (err) {
-        console.error(
-          '[TasksService] Error enviando email de completado con template:',
-          err,
+      // Si el cliente mandó attachments taggeados por templateId, cada
+      // template usa SU set. Los sin templateId se adjuntan a TODOS como
+      // compat para clientes viejos (single-template).
+      const sharedAttachments = attachments.filter((a) => !a.templateId);
+
+      for (const template of enabledTemplates) {
+        const subject = this.renderPlaceholders(
+          template.subject || `✅ Completada: ${task.title}`,
+          placeholders,
         );
+        const body = this.renderPlaceholders(template.emailBody || '', placeholders);
+
+        const ownAttachments = template.id
+          ? attachments.filter((a) => a.templateId === template.id)
+          : [];
+        const toSend =
+          ownAttachments.length > 0
+            ? [...ownAttachments, ...sharedAttachments]
+            : sharedAttachments;
+
+        try {
+          await this.emailService.sendEmail({
+            subject,
+            emailBody: body,
+            senderName: template.senderName || 'SoulForms — Tareas',
+            replyTo: template.replyTo,
+            toRecipients: template.toRecipients ?? [],
+            ccRecipients: template.ccRecipients ?? [],
+            bccRecipients: template.bccRecipients ?? [],
+            formData: finalData,
+            attachments: toSend,
+          });
+        } catch (err) {
+          console.error(
+            `[TasksService] Error enviando email de completado (template "${template.id ?? 'legacy'}"):`,
+            err,
+          );
+        }
       }
       return;
     }

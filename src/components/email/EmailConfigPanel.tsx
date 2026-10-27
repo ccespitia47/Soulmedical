@@ -1,21 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useBuilderStore } from "../../store/useBuilderStore";
 import { useUsersStore } from "../../store/useUsersStore";
-import {
-  DEFAULT_EMAIL_HTML,
-  buildPdfHtmlTemplate,
-} from "../../utils/emailTemplates";
-import SenderSection from "./emailConfig/SenderSection";
-import EmailBodyEditor from "./emailConfig/EmailBodyEditor";
-import PdfAttachmentSection from "./emailConfig/PdfAttachmentSection";
-import EnabledToggle from "./emailConfig/EnabledToggle";
-import RecipientsSection from "./emailConfig/RecipientsSection";
-import SubjectField from "./emailConfig/SubjectField";
-import AttachPdfToggle from "./emailConfig/AttachPdfToggle";
-import ValidationErrorsBox from "./emailConfig/ValidationErrorsBox";
-import EmailConfigModals from "./emailConfig/EmailConfigModals";
-import HtmlCellMapper from "./HtmlCellMapper";
 import { useEmailConfig } from "./emailConfig/useEmailConfig";
+import EmailConfigItem from "./emailConfig/EmailConfigItem";
 import { buildPlaceholders } from "../../utils/placeholders";
 import Icon from "../common/Icon";
 
@@ -32,45 +19,29 @@ export default function EmailConfigPanel({
 }: EmailConfigPanelProps) {
   const widgets = useBuilderStore((s) => s.widgets);
   const { users, loadUsers, loaded: usersLoaded } = useUsersStore();
+
   useEffect(() => {
     if (!usersLoaded) loadUsers();
   }, [usersLoaded, loadUsers]);
+
   const {
-    config,
-    setConfig,
-    validationErrors,
-    setValidationErrors,
+    configs,
+    expandedId,
+    validationErrorsById,
+    addConfig,
+    removeConfig,
+    updateConfig,
+    replaceConfig,
+    toggleExpanded,
     clearErrorContaining,
-    showCcBcc,
-    setShowCcBcc,
-    pdfMode,
-    setPdfMode,
-    uploadedPdfFile,
-    uploadedExcelFile,
-    handlePdfUpload,
-    handleExcelUpload,
     save,
   } = useEmailConfig(folderId, formId);
 
-  const [showEmailCodeMode, setShowEmailCodeMode] = useState(false);
-  const [showEmailPreview, setShowEmailPreview] = useState(false);
-  const [showPdfPreview, setShowPdfPreview] = useState(false);
-  const [showExcelPreview, setShowExcelPreview] = useState(false);
-  const [showPdfMapper, setShowPdfMapper] = useState(false);
-  const [showExcelMapper, setShowExcelMapper] = useState(false);
-  const [showHtmlMapper, setShowHtmlMapper] = useState(false);
-
-  // Genera placeholders para todos los widgets. Para subformularios añade
-  // entradas adicionales por cada campo interno y una para la tabla completa
-  // — así el usuario puede mapear los datos dentro del subform al PDF/email.
+  // Placeholders disponibles (widgets + subcampos) para interpolación en
+  // asunto, cuerpo y nombre del PDF.
   const widgetPlaceholders = buildPlaceholders(widgets);
 
-  // Campos del formulario elegibles como fuente para el lookup externo.
-  // Al clickear uno en el dropdown de destinatarios, se abre el modal de
-  // Lookup Config con ese widget preseleccionado — ahí se configura la
-  // URL del Google Sheet, columna de match y columnas de correo. UNA entry
-  // por widget (no una por columna, aunque sea search), porque la elección
-  // de columnas pasa al modal.
+  // Campos elegibles como fuente de email (destinatarios tipo field/lookup).
   const ELIGIBLE_FIELD_TYPES = new Set([
     "email",
     "text",
@@ -91,10 +62,6 @@ export default function EmailConfigPanel({
         w.id,
     }));
 
-  const hasSubjectError = validationErrors.some((e) => e.includes("asunto"));
-  const hasBodyError = validationErrors.some((e) => e.includes("cuerpo"));
-  const hasToError = validationErrors.some((e) => e.includes("destinatario"));
-
   const handleSave = () => {
     if (save()) onClose();
   };
@@ -112,7 +79,9 @@ export default function EmailConfigPanel({
                 Configuración de email
               </h2>
               <p className="m-0 mt-0.5 text-[12.5px] text-gray-400">
-                Configura el email que se enviará al completar el formulario.
+                Agregá una o más notificaciones de email que se dispararán
+                al enviarse el formulario. Cada una tiene sus propios
+                destinatarios, cuerpo y PDF.
               </p>
             </div>
           </div>
@@ -125,126 +94,37 @@ export default function EmailConfigPanel({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6">
-          <EnabledToggle
-            enabled={config.enabled}
-            onChange={(enabled) => {
-              setConfig((prev) => ({ ...prev, enabled }));
-              setValidationErrors([]);
-            }}
-          />
+        <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50/50 p-6">
+          {configs.map((cfg, i) => (
+            <EmailConfigItem
+              key={cfg.id ?? `tpl-${i}`}
+              config={cfg}
+              index={i}
+              total={configs.length}
+              expanded={expandedId === (cfg.id ?? `tpl-${i}`)}
+              onToggleExpanded={() => toggleExpanded(cfg.id ?? `tpl-${i}`)}
+              onChange={(partial) => updateConfig(cfg.id ?? `tpl-${i}`, partial)}
+              onReplace={(updater) => replaceConfig(cfg.id ?? `tpl-${i}`, updater)}
+              onDelete={() => removeConfig(cfg.id ?? `tpl-${i}`)}
+              widgets={widgets}
+              users={users}
+              emailFields={emailFields}
+              widgetPlaceholders={widgetPlaceholders}
+              validationErrors={validationErrorsById[cfg.id ?? `tpl-${i}`] ?? []}
+              clearErrorContaining={(substr) =>
+                clearErrorContaining(cfg.id ?? `tpl-${i}`, substr)
+              }
+            />
+          ))}
 
-          {config.enabled && (
-            <>
-              <SenderSection
-                senderName={config.senderName ?? ""}
-                replyTo={config.replyTo ?? ""}
-                onChangeSenderName={(v) =>
-                  setConfig((prev) => ({ ...prev, senderName: v }))
-                }
-                onChangeReplyTo={(v) =>
-                  setConfig((prev) => ({ ...prev, replyTo: v }))
-                }
-              />
-
-              <RecipientsSection
-                toRecipients={config.toRecipients ?? []}
-                ccRecipients={config.ccRecipients ?? []}
-                bccRecipients={config.bccRecipients ?? []}
-                allUsers={users}
-                emailFields={emailFields}
-                widgets={widgets}
-                hasToError={hasToError}
-                showCcBcc={showCcBcc}
-                onToggleCcBcc={() => setShowCcBcc(!showCcBcc)}
-                onChangeTo={(r) => {
-                  setConfig((prev) => ({ ...prev, toRecipients: r }));
-                  if (r.length > 0) clearErrorContaining("destinatario");
-                }}
-                onChangeCc={(r) =>
-                  setConfig((prev) => ({ ...prev, ccRecipients: r }))
-                }
-                onChangeBcc={(r) =>
-                  setConfig((prev) => ({ ...prev, bccRecipients: r }))
-                }
-              />
-
-              <SubjectField
-                value={config.subject}
-                hasError={hasSubjectError}
-                placeholders={widgetPlaceholders}
-                onChange={(v) => {
-                  setConfig((prev) => ({ ...prev, subject: v }));
-                  if (v.trim()) clearErrorContaining("asunto");
-                }}
-              />
-
-              <EmailBodyEditor
-                value={config.emailBody}
-                codeMode={showEmailCodeMode}
-                hasError={hasBodyError}
-                placeholders={widgetPlaceholders}
-                onChange={(html) => {
-                  setConfig((prev) => ({ ...prev, emailBody: html }));
-                  if (html.trim()) clearErrorContaining("cuerpo");
-                }}
-                onToggleCodeMode={() => setShowEmailCodeMode(!showEmailCodeMode)}
-                onLoadTemplate={() =>
-                  setConfig((prev) => ({ ...prev, emailBody: DEFAULT_EMAIL_HTML }))
-                }
-                onClear={() => setConfig((prev) => ({ ...prev, emailBody: "" }))}
-                onPreview={() => setShowEmailPreview(true)}
-              />
-
-              <PdfAttachmentSection
-                mode={pdfMode}
-                pdfTemplate={config.pdfTemplate}
-                pdfBase64={config.pdfBase64}
-                pdfMappingsCount={config.pdfMappings?.length ?? 0}
-                uploadedPdfFile={uploadedPdfFile}
-                excelBase64={config.excelBase64}
-                excelFilename={config.excelFilename}
-                uploadedExcelFile={uploadedExcelFile}
-                excelMappingsCount={config.excelMappings?.length ?? 0}
-                placeholders={widgetPlaceholders}
-                onChangeMode={setPdfMode}
-                onChangePdfTemplate={(v) =>
-                  setConfig((prev) => ({ ...prev, pdfTemplate: v }))
-                }
-                onClearPdfTemplate={() =>
-                  setConfig((prev) => ({ ...prev, pdfTemplate: "" }))
-                }
-                onLoadPdfTemplate={() =>
-                  setConfig((prev) => ({
-                    ...prev,
-                    pdfTemplate: buildPdfHtmlTemplate(widgets),
-                  }))
-                }
-                onPreviewPdf={() => setShowPdfPreview(true)}
-                onUploadPdf={handlePdfUpload}
-                onOpenPdfMapper={() => setShowPdfMapper(true)}
-                onUploadExcel={handleExcelUpload}
-                onOpenExcelMapper={() => setShowExcelMapper(true)}
-                onPreviewExcel={() => setShowExcelPreview(true)}
-                onOpenHtmlMapper={() => setShowHtmlMapper(true)}
-              />
-
-              <AttachPdfToggle
-                attachPDF={config.attachPDF}
-                pdfFilename={config.pdfFilename}
-                placeholders={widgetPlaceholders}
-                onChangeAttach={(v) =>
-                  setConfig((prev) => ({ ...prev, attachPDF: v }))
-                }
-                onChangeFilename={(v) =>
-                  setConfig((prev) => ({ ...prev, pdfFilename: v }))
-                }
-              />
-            </>
-          )}
+          <button
+            type="button"
+            onClick={addConfig}
+            className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-white px-4 py-3.5 text-sm font-semibold text-slate-500 transition-all hover:border-[#00c2a8] hover:bg-emerald-50/40 hover:text-[#00c2a8]"
+          >
+            <Icon name="plus" size={16} /> Agregar notificación
+          </button>
         </div>
-
-        <ValidationErrorsBox errors={validationErrors} />
 
         <div className="flex justify-end gap-2.5 border-t border-slate-200 bg-slate-50/50 px-6 py-4">
           <button
@@ -260,33 +140,6 @@ export default function EmailConfigPanel({
             <Icon name="save" size={16} /> Guardar configuración
           </button>
         </div>
-
-        <EmailConfigModals
-          config={config}
-          setConfig={setConfig}
-          placeholders={widgetPlaceholders}
-          showEmailPreview={showEmailPreview}
-          showPdfPreview={showPdfPreview}
-          showPdfMapper={showPdfMapper}
-          showExcelMapper={showExcelMapper}
-          showExcelPreview={showExcelPreview}
-          onCloseEmailPreview={() => setShowEmailPreview(false)}
-          onClosePdfPreview={() => setShowPdfPreview(false)}
-          onClosePdfMapper={() => setShowPdfMapper(false)}
-          onCloseExcelMapper={() => setShowExcelMapper(false)}
-          onCloseExcelPreview={() => setShowExcelPreview(false)}
-        />
-
-        {showHtmlMapper && (
-          <HtmlCellMapper
-            html={config.pdfTemplate}
-            placeholders={widgetPlaceholders}
-            onSave={(nextHtml) =>
-              setConfig((prev) => ({ ...prev, pdfTemplate: nextHtml }))
-            }
-            onClose={() => setShowHtmlMapper(false)}
-          />
-        )}
       </div>
     </div>
   );

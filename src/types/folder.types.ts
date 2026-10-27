@@ -16,6 +16,8 @@ export type FormVersion = {
   publishedBy: string;   // nombre del usuario que publicó
   widgets: WidgetInstance[];
   emailTemplate?: EmailTemplate;
+  // Snapshot del array multi-template al momento de publicar la versión.
+  emailTemplates?: EmailTemplate[];
   note?: string;         // descripción opcional del cambio
 };
 
@@ -30,7 +32,14 @@ export type FormItem = {
   widgets?: WidgetInstance[];
   // Reglas show/hide del formulario (persistidas con el schema en el backend)
   rules?: FormRule[];
+  // LEGACY: configuración singular de email. Se mantiene para compat con
+  // formularios creados antes de que `emailTemplates[]` existiera.
   emailTemplate?: EmailTemplate;
+  // Múltiples configuraciones de email por formulario. Cada entry es
+  // autónoma (sus propios destinatarios, cuerpo, asunto, PDF). Si está
+  // presente y no vacío es la fuente de verdad; si no, se cae a
+  // `emailTemplate` singular.
+  emailTemplates?: EmailTemplate[];
   // Estado de publicación
   status: FormStatus;
   // Compartir público / confirmación
@@ -41,6 +50,7 @@ export type FormItem = {
   // Versión publicada actual (lo que ven los usuarios)
   publishedWidgets?: WidgetInstance[];
   publishedEmailTemplate?: EmailTemplate;
+  publishedEmailTemplates?: EmailTemplate[];
   // Historial de versiones publicadas
   versions?: FormVersion[];
   currentVersion?: number;
@@ -70,6 +80,7 @@ export type TemplateItem = {
   // con plantillas guardadas antes de este cambio.
   rules?: FormRule[];
   emailTemplate?: EmailTemplate;
+  emailTemplates?: EmailTemplate[];
   createdAt: string;
   createdBy: string;     // nombre del usuario que la creó
 };

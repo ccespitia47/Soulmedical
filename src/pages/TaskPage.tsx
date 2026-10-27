@@ -16,6 +16,10 @@ type Attachment = {
   name: string;
   contentType: string;
   contentBytes: string;
+  // Multi-templates: si está presente, el backend solo adjunta este PDF
+  // al dispatch de la configuración con ese id. Undefined ⇒ compartido
+  // entre todas las configs (compat con flujos pre-multi-template).
+  templateId?: string;
 };
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
@@ -33,7 +37,11 @@ type TaskData = {
   stepOrder: number;
   recipientName: string;
   recipientEmail: string;
+  // Legacy: una sola configuración de email del form.
   emailTemplate?: EmailTemplate | null;
+  // Nuevo: múltiples configuraciones. Si viene con items, es fuente de
+  // verdad; si no, se cae al `emailTemplate` singular.
+  emailTemplates?: EmailTemplate[];
   previousStepsData?: Record<string, string>;
 };
 
@@ -123,8 +131,12 @@ function buildLabeledData(
 async function collectPdfAttachments(
   template: EmailTemplate,
   labeledData: Record<string, string>,
-  attachments: { name: string; contentType: string; contentBytes: string }[],
+  attachments: Attachment[],
 ): Promise<void> {
+  // Taggeamos cada adjunto generado con el id del template para que el
+  // backend lo rutee al dispatch correcto cuando haya múltiples configs.
+  const templateId = template.id;
+
   // Excel mapeado → PDF
   if (template.excelBase64 && (template.excelMappings?.length ?? 0) > 0) {
     const html = await generateExcelHtml(
@@ -141,6 +153,7 @@ async function collectPdfAttachments(
           "formulario.pdf",
         contentType: "application/pdf",
         contentBytes: base64,
+        templateId,
       });
     }
   }
@@ -162,6 +175,7 @@ async function collectPdfAttachments(
       name: renderFilename(template.pdfFilename, labeledData),
       contentType: "application/pdf",
       contentBytes: base64,
+      templateId,
     });
   }
 }
@@ -308,9 +322,17 @@ export default function TaskPage() {
     });
 
     // Validar destinatarios de email tipo "field": el widget que da el
-    // email debe estar diligenciado para saber a quién mandar.
-    const taskTemplate = task.emailTemplate;
-    if (taskTemplate?.enabled) {
+    // email debe estar diligenciado para saber a quién mandar. Con multi-
+    // templates, chequeamos TODAS las configs habilitadas (una falla en
+    // cualquiera basta para bloquear el envío).
+    const taskTemplates =
+      task.emailTemplates && task.emailTemplates.length > 0
+        ? task.emailTemplates
+        : task.emailTemplate
+        ? [task.emailTemplate]
+        : [];
+    for (const taskTemplate of taskTemplates) {
+      if (!taskTemplate.enabled) continue;
       const allRecipients = [
         ...(taskTemplate.toRecipients ?? []),
         ...(taskTemplate.ccRecipients ?? []),
@@ -356,7 +378,7 @@ export default function TaskPage() {
     // mandamos al backend. Pasos intermedios no llevan attachments.
     const isLast = task.stepOrder === task.totalSteps;
     const attachments: Attachment[] = [];
-    const template = task.emailTemplate;
+    const enabledTaskTemplates = taskTemplates.filter((t) => t.enabled);
     if (import.meta.env.DEV) {
       // Solo en dev — evita exponer metadata del template en consoles
       // remotas de iPhone/iPad de usuarios reales.
@@ -364,32 +386,44 @@ export default function TaskPage() {
         isLast,
         stepOrder: task.stepOrder,
         totalSteps: task.totalSteps,
-        hasTemplate: !!template,
-        templateEnabled: template?.enabled,
-        hasExcel: !!template?.excelBase64,
-        excelMappings: template?.excelMappings?.length ?? 0,
-        hasPdfTemplate: !!template?.pdfTemplate,
-        attachPDF: template?.attachPDF,
+        enabledTemplates: enabledTaskTemplates.length,
+        templates: enabledTaskTemplates.map((t) => ({
+          id: t.id,
+          label: t.label,
+          hasExcel: !!t.excelBase64,
+          excelMappings: t.excelMappings?.length ?? 0,
+          hasPdfTemplate: !!t.pdfTemplate,
+          attachPDF: t.attachPDF,
+        })),
       });
     }
-    if (isLast && template?.enabled) {
+    if (isLast && enabledTaskTemplates.length > 0) {
       const combined: Record<string, string> = {
         ...(task.previousStepsData ?? {}),
         ...data,
       };
       const labeled = buildLabeledData(task.widgets, combined, hiddenIds);
-      try {
-        await collectPdfAttachments(template, labeled, attachments);
-        if (import.meta.env.DEV) {
-          // Los nombres de archivo suelen incluir nombre del paciente/tarea:
-          // PII que no queremos en consoles remotas de producción.
-          console.log(
-            `[TaskPage] PDFs generados: ${attachments.length}`,
-            attachments.map((a) => ({ name: a.name, sizeKB: Math.round(a.contentBytes.length / 1024) })),
+      // Un set de attachments por template habilitado; cada archivo lleva
+      // su `templateId` para que el backend lo rutee al dispatch correcto.
+      for (const template of enabledTaskTemplates) {
+        try {
+          await collectPdfAttachments(template, labeled, attachments);
+        } catch (e) {
+          console.error(
+            `[TaskPage] Error generando PDFs del template "${template.label || template.id || "legacy"}":`,
+            e,
           );
         }
-      } catch (e) {
-        console.error("[TaskPage] Error generando PDFs en último paso:", e);
+      }
+      if (import.meta.env.DEV) {
+        console.log(
+          `[TaskPage] PDFs generados: ${attachments.length}`,
+          attachments.map((a) => ({
+            name: a.name,
+            sizeKB: Math.round(a.contentBytes.length / 1024),
+            templateId: a.templateId,
+          })),
+        );
       }
     }
 
