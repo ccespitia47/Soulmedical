@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Schema as MongooseSchema } from 'mongoose';
+import { Document } from 'mongoose';
 
 export type TaskDocument = Task & Document;
 
@@ -136,12 +136,14 @@ export class Task {
   // propio (ver tasks.service.sendCompletionEmail). Fuente de verdad cuando
   // no está vacío; si está vacío se cae al `emailTemplate` singular.
   //
-  // OJO con el tipo: `type: [Object]` rompe al hidratar tareas legacy sin
-  // este campo (Mongoose aplica el default `[]` castéandolo con SchemaArray
-  // y falla en `doc.schema.indexedPaths is not a function`). Usamos
-  // `type: [MongooseSchema.Types.Mixed]` para persistir el array sin esa
-  // ruta de casting problemática.
-  @Prop({ type: [MongooseSchema.Types.Mixed], default: [] })
+  // OJO con el tipo: tanto `[Object]` como `[Schema.Types.Mixed]` rompen
+  // al hidratar tareas legacy sin este campo (Mongoose aplica el default
+  // `[]` castéandolo con SchemaArray y falla en
+  // `doc.schema.indexedPaths is not a function`). `type: Array` sin
+  // especificar el tipo de elemento es el mismo patrón que ya usan
+  // `task.widgets` y `task.rules` arriba, que persisten arrays de
+  // objetos arbitrarios sin este problema.
+  @Prop({ type: Array, default: [] })
   emailTemplates: Record<string, unknown>[];
 
   @Prop({ type: [TaskStepSchema], default: [] })

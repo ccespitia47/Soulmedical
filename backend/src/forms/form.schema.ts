@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Schema as MongooseSchema } from 'mongoose';
+import { Document } from 'mongoose';
 
 export type FormDocument = Form & Document;
 
@@ -25,12 +25,14 @@ export class Form {
   // autónoma (sus propios destinatarios, cuerpo, asunto, PDF). Al enviar
   // el formulario se disparan todas en paralelo.
   //
-  // OJO con el tipo: `type: [Object]` en Mongoose moderno rompe al cargar
-  // documentos legacy (sin este campo) porque intenta aplicar el default
-  // `[]` casteando con SchemaArray y revienta en `doc.schema.indexedPaths
-  // is not a function`. `type: [MongooseSchema.Types.Mixed]` sortea esa
-  // ruta y persiste exactamente lo mismo (array de objetos arbitrarios).
-  @Prop({ type: [MongooseSchema.Types.Mixed], default: [] })
+  // OJO con el tipo: tanto `[Object]` como `[Schema.Types.Mixed]` rompen
+  // en Mongoose moderno al cargar documentos legacy (sin este campo). Al
+  // aplicar el default `[]`, SchemaArray.cast falla con
+  // `doc.schema.indexedPaths is not a function`. `type: Array` sin
+  // especificar el tipo de elemento sortea esa ruta — es el mismo patrón
+  // que ya usan `task.widgets` y `task.rules`, que persisten arrays de
+  // objetos arbitrarios sin este problema.
+  @Prop({ type: Array, default: [] })
   emailTemplates: Record<string, unknown>[];
 
   @Prop({ default: 1 })
