@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Schema as MongooseSchema } from 'mongoose';
 
 export type FormDocument = Form & Document;
 
@@ -24,7 +24,13 @@ export class Form {
   // Múltiples configuraciones de email por formulario. Cada entry es
   // autónoma (sus propios destinatarios, cuerpo, asunto, PDF). Al enviar
   // el formulario se disparan todas en paralelo.
-  @Prop({ type: [Object], default: [] })
+  //
+  // OJO con el tipo: `type: [Object]` en Mongoose moderno rompe al cargar
+  // documentos legacy (sin este campo) porque intenta aplicar el default
+  // `[]` casteando con SchemaArray y revienta en `doc.schema.indexedPaths
+  // is not a function`. `type: [MongooseSchema.Types.Mixed]` sortea esa
+  // ruta y persiste exactamente lo mismo (array de objetos arbitrarios).
+  @Prop({ type: [MongooseSchema.Types.Mixed], default: [] })
   emailTemplates: Record<string, unknown>[];
 
   @Prop({ default: 1 })

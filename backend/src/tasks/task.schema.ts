@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Schema as MongooseSchema } from 'mongoose';
 
 export type TaskDocument = Task & Document;
 
@@ -135,7 +135,13 @@ export class Task {
   // Al completar el último paso, cada entry habilitada dispara UN email
   // propio (ver tasks.service.sendCompletionEmail). Fuente de verdad cuando
   // no está vacío; si está vacío se cae al `emailTemplate` singular.
-  @Prop({ type: [Object], default: [] })
+  //
+  // OJO con el tipo: `type: [Object]` rompe al hidratar tareas legacy sin
+  // este campo (Mongoose aplica el default `[]` castéandolo con SchemaArray
+  // y falla en `doc.schema.indexedPaths is not a function`). Usamos
+  // `type: [MongooseSchema.Types.Mixed]` para persistir el array sin esa
+  // ruta de casting problemática.
+  @Prop({ type: [MongooseSchema.Types.Mixed], default: [] })
   emailTemplates: Record<string, unknown>[];
 
   @Prop({ type: [TaskStepSchema], default: [] })
