@@ -45,55 +45,80 @@ export default function PropertyPanel({ onClose }: { onClose?: () => void }) {
         </div>
       )}
 
-      {/* Placeholder manual del widget (opcional). Si el admin lo deja
-          vacío, el placeholder del PDF/Email se calcula a partir del label
-          con desambiguación automática por sufijo (ej. `cargo`, `cargo1`).
-          Si lo llena, se usa esa clave tal cual — útil para distinguir dos
-          widgets con el mismo label (ej. `cargo_jefe` vs `cargo_trabajador`). */}
-      {widget && (
-        <div
-          style={{
-            padding: "12px 14px",
-            borderBottom: "1px solid #e2e8f0",
-            background: "#f8fafc",
-          }}
-        >
-          <label
+      {/* Nombre interno para plantillas PDF/Email. Si el admin lo deja
+          vacío, el placeholder se calcula a partir del label con
+          desambiguación automática por sufijo (ej. `cargo`, `cargo1`) —
+          lo que puede dar strings larguísimos cuando el label es un
+          párrafo entero (texto de autorización, declaraciones legales).
+          Al llenarlo, se usa esa clave tal cual: `${declaracion}` en vez
+          de `${autorizoaastellasfarmacolombias...}`. */}
+      {widget && (() => {
+        const labelLength = (widget.label ?? "").length;
+        const autoKey = (widget.label || "campo")
+          .toLowerCase()
+          .replace(/\s+/g, "")
+          .replace(/[^a-z0-9]/gi, "");
+        const autoKeyTooLong = autoKey.length > 30;
+        const needsCustom = autoKeyTooLong && !widget.placeholder?.trim();
+        return (
+          <div
             style={{
-              display: "block",
-              fontSize: 10.5,
-              fontWeight: 700,
-              letterSpacing: "0.04em",
-              color: "#64748b",
-              textTransform: "uppercase",
-              marginBottom: 5,
+              padding: "12px 14px",
+              borderBottom: "1px solid #e2e8f0",
+              background: needsCustom ? "#fef3c7" : "#f8fafc",
             }}
           >
-            Placeholder{" "}
-            <span style={{ fontWeight: 500, textTransform: "none", color: "#94a3b8" }}>
-              (opcional, para los mapeos del PDF/Email)
-            </span>
-          </label>
-          <input
-            type="text"
-            value={widget.placeholder ?? ""}
-            onChange={(e) => updateWidget(widget.id, { placeholder: e.target.value })}
-            placeholder={`Ej: ${(widget.label || "campo").toLowerCase().replace(/\s+/g, "")}`}
-            style={{
-              width: "100%",
-              boxSizing: "border-box",
-              padding: "7px 10px",
-              borderRadius: 8,
-              border: "1.5px solid #e2e8f0",
-              background: "#ffffff",
-              fontSize: 13,
-              fontFamily: "ui-monospace, SFMono-Regular, monospace",
-              color: "#0f172a",
-              outline: "none",
-            }}
-          />
-        </div>
-      )}
+            <label
+              style={{
+                display: "block",
+                fontSize: 10.5,
+                fontWeight: 700,
+                letterSpacing: "0.04em",
+                color: "#64748b",
+                textTransform: "uppercase",
+                marginBottom: 5,
+              }}
+            >
+              Nombre para plantilla PDF / Email{" "}
+              <span style={{ fontWeight: 500, textTransform: "none", color: "#94a3b8" }}>
+                (opcional, aparece como ${"{nombre}"})
+              </span>
+            </label>
+            <input
+              type="text"
+              value={widget.placeholder ?? ""}
+              onChange={(e) => updateWidget(widget.id, { placeholder: e.target.value })}
+              placeholder={autoKeyTooLong ? "Dale un nombre corto (ej: declaracion)" : `Auto: ${autoKey}`}
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                padding: "7px 10px",
+                borderRadius: 8,
+                border: `1.5px solid ${needsCustom ? "#f59e0b" : "#e2e8f0"}`,
+                background: "#ffffff",
+                fontSize: 13,
+                fontFamily: "ui-monospace, SFMono-Regular, monospace",
+                color: "#0f172a",
+                outline: "none",
+              }}
+            />
+            {needsCustom && (
+              <p
+                style={{
+                  margin: "6px 0 0",
+                  fontSize: 11,
+                  lineHeight: 1.4,
+                  color: "#78350f",
+                }}
+              >
+                ⚠️ Tu etiqueta tiene {labelLength} caracteres — el placeholder
+                auto-generado sale como <code>${"{"}{autoKey.slice(0, 20)}…{"}"}</code>.
+                Definí un nombre corto acá para que la plantilla quede legible.
+              </p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Propiedades del widget seleccionado */}
       {widget && (

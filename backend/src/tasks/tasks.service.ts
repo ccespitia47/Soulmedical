@@ -1661,10 +1661,13 @@ export class TasksService {
     finalData: Record<string, string>,
   ): Record<string, string> {
     const out: Record<string, string> = {};
+    type SearchCol = { key: string; label?: string };
     const widgets = (task.widgets ?? []) as Array<{
       id: string;
+      type?: string;
       label: string;
       placeholder?: string;
+      config?: { displayColumns?: SearchCol[] };
     }>;
     const normalize = (s: string) =>
       (s || '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/gi, '');
@@ -1680,6 +1683,32 @@ export class TasksService {
       used.set(rawKey, current + 1);
       const key = current === 0 ? rawKey : `${rawKey}${current}`;
       out[key] = finalData[w.id] ?? '';
+
+      // Widgets `search`: expone cada columna de la fila seleccionada
+      // bajo `${key}.col`. La fila completa viaja como JSON en
+      // finalData[`${widgetId}__row`]. Espeja src/utils/placeholders.ts.
+      if (w.type === 'search') {
+        const cols = w.config?.displayColumns ?? [];
+        if (cols.length > 0) {
+          const rowRaw = finalData[`${w.id}__row`];
+          let row: Record<string, unknown> = {};
+          if (typeof rowRaw === 'string' && rowRaw) {
+            try {
+              const parsed = JSON.parse(rowRaw);
+              if (parsed && typeof parsed === 'object') {
+                row = parsed as Record<string, unknown>;
+              }
+            } catch { /* fila mal formada: columnas vacías */ }
+          }
+          for (const col of cols) {
+            const colKey = normalize(col.key ?? '');
+            if (!colKey) continue;
+            const v = row[col.key];
+            out[`${key}.${colKey}`] =
+              v == null ? '' : typeof v === 'string' ? v : String(v);
+          }
+        }
+      }
     }
     return out;
   }

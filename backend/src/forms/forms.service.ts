@@ -458,7 +458,14 @@ export class FormsService implements OnModuleInit {
       label.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/gi, '');
     const labeledFormData: Record<string, string> = { ...formData };
     const used = new Map<string, number>();
-    const widgetsExt = widgets as Array<{ id: string; label?: string; placeholder?: string }>;
+    type SearchCol = { key: string; label?: string };
+    const widgetsExt = widgets as Array<{
+      id: string;
+      type?: string;
+      label?: string;
+      placeholder?: string;
+      config?: { displayColumns?: SearchCol[] };
+    }>;
     for (const w of widgetsExt) {
       if (!w.id) continue;
       const manual = (w.placeholder ?? '').trim();
@@ -469,6 +476,34 @@ export class FormsService implements OnModuleInit {
       const key = current === 0 ? base : `${base}${current}`;
       const raw = submissionDoc.data?.[w.id];
       if (raw != null) labeledFormData[key] = String(raw);
+
+      // Widgets `search`: expone cada columna de la fila seleccionada
+      // bajo `${key}.col`. La fila completa viaja como JSON en
+      // data["${widgetId}__row"]. Espeja src/utils/placeholders.ts para
+      // que las plantillas usen EXACTAMENTE las mismas keys que el admin
+      // ve en el panel "Campos disponibles".
+      if (w.type === 'search') {
+        const cols = w.config?.displayColumns ?? [];
+        if (cols.length > 0) {
+          const rowRaw = submissionDoc.data?.[`${w.id}__row`];
+          let row: Record<string, unknown> = {};
+          if (typeof rowRaw === 'string' && rowRaw) {
+            try {
+              const parsed = JSON.parse(rowRaw);
+              if (parsed && typeof parsed === 'object') {
+                row = parsed as Record<string, unknown>;
+              }
+            } catch { /* fila mal formada: columnas vacías */ }
+          }
+          for (const col of cols) {
+            const colKey = normalizeKey(col.key ?? '');
+            if (!colKey) continue;
+            const v = row[col.key];
+            labeledFormData[`${key}.${colKey}`] =
+              v == null ? '' : typeof v === 'string' ? v : String(v);
+          }
+        }
+      }
     }
     const interpolate = (text: string): string =>
       text.replace(/\$\{([^}]+)\}/g, (_, k) => labeledFormData[k] ?? '');
@@ -665,8 +700,15 @@ export class FormsService implements OnModuleInit {
     //
     // Espejamos exactamente la función normalizeKey de src/utils/placeholders.ts.
     // Si esa función cambia, hay que sincronizar aquí también.
+    type SearchCol = { key: string; label?: string };
     const widgets = (form.schema as {
-      widgets?: Array<{ id: string; label?: string; placeholder?: string }>;
+      widgets?: Array<{
+        id: string;
+        type?: string;
+        label?: string;
+        placeholder?: string;
+        config?: { displayColumns?: SearchCol[] };
+      }>;
     }).widgets ?? [];
     const normalizeKey = (label: string): string =>
       label.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/gi, '');
@@ -674,6 +716,9 @@ export class FormsService implements OnModuleInit {
     // sino `normalizeKey(label)` con sufijo numérico determinístico para
     // desambiguar labels duplicados (espeja uniqueBaseKey del frontend).
     const keyById = new Map<string, string>();
+    // Mapa widgetId → columnas (si es search). Lo usamos abajo para
+    // expandir `${widgetKey.col}` leyendo la fila completa seleccionada.
+    const searchColsById = new Map<string, SearchCol[]>();
     {
       const used = new Map<string, number>();
       for (const w of widgets) {
@@ -684,6 +729,9 @@ export class FormsService implements OnModuleInit {
         const current = used.get(base) ?? 0;
         used.set(base, current + 1);
         keyById.set(w.id, current === 0 ? base : `${base}${current}`);
+        if (w.type === 'search' && (w.config?.displayColumns?.length ?? 0) > 0) {
+          searchColsById.set(w.id, w.config!.displayColumns!);
+        }
       }
     }
 
@@ -702,6 +750,35 @@ export class FormsService implements OnModuleInit {
           values[`\${${norm}}`] = str;
           labeledValues[norm] = str;
         }
+      }
+    }
+
+    // Expone cada columna de un widget `search` como `${widgetKey.col}`.
+    // La fila completa viaja en data[`${widgetId}__row`] serializada como
+    // JSON. Espeja la lógica de src/utils/placeholders.ts para que el
+    // mapper del PDF y las plantillas de email vean exactamente las mismas
+    // keys que el admin ve en el panel "Campos disponibles".
+    for (const [widgetId, cols] of searchColsById) {
+      const base = keyById.get(widgetId);
+      if (!base) continue;
+      const rowRaw = submissionDoc.data?.[`${widgetId}__row`];
+      let row: Record<string, unknown> = {};
+      if (typeof rowRaw === 'string' && rowRaw) {
+        try {
+          const parsed = JSON.parse(rowRaw);
+          if (parsed && typeof parsed === 'object') {
+            row = parsed as Record<string, unknown>;
+          }
+        } catch { /* fila mal formada: columnas vacías */ }
+      }
+      for (const col of cols) {
+        const colKey = normalizeKey(col.key ?? '');
+        if (!colKey) continue;
+        const v = row[col.key];
+        const vs = v == null ? '' : typeof v === 'string' ? v : String(v);
+        values[`${base}.${colKey}`] = vs;
+        values[`\${${base}.${colKey}}`] = vs;
+        labeledValues[`${base}.${colKey}`] = vs;
       }
     }
 

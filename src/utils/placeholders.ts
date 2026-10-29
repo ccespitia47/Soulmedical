@@ -104,6 +104,25 @@ export function buildPlaceholders(
       description: `${w.label}${descSuffix}`,
       widgetType: w.type,
     });
+
+    // Widgets `search`: por cada columna configurada en `displayColumns`
+    // (ej. "concentracion", "dosisPrescrita") agregamos `${base.col}` que
+    // se resuelve contra la fila completa seleccionada por el usuario.
+    // Permite plantillas tipo "Dosis: ${presentacion.dosisPrescrita}"
+    // sin tener que mapear a widgets separados.
+    if (w.type === "search") {
+      type Col = { key: string; label?: string };
+      const cols = (w.config?.displayColumns as Col[] | undefined) ?? [];
+      for (const col of cols) {
+        const colKey = normalizeKey(col.key ?? "");
+        if (!colKey) continue;
+        list.push({
+          placeholder: `\${${base}.${colKey}}`,
+          description: `${w.label}${descSuffix} → ${col.label || col.key}`,
+          widgetType: w.type,
+        });
+      }
+    }
   }
   return list;
 }
@@ -165,6 +184,34 @@ export function expandFormData(
       out[base] = rawVal;
     } else {
       out[base] = JSON.stringify(rawVal);
+    }
+
+    // Widgets `search`: expone cada columna de la fila seleccionada bajo
+    // `${base.col}`. La fila completa viaja como JSON en
+    // `data["${widgetId}__row"]`. Si no hay fila (usuario no seleccionó
+    // nada todavía), los sub-placeholders quedan vacíos.
+    if (w.type === "search") {
+      type Col = { key: string; label?: string };
+      const cols = (w.config?.displayColumns as Col[] | undefined) ?? [];
+      if (cols.length > 0) {
+        const rowRaw = data[`${w.id}__row`];
+        let row: Record<string, unknown> = {};
+        if (typeof rowRaw === "string" && rowRaw) {
+          try {
+            const parsed = JSON.parse(rowRaw);
+            if (parsed && typeof parsed === "object") {
+              row = parsed as Record<string, unknown>;
+            }
+          } catch { /* fila inválida: columnas quedan vacías */ }
+        }
+        for (const col of cols) {
+          const colKey = normalizeKey(col.key ?? "");
+          if (!colKey) continue;
+          const v = row[col.key];
+          out[`${base}.${colKey}`] =
+            v == null ? "" : typeof v === "string" ? v : String(v);
+        }
+      }
     }
   }
   return out;
