@@ -9,6 +9,10 @@ type Placeholder = {
 type HtmlCellMapperProps = {
   html: string;
   placeholders: Placeholder[];
+  /** Mapa { keyVieja: keyNueva } para el botón "Modernizar
+   *  placeholders": al clickearlo, cada `${keyVieja}` del editor se
+   *  reemplaza por `${keyNueva}`. Si no se pasa, el botón no aparece. */
+  legacyToCamel?: Record<string, string>;
   onSave: (nextHtml: string) => void;
   onClose: () => void;
 };
@@ -26,12 +30,14 @@ type HtmlCellMapperProps = {
 export default function HtmlCellMapper({
   html,
   placeholders,
+  legacyToCamel,
   onSave,
   onClose,
 }: HtmlCellMapperProps) {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const lastRangeRef = useRef<Range | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
+  const [modernizeNotice, setModernizeNotice] = useState<string | null>(null);
 
   // Separamos <style> del resto. El editor solo edita el contenido visible;
   // los estilos se preservan tal cual y se reincorporan al guardar.
@@ -92,6 +98,35 @@ export default function HtmlCellMapper({
     sel.addRange(range);
     lastRangeRef.current = range.cloneRange();
     setHasChanges(true);
+  };
+
+  /**
+   * Recorre el innerHTML del editor y reemplaza cada `${keyVieja}` por
+   * su `${keyNueva}` según el map. Preserva el resto del HTML tal cual.
+   * Útil para migrar plantillas creadas antes del cambio a camelCase
+   * sin tener que borrar y volver a insertar cada chip manualmente.
+   */
+  const handleModernize = () => {
+    const editor = editorRef.current;
+    if (!editor || !legacyToCamel) return;
+    const before = editor.innerHTML;
+    let count = 0;
+    const next = before.replace(/\$\{([^}]+)\}/g, (match, key: string) => {
+      const trimmed = key.trim();
+      const replacement = legacyToCamel[trimmed];
+      if (!replacement || replacement === trimmed) return match;
+      count += 1;
+      return `\${${replacement}}`;
+    });
+    if (next === before) {
+      setModernizeNotice("No había placeholders que migrar.");
+      return;
+    }
+    editor.innerHTML = next;
+    setHasChanges(true);
+    setModernizeNotice(
+      `✓ ${count} placeholder${count === 1 ? "" : "s"} actualizado${count === 1 ? "" : "s"} a camelCase.`,
+    );
   };
 
   const handleSave = () => {
@@ -191,9 +226,18 @@ export default function HtmlCellMapper({
         {/* Footer */}
         <div className="flex flex-shrink-0 items-center justify-between border-t border-slate-200 px-6 py-4">
           <span className="text-[12px] text-gray-400">
-            {hasChanges ? "✏️ Hay cambios sin aplicar" : "Sin cambios"}
+            {modernizeNotice ?? (hasChanges ? "✏️ Hay cambios sin aplicar" : "Sin cambios")}
           </span>
           <div className="flex gap-2.5">
+            {legacyToCamel && Object.keys(legacyToCamel).length > 0 && (
+              <button
+                onClick={handleModernize}
+                title="Reemplaza placeholders en formato viejo (${nombredelpaciente}) por el nuevo (${nombreDelPaciente})"
+                className="cursor-pointer rounded-lg border-[1.5px] border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+              >
+                ✨ Modernizar placeholders
+              </button>
+            )}
             <button
               onClick={onClose}
               className="cursor-pointer rounded-lg border-[1.5px] border-slate-200 bg-transparent px-5 py-2.5 text-sm font-semibold text-gray-500"

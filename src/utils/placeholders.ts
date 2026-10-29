@@ -172,6 +172,84 @@ export function buildPlaceholders(
 }
 
 /**
+ * Devuelve un mapa { keyVieja: keyNueva } para migrar placeholders
+ * `${…}` que estaban guardados en formato lowercase legacy (ej. en
+ * plantillas PDF creadas antes del cambio a camelCase) hacia la clave
+ * canónica actual. Cubre widgets normales, subformularios con sus
+ * subcampos, y columnas del search (sheetColumns / displayColumns).
+ *
+ * Las entradas donde la key vieja ya coincide con la nueva se omiten
+ * para que un `.replace()` ingenuo no desperdicie ciclos cambiando algo
+ * por sí mismo.
+ */
+export function buildLegacyToCamelMap(
+  widgets: Pick<WidgetInstance, "id" | "type" | "label" | "config" | "placeholder">[],
+): Record<string, string> {
+  const map: Record<string, string> = {};
+  const used = new Map<string, number>();
+  const usedLegacy = new Map<string, number>();
+
+  for (const w of widgets) {
+    const manual = (w.placeholder ?? "").trim();
+    const camelRaw = manual ? toCamelKey(manual) : toCamelKey(w.label);
+    const legacyRaw = manual ? normalizeKey(manual) : normalizeKey(w.label);
+    if (!camelRaw) continue;
+    const camelKey = uniqueBaseKey(camelRaw, used);
+    const legacyKey = legacyRaw ? uniqueBaseKey(legacyRaw, usedLegacy) : "";
+
+    if (legacyKey && legacyKey !== camelKey) map[legacyKey] = camelKey;
+
+    if (w.type === "subform") {
+      const fields = (w.config?.fields as SubformField[] | undefined) ?? [];
+      // Variantes compuestas del subform (:tabla y .count).
+      if (legacyKey && legacyKey !== camelKey) {
+        map[`${legacyKey}:tabla`] = `${camelKey}:tabla`;
+        map[`${legacyKey}.count`] = `${camelKey}.count`;
+      }
+      const usedField = new Map<string, number>();
+      const usedFieldLegacy = new Map<string, number>();
+      for (const f of fields) {
+        const fCamel = toCamelKey(f.label);
+        const fLegacy = normalizeKey(f.label);
+        if (!fCamel) continue;
+        const fk = uniqueBaseKey(fCamel, usedField);
+        const fkLegacy = fLegacy ? uniqueBaseKey(fLegacy, usedFieldLegacy) : "";
+        if (legacyKey && fkLegacy && (legacyKey !== camelKey || fkLegacy !== fk)) {
+          map[`${legacyKey}.${fkLegacy}`] = `${camelKey}.${fk}`;
+        }
+      }
+      continue;
+    }
+
+    if (w.type === "search") {
+      type Col = { key: string; label?: string };
+      const sheetCols = (w.config?.sheetColumns as string[] | undefined) ?? [];
+      const displayCols = (w.config?.displayColumns as Col[] | undefined) ?? [];
+      const sources: string[] =
+        sheetCols.length > 0
+          ? sheetCols
+          : displayCols.map((c) => c.key).filter(Boolean);
+      const seen = new Set<string>();
+      for (const sourceKey of sources) {
+        if (!sourceKey || seen.has(sourceKey)) continue;
+        seen.add(sourceKey);
+        const colCamel = toCamelKey(sourceKey);
+        const colLegacy = normalizeKey(sourceKey);
+        if (!colCamel) continue;
+        if (
+          legacyKey &&
+          colLegacy &&
+          (legacyKey !== camelKey || colLegacy !== colCamel)
+        ) {
+          map[`${legacyKey}.${colLegacy}`] = `${camelKey}.${colCamel}`;
+        }
+      }
+    }
+  }
+  return map;
+}
+
+/**
  * Toma la data cruda del formulario (donde subform.value es un JSON string
  * serializado de las entries) y la "expande" a un diccionario plano con
  * keys que coinciden con los placeholders generados por buildPlaceholders.

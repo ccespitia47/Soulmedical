@@ -6,6 +6,7 @@ import {
   DEFAULT_EMAIL_HTML,
   buildPdfHtmlTemplate,
 } from "../../../utils/emailTemplates";
+import { buildLegacyToCamelMap } from "../../../utils/placeholders";
 import HtmlCellMapper from "../HtmlCellMapper";
 import SenderSection from "./SenderSection";
 import EmailBodyEditor from "./EmailBodyEditor";
@@ -296,6 +297,7 @@ export default function EmailConfigItem({
             <HtmlCellMapper
               html={config.pdfTemplate}
               placeholders={widgetPlaceholders}
+              legacyToCamel={buildLegacyToCamelMap(widgets)}
               onSave={(nextHtml) => onChange({ pdfTemplate: nextHtml })}
               onClose={() => setShowHtmlMapper(false)}
             />
