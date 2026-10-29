@@ -10,6 +10,10 @@ type Props = {
   customLogo: string | null;
   onCellClick: (coord: string, isMappable: boolean) => void;
   onRemoveMapping: (coord: string) => void;
+  /** Opcional: si está definido, un doble-click en una celda sin mapear
+   *  habilita edición in-place de su texto. Al blur / Enter se dispara
+   *  con el texto nuevo. Escape cancela y restaura el original. */
+  onCellEdit?: (coord: string, newText: string) => void;
 };
 
 /**
@@ -26,6 +30,7 @@ export default function ExcelHtmlTable({
   customLogo,
   onCellClick,
   onRemoveMapping,
+  onCellEdit,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const shadowRef = useRef<ShadowRoot | null>(null);
@@ -55,6 +60,13 @@ export default function ExcelHtmlTable({
     td[data-mappable="true"]:not([data-mapped="true"]):hover {
       outline: 2px dashed #3b82f6 !important; outline-offset: -2px;
       background: rgba(59,130,246,0.06) !important;
+    }
+    td[data-editing="true"] {
+      outline: 2px solid #f59e0b !important;
+      outline-offset: -2px;
+      background: rgba(245,158,11,0.08) !important;
+      cursor: text;
+      caret-color: #0f172a;
     }
   `;
 
@@ -117,7 +129,9 @@ export default function ExcelHtmlTable({
       `;
     }
 
-    // Delegación de clicks en el wrapper.
+    // Delegación de clicks en el wrapper. Si la celda está en modo
+    // edición (data-editing="true"), ignoramos el click para no gatillar
+    // mapeo mientras el user escribe.
     const onClick = (e: Event) => {
       const target = e.target as HTMLElement;
       const remove = target.closest<HTMLElement>("button[data-remove]");
@@ -128,15 +142,96 @@ export default function ExcelHtmlTable({
       }
       const cell = target.closest<HTMLTableCellElement>("td[data-coord]");
       if (!cell) return;
+      if (cell.getAttribute("data-editing") === "true") return;
       const coord = cell.getAttribute("data-coord") || "";
       const isMappable = cell.getAttribute("data-mappable") === "true";
       onCellClick(coord, isMappable);
     };
     wrapper.addEventListener("click", onClick);
+
+    // Doble-click = modo edición in-place. Solo para celdas mappables y
+    // NO mapeadas (una celda mapeada muestra un badge, no el texto real
+    // del Excel — editarlo no tiene sentido). Guarda el texto original
+    // en data-original; Escape lo restaura.
+    const onDblClick = (e: Event) => {
+      if (!onCellEdit) return;
+      const target = e.target as HTMLElement;
+      const cell = target.closest<HTMLTableCellElement>("td[data-coord]");
+      if (!cell) return;
+      if (cell.getAttribute("data-mapped") === "true") return;
+      if (cell.getAttribute("data-mappable") !== "true") return;
+      if (cell.getAttribute("data-editing") === "true") return;
+      e.preventDefault();
+      cell.setAttribute("data-original", cell.textContent ?? "");
+      cell.setAttribute("data-editing", "true");
+      cell.setAttribute("contenteditable", "plaintext-only");
+      // plaintext-only no está soportado en todos los browsers; fallback a true.
+      if (cell.contentEditable !== "plaintext-only") {
+        cell.setAttribute("contenteditable", "true");
+      }
+      // Focus + seleccionar todo el texto para que el user tipee y reemplace.
+      cell.focus();
+      try {
+        const sel = window.getSelection();
+        if (sel) {
+          sel.removeAllRanges();
+          const range = document.createRange();
+          range.selectNodeContents(cell);
+          sel.addRange(range);
+        }
+      } catch { /* selection no disponible: focus funciona igual */ }
+    };
+    wrapper.addEventListener("dblclick", onDblClick);
+
+    const commitEdit = (cell: HTMLTableCellElement) => {
+      const coord = cell.getAttribute("data-coord") ?? "";
+      const original = cell.getAttribute("data-original") ?? "";
+      const next = (cell.textContent ?? "").trim();
+      cell.removeAttribute("data-editing");
+      cell.removeAttribute("data-original");
+      cell.removeAttribute("contenteditable");
+      if (next === original.trim()) return; // nada cambió
+      if (onCellEdit) onCellEdit(coord, next);
+    };
+
+    const cancelEdit = (cell: HTMLTableCellElement) => {
+      const original = cell.getAttribute("data-original") ?? "";
+      cell.textContent = original;
+      cell.removeAttribute("data-editing");
+      cell.removeAttribute("data-original");
+      cell.removeAttribute("contenteditable");
+    };
+
+    // focusout burbujea; blur no. Delegamos en el wrapper.
+    const onFocusOut = (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (target.getAttribute && target.getAttribute("data-editing") === "true") {
+        commitEdit(target as HTMLTableCellElement);
+      }
+    };
+    wrapper.addEventListener("focusout", onFocusOut);
+
+    const onKeyDown = (e: Event) => {
+      const kev = e as KeyboardEvent;
+      const target = e.target as HTMLElement;
+      if (!target.getAttribute || target.getAttribute("data-editing") !== "true") return;
+      if (kev.key === "Enter" && !kev.shiftKey) {
+        kev.preventDefault();
+        (target as HTMLTableCellElement).blur();
+      } else if (kev.key === "Escape") {
+        kev.preventDefault();
+        cancelEdit(target as HTMLTableCellElement);
+      }
+    };
+    wrapper.addEventListener("keydown", onKeyDown);
+
     return () => {
       wrapper.removeEventListener("click", onClick);
+      wrapper.removeEventListener("dblclick", onDblClick);
+      wrapper.removeEventListener("focusout", onFocusOut);
+      wrapper.removeEventListener("keydown", onKeyDown);
     };
-  }, [html, css, mappings, overlayCss, onCellClick, onRemoveMapping, selectedPlaceholder, customLogo]);
+  }, [html, css, mappings, overlayCss, onCellClick, onRemoveMapping, onCellEdit, selectedPlaceholder, customLogo]);
 
   return <div ref={hostRef} />;
 }

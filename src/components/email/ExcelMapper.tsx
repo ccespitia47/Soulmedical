@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ExcelFieldMapping as ExcelMapping } from "../../types/email-template.types";
 import { extractImages, type EmbeddedImage } from "../../utils/excelParser";
-import { fetchExcelPreview } from "../../services/excelPreview";
+import { fetchExcelPreview, editExcelCells } from "../../services/excelPreview";
 import ExcelMapperHeader from "./excelMapper/ExcelMapperHeader";
 import LogoUploader from "./excelMapper/LogoUploader";
 import PlaceholdersList, {
@@ -17,7 +17,14 @@ type ExcelMapperProps = {
   excelBase64: string;
   existingMappings: ExcelMapping[];
   availablePlaceholders: PlaceholderItem[];
-  onSave: (mappings: ExcelMapping[], logoBase64?: string) => void;
+  /** `newExcelBase64` llega sólo si el admin editó texto de celdas en el
+   *  mapper; en ese caso el caller debe persistirlo en `config.excelBase64`
+   *  para que las ediciones queden guardadas. */
+  onSave: (
+    mappings: ExcelMapping[],
+    logoBase64?: string,
+    newExcelBase64?: string,
+  ) => void;
   onClose: () => void;
 };
 
@@ -36,6 +43,11 @@ export default function ExcelMapper({
   const [customLogo, setCustomLogo] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // XLSX "actual": empieza igual al prop y se actualiza con cada edición
+  // de texto. Al guardar, si cambió respecto al original, se devuelve en
+  // onSave para que el caller lo persista en config.excelBase64.
+  const [currentExcelBase64, setCurrentExcelBase64] = useState<string>(excelBase64);
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -64,6 +76,32 @@ export default function ExcelMapper({
     };
     load();
   }, [excelBase64, existingMappings]);
+
+  /**
+   * Edita el texto de UNA celda. Llama al backend (exceljs vía
+   * /forms/excel/edit-cells), actualiza el XLSX actual + refresca el
+   * preview HTML/CSS con la respuesta. No toca mappings ni formato.
+   */
+  const handleCellEdit = useCallback(
+    async (coord: string, newText: string) => {
+      // Protección: no permitir editar celdas ya mapeadas (su contenido
+      // es un badge que no corresponde al texto real del Excel). El admin
+      // debe quitar el mapping primero si quiere cambiar el texto.
+      if (mappings[coord]) return;
+      setEditing(true);
+      setError(null);
+      const result = await editExcelCells(currentExcelBase64, { [coord]: newText });
+      setEditing(false);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      if (result.excelBase64) setCurrentExcelBase64(result.excelBase64);
+      if (result.html !== undefined) setPreviewHtml(result.html);
+      if (result.css !== undefined) setPreviewCss(result.css);
+    },
+    [currentExcelBase64, mappings],
+  );
 
   const handleLogoUpload = (file: File) => {
     const reader = new FileReader();
@@ -102,7 +140,8 @@ export default function ExcelMapper({
   }, []);
 
   const handleSave = () => {
-    onSave(Object.values(mappings), customLogo ?? undefined);
+    const edited = currentExcelBase64 !== excelBase64 ? currentExcelBase64 : undefined;
+    onSave(Object.values(mappings), customLogo ?? undefined, edited);
   };
 
   const mappingCount = Object.keys(mappings).length;
@@ -159,13 +198,16 @@ export default function ExcelMapper({
                   customLogo={customLogo}
                   onCellClick={handleCellClick}
                   onRemoveMapping={removeMapping}
+                  onCellEdit={handleCellEdit}
                 />
                 <div className="mt-2.5 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
                   <span>💡</span>
                   <span>
-                    La vista muestra el formato original del Excel (fuentes, bordes,
-                    logo). Seleccioná un placeholder del panel izquierdo y hacé click
-                    en la celda donde debe aparecer.
+                    <strong>Click</strong> con un placeholder seleccionado para
+                    mapearlo. <strong>Doble-click</strong> en cualquier celda sin
+                    mapear para editar su texto (el Excel queda guardado con la
+                    edición al guardar el mapeo).
+                    {editing && <span className="ml-2 text-amber-700">· Guardando edición…</span>}
                   </span>
                 </div>
               </>

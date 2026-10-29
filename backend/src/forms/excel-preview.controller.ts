@@ -152,6 +152,34 @@ export class ExcelPreviewController {
   }
 
   /**
+   * Edita el texto de celdas del XLSX. Recibe el Excel actual + un mapa
+   * { coord: texto } y devuelve el nuevo excelBase64 ya modificado + un
+   * HTML/CSS fresco para refrescar el preview del mapper sin pasar por
+   * LibreOffice de nuevo (el `editCells` del service no cambia el layout).
+   */
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission(Permission.FORMS_EDIT)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @Post('edit-cells')
+  async editCells(
+    @Body() body: { excelBase64?: string; edits?: Record<string, string> },
+  ): Promise<{ excelBase64: string; html: string; css: string }> {
+    if (!body?.excelBase64) throw new BadRequestException('Falta excelBase64.');
+    const edits = body.edits ?? {};
+    const buf = decodeBase64(body.excelBase64);
+    if (buf.length > MAX_BYTES) {
+      throw new BadRequestException('El archivo supera 15 MB.');
+    }
+    const edited = await this.preview.editCells(buf, edits);
+    const { html, css } = await this.preview.convertBufferToHtml(edited);
+    return {
+      excelBase64: `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${edited.toString('base64')}`,
+      html,
+      css,
+    };
+  }
+
+  /**
    * Renderiza el PDF final con LibreOffice. Devuelve el PDF binario
    * como attachment para descarga.
    */

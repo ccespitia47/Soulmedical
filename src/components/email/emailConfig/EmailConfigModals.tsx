@@ -83,11 +83,15 @@ export default function EmailConfigModals({
           excelBase64={config.excelBase64}
           existingMappings={config.excelMappings || []}
           availablePlaceholders={placeholders}
-          onSave={(mappings, logoBase64) => {
+          onSave={(mappings, logoBase64, newExcelBase64) => {
             setConfig((prev) => ({
               ...prev,
               excelMappings: mappings,
               ...(logoBase64 ? { excelLogoBase64: logoBase64 } : {}),
+              // Si el admin editó texto de celdas dentro del mapper, el
+              // mapper devuelve el nuevo .xlsx aquí y lo persistimos. Si
+              // no editó nada, viene undefined y conservamos el actual.
+              ...(newExcelBase64 ? { excelBase64: newExcelBase64 } : {}),
             }));
             onCloseExcelMapper();
           }}

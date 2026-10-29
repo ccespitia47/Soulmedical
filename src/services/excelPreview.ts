@@ -77,6 +77,37 @@ export async function fetchFilledPreview(
 }
 
 /**
+ * Edita el texto de celdas del XLSX. `edits` mapea coord → texto nuevo
+ * (string vacío ⇒ blanquear la celda). El backend aplica los cambios con
+ * exceljs y devuelve el nuevo base64 + HTML/CSS fresco para refrescar
+ * el preview del mapper sin re-correr LibreOffice de principio a fin.
+ */
+export async function editExcelCells(
+  excelBase64: string,
+  edits: Record<string, string>,
+): Promise<{ excelBase64?: string; html?: string; css?: string; error?: string }> {
+  const token = localStorage.getItem("token");
+  try {
+    const res = await fetch(`${API_URL}/forms/excel/edit-cells`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ excelBase64, edits }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return { error: body.message || `Error ${res.status}` };
+    }
+    return (await res.json()) as { excelBase64: string; html: string; css: string };
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e);
+    return { error: `No se pudo conectar: ${detail}` };
+  }
+}
+
+/**
  * Renderiza y descarga el PDF final. Devuelve el Blob o un error.
  */
 export async function fetchRenderedPdf(

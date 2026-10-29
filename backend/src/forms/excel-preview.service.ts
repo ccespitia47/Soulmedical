@@ -317,6 +317,41 @@ export class ExcelPreviewService {
     return stripped.length === 0 || stripped === '__IMG__';
   }
 
+  /**
+   * Aplica ediciones de texto a celdas del XLSX. `edits` mapea coord → texto
+   * nuevo (string vacío ⇒ blanquear la celda). No toca formato, bordes,
+   * imágenes ni anchos — sólo el `value` de cada celda listada. Devuelve
+   * el buffer del .xlsx modificado.
+   *
+   * Lo usa el mapper del admin para que el usuario corrija textos sueltos
+   * (ej. "Campo abierto (Describir el evento)" → "Descripción:") sin tener
+   * que bajar el Excel, editarlo en Office y re-subirlo.
+   */
+  async editCells(
+    buffer: Buffer,
+    edits: Record<string, string>,
+  ): Promise<Buffer> {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer as unknown as ArrayBuffer);
+    const ws = wb.worksheets[0];
+    if (!ws) throw new BadRequestException('El XLSX no tiene hojas.');
+
+    for (const [coord, text] of Object.entries(edits)) {
+      // Validación mínima: coord con formato A1, AB123, etc. Si viene algo
+      // raro ("1A", "", "Sheet1!A1"), lo ignoramos silenciosamente para no
+      // romper el batch entero por una entry mal formada.
+      if (!/^[A-Z]{1,3}\d{1,7}$/.test(coord)) continue;
+      const cell = ws.getCell(coord);
+      // Preserva el style de la celda — exceljs cambia solo el value.
+      // Un string vacío queda como celda vacía (value=null) para no dejar
+      // el string literal "" que después se ve raro en el preview.
+      cell.value = text === '' ? null : text;
+    }
+
+    const out = (await wb.xlsx.writeBuffer()) as unknown as Buffer;
+    return out;
+  }
+
   // ─── Preview con placeholders rellenados + logo custom ─────────────────
 
   /**
