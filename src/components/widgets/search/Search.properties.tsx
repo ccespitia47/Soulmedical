@@ -348,6 +348,55 @@ export default function SearchProperties({ widget, updateWidget, allWidgets }: W
             </div>
           )}
 
+          {/* Botón explícito para forzar el fetch de columnas y persistirlas
+              en `config.sheetColumns`. El auto-detect de arriba corre al
+              pegar la URL, pero no siempre funciona (sheet privado, CORS,
+              fetch que devuelve []), y el admin se quedaba sin saber por
+              qué los chips `${widget.col}` nunca aparecían. Este botón
+              fuerza el fetch con feedback inmediato. */}
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                const url = config.sheetsUrl?.trim();
+                if (!url) {
+                  setSheetsError("Pega primero la URL del Sheet.");
+                  return;
+                }
+                setSheetsDetecting(true);
+                setSheetsError(null);
+                try {
+                  const headers = await fetchSheetsHeaders(url);
+                  if (headers.length === 0) {
+                    setSheetsError(
+                      "No se leyeron columnas. Verifica que el Sheet sea público ('Cualquiera con el enlace').",
+                    );
+                    setSheetsHeaders([]);
+                  } else {
+                    setSheetsHeaders(headers);
+                    setConfig({ sheetColumns: headers });
+                  }
+                } catch (err) {
+                  console.error("[SearchWidget] Import columnas falló:", err);
+                  setSheetsError(
+                    "Error al leer el Sheet. Verifica que esté compartido como 'Cualquiera con el enlace' (Lector).",
+                  );
+                } finally {
+                  setSheetsDetecting(false);
+                }
+              }}
+              disabled={sheetsDetecting}
+              className="cursor-pointer rounded-lg border-[1.5px] border-[#00c2a8] bg-emerald-50 px-3 py-1.5 text-[12px] font-semibold text-[#00c2a8] hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              📥 Importar columnas del Sheet
+            </button>
+            <span className="text-[11px] text-gray-500">
+              {(config.sheetColumns?.length ?? 0) > 0
+                ? `✓ ${config.sheetColumns!.length} columna(s) guardada(s) para placeholders`
+                : "Ninguna columna guardada todavía"}
+            </span>
+          </div>
+
           {sheetsHeaders.length > 0 && (
             <>
               <div className="mt-3 rounded-md bg-emerald-50 px-2.5 py-1.5 text-[11.5px] text-emerald-700">

@@ -1675,15 +1675,26 @@ export class TasksService {
     //     que plantillas creadas antes del cambio sigan resolviendo.
     const normalize = (s: string) =>
       (s || '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/gi, '');
+    const MAX_AUTO = 30;
     const toCamelKey = (s: string): string => {
       const cleaned = (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '');
       const tokens = cleaned.split(/[^a-zA-Z0-9]+|(?<=[a-z])(?=[A-Z])/).filter(Boolean);
       if (tokens.length === 0) return '';
-      const [first, ...rest] = tokens;
-      return (
-        first.toLowerCase() +
-        rest.map((t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()).join('')
-      );
+      const toCamel = (ts: string[]): string => {
+        const [first, ...rest] = ts;
+        return (
+          first.toLowerCase() +
+          rest.map((t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()).join('')
+        );
+      };
+      const full = toCamel(tokens);
+      if (full.length <= MAX_AUTO) return full;
+      const kept: string[] = [tokens[0]];
+      for (let i = 1; i < tokens.length; i++) {
+        if (toCamel([...kept, tokens[i]]).length > MAX_AUTO) break;
+        kept.push(tokens[i]);
+      }
+      return toCamel(kept);
     };
     const used = new Map<string, number>();
     const usedLegacy = new Map<string, number>();

@@ -21,6 +21,13 @@ export function normalizeKey(label: string): string {
     .replace(/[^a-z0-9]/gi, "");
 }
 
+/** Tope duro de longitud para keys autogeneradas desde un label. Si
+ *  el label pasa este tope, `toCamelKey` corta por palabras completas
+ *  (nunca en la mitad de una) hasta que el resultado quepa. Elegido
+ *  en 30 porque arriba de ahí los chips se vuelven ilegibles y los
+ *  mapers del PDF/Excel se descolocan visualmente. */
+export const MAX_AUTO_KEY_LENGTH = 30;
+
 /**
  * Normalización preferida (estilo MoreApp): acentos quitados y camelCase.
  *
@@ -29,12 +36,19 @@ export function normalizeKey(label: string): string {
  *   "dosisPrescrita"                        → "dosisPrescrita" (preserva)
  *   "Nombre y Apellido del Prescriptor"     → "nombreYApellidoDelPrescriptor"
  *
- * Se usa para los placeholders que ve el admin (`buildPlaceholders`). El
- * motor de interpolación (`expandFormData`) emite TAMBIÉN la variante
- * legacy devuelta por `normalizeKey` para no romper plantillas creadas
- * antes de este cambio.
+ * Si el camelCase resultante supera `maxLen` caracteres (default 30),
+ * se trunca sumando palabras completas hasta que la próxima no quepa.
+ * Nunca corta en medio de una palabra para que el placeholder siga
+ * siendo legible. La primera palabra siempre entra aunque sola supere
+ * el tope — es mejor eso que una key vacía. Si el admin quiere
+ * personalizar, puede setear `widget.placeholder` manualmente.
+ *
+ * Se usa para los placeholders que ve el admin (`buildPlaceholders`).
+ * El motor de interpolación (`expandFormData`) emite TAMBIÉN la
+ * variante legacy devuelta por `normalizeKey` para no romper
+ * plantillas creadas antes de este cambio.
  */
-export function toCamelKey(label: string): string {
+export function toCamelKey(label: string, maxLen: number = MAX_AUTO_KEY_LENGTH): string {
   const cleaned = (label ?? "")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, ""); // quitar acentos
@@ -43,13 +57,24 @@ export function toCamelKey(label: string): string {
   // perder el casing original cuando el label ya venía en camelCase.
   const tokens = cleaned.split(/[^a-zA-Z0-9]+|(?<=[a-z])(?=[A-Z])/).filter(Boolean);
   if (tokens.length === 0) return "";
-  const [first, ...rest] = tokens;
-  return (
-    first.toLowerCase() +
-    rest
-      .map((t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase())
-      .join("")
-  );
+  const toCamel = (ts: string[]): string => {
+    const [first, ...rest] = ts;
+    return (
+      first.toLowerCase() +
+      rest.map((t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()).join("")
+    );
+  };
+  const full = toCamel(tokens);
+  if (full.length <= maxLen) return full;
+  // Agregar tokens de a uno hasta que el siguiente no quepa. La primera
+  // palabra siempre se incluye aunque sola exceda el tope.
+  const kept: string[] = [tokens[0]];
+  for (let i = 1; i < tokens.length; i++) {
+    const candidate = toCamel([...kept, tokens[i]]);
+    if (candidate.length > maxLen) break;
+    kept.push(tokens[i]);
+  }
+  return toCamel(kept);
 }
 
 /**

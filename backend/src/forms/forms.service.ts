@@ -458,15 +458,29 @@ export class FormsService implements OnModuleInit {
     // src/utils/placeholders.ts del frontend.
     const normalizeKey = (label: string): string =>
       (label ?? '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/gi, '');
+    // Trunca a 30 para espejar MAX_AUTO_KEY_LENGTH del frontend; sin
+    // esto, labels muy largos generarían una key distinta backend vs
+    // frontend y los placeholders no resolverían.
+    const MAX_AUTO = 30;
     const toCamelKey = (label: string): string => {
       const cleaned = (label ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '');
       const tokens = cleaned.split(/[^a-zA-Z0-9]+|(?<=[a-z])(?=[A-Z])/).filter(Boolean);
       if (tokens.length === 0) return '';
-      const [first, ...rest] = tokens;
-      return (
-        first.toLowerCase() +
-        rest.map((t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()).join('')
-      );
+      const toCamel = (ts: string[]): string => {
+        const [first, ...rest] = ts;
+        return (
+          first.toLowerCase() +
+          rest.map((t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()).join('')
+        );
+      };
+      const full = toCamel(tokens);
+      if (full.length <= MAX_AUTO) return full;
+      const kept: string[] = [tokens[0]];
+      for (let i = 1; i < tokens.length; i++) {
+        if (toCamel([...kept, tokens[i]]).length > MAX_AUTO) break;
+        kept.push(tokens[i]);
+      }
+      return toCamel(kept);
     };
     const labeledFormData: Record<string, string> = { ...formData };
     const used = new Map<string, number>();
@@ -751,15 +765,26 @@ export class FormsService implements OnModuleInit {
     //     que plantillas creadas antes del cambio sigan resolviendo.
     const normalizeKey = (label: string): string =>
       (label ?? '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/gi, '');
+    const MAX_AUTO = 30;
     const toCamelKey = (label: string): string => {
       const cleaned = (label ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '');
       const tokens = cleaned.split(/[^a-zA-Z0-9]+|(?<=[a-z])(?=[A-Z])/).filter(Boolean);
       if (tokens.length === 0) return '';
-      const [first, ...rest] = tokens;
-      return (
-        first.toLowerCase() +
-        rest.map((t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()).join('')
-      );
+      const toCamel = (ts: string[]): string => {
+        const [first, ...rest] = ts;
+        return (
+          first.toLowerCase() +
+          rest.map((t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()).join('')
+        );
+      };
+      const full = toCamel(tokens);
+      if (full.length <= MAX_AUTO) return full;
+      const kept: string[] = [tokens[0]];
+      for (let i = 1; i < tokens.length; i++) {
+        if (toCamel([...kept, tokens[i]]).length > MAX_AUTO) break;
+        kept.push(tokens[i]);
+      }
+      return toCamel(kept);
     };
     // Mapa widgetId → { camelKey, legacyKey }: usa `widget.placeholder`
     // manual si existe, sino el label normalizado con sufijo numérico
