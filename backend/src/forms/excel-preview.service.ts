@@ -222,9 +222,16 @@ export class ExcelPreviewService {
         const rowspan = this.parseSpanAttr(attrs, 'rowspan');
 
         const coord = `${this.colLetter(col)}${row}`;
-        const isEmpty = this.isCellEmpty(inner);
+        // Hoy todas las celdas son mappables, salvo las que contienen una
+        // imagen (típicamente el logo del Excel): mapear ahí no tiene
+        // sentido y el fillXlsx no sabe reemplazar un `<img>` por texto.
+        // Antes exigíamos celda vacía, pero eso bloqueaba celdas con
+        // placeholders textuales ("Campo abierto...", "Desplegable
+        // con...") que son precisamente las que el admin quiere mapear.
+        const hasImage = /<img\b/i.test(inner);
+        const mappable = !hasImage;
 
-        const newAttrs = `${attrs} data-coord="${coord}"${isEmpty ? ' data-mappable="true"' : ''}`;
+        const newAttrs = `${attrs} data-coord="${coord}"${mappable ? ' data-mappable="true"' : ''}`;
         processed += `<${tag}${newAttrs}>${inner}</${tag}>`;
 
         for (let dr = 0; dr < rowspan; dr++) {
