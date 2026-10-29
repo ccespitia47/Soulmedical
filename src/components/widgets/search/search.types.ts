@@ -44,6 +44,14 @@ export type SearchWidgetConfig = {
   // Columnas a mostrar en el modal de resultados
   displayColumns?: { key: string; label: string }[];
 
+  // Columnas completas detectadas del Sheet/Excel origen. Se auto-rellena
+  // cuando Properties pega la URL. A diferencia de `displayColumns` (que
+  // controla qué columnas se ven en el modal de resultados), este array
+  // existe para alimentar placeholders — `buildPlaceholders` genera un
+  // chip `${widget.col}` por cada entry para que el admin pueda usarlas
+  // en plantillas PDF/Email aunque no quiera mostrarlas al usuario.
+  sheetColumns?: string[];
+
   // Mappings: al seleccionar un resultado, rellena otros campos
   fieldMappings?: FieldMapping[];
 

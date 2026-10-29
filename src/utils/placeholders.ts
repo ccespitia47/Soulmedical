@@ -8,15 +8,48 @@ export type AppPlaceholder = {
 };
 
 /**
- * Misma normalización que se usaba inline en EmailConfigPanel/FormPage/TaskPage.
- * Importante: si cambia, hay que cambiar TODOS los puntos donde se construyen
- * placeholders y donde se reemplazan — por eso vive aquí, en un solo sitio.
+ * LEGACY (lowercase sin espacios ni símbolos). Se mantiene exportado
+ * porque `expandFormData` sigue emitiendo esta key en paralelo a la nueva
+ * camelCase para que las plantillas antiguas (PDF/Email que ya tienen
+ * `${nombredelpaciente}`, `${seleccionelapresentaciondextandi}`, etc.)
+ * sigan resolviendo sin tocar nada. Nuevos placeholders usan `toCamelKey`.
  */
 export function normalizeKey(label: string): string {
-  return label
+  return (label ?? "")
     .toLowerCase()
     .replace(/\s+/g, "")
     .replace(/[^a-z0-9]/gi, "");
+}
+
+/**
+ * Normalización preferida (estilo MoreApp): acentos quitados y camelCase.
+ *
+ *   "Seleccione la presentacion de Xtandi" → "seleccioneLaPresentacionDeXtandi"
+ *   "Dosis Prescrita"                       → "dosisPrescrita"
+ *   "dosisPrescrita"                        → "dosisPrescrita" (preserva)
+ *   "Nombre y Apellido del Prescriptor"     → "nombreYApellidoDelPrescriptor"
+ *
+ * Se usa para los placeholders que ve el admin (`buildPlaceholders`). El
+ * motor de interpolación (`expandFormData`) emite TAMBIÉN la variante
+ * legacy devuelta por `normalizeKey` para no romper plantillas creadas
+ * antes de este cambio.
+ */
+export function toCamelKey(label: string): string {
+  const cleaned = (label ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, ""); // quitar acentos
+  // Divide por separadores no alfanuméricos Y por bordes camelCase ya
+  // existentes (ej. "dosisPrescrita" → ["dosis", "Prescrita"]) para no
+  // perder el casing original cuando el label ya venía en camelCase.
+  const tokens = cleaned.split(/[^a-zA-Z0-9]+|(?<=[a-z])(?=[A-Z])/).filter(Boolean);
+  if (tokens.length === 0) return "";
+  const [first, ...rest] = tokens;
+  return (
+    first.toLowerCase() +
+    rest
+      .map((t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase())
+      .join("")
+  );
 }
 
 /**
@@ -56,13 +89,14 @@ export function buildPlaceholders(
   const occurrenceByLabel = new Map<string, number>();
 
   for (const w of widgets) {
-    // Si el admin definió un placeholder manual, lo usamos (normalizado por
-    // consistencia). Si no, caemos a normalizeKey(label) con desambiguación
-    // por sufijo. El `used` map evita colisiones también entre manuales y
-    // automáticos (si alguien pone "cargo" manual y hay otro widget con
-    // label "Cargo", el segundo recibe `cargo1`).
+    // Si el admin definió un placeholder manual, lo usamos tal cual
+    // (normalizado a camelCase por consistencia). Si no, derivamos de
+    // toCamelKey(label) con desambiguación por sufijo. El `used` map
+    // evita colisiones también entre manuales y automáticos (si alguien
+    // pone "cargo" manual y hay otro widget con label "Cargo", el
+    // segundo recibe `cargo1`).
     const manual = (w.placeholder ?? "").trim();
-    const raw = manual ? normalizeKey(manual) : normalizeKey(w.label);
+    const raw = manual ? toCamelKey(manual) : toCamelKey(w.label);
     if (!raw) continue;
     const base = uniqueBaseKey(raw, used);
     const occ = (occurrenceByLabel.get(w.label) ?? 0) + 1;
@@ -82,7 +116,7 @@ export function buildPlaceholders(
       // dos SubformFields con el mismo label dentro del mismo subform.
       const usedField = new Map<string, number>();
       for (const f of fields) {
-        const fRaw = normalizeKey(f.label);
+        const fRaw = toCamelKey(f.label);
         if (!fRaw) continue;
         const fk = uniqueBaseKey(fRaw, usedField);
         list.push({
@@ -105,20 +139,30 @@ export function buildPlaceholders(
       widgetType: w.type,
     });
 
-    // Widgets `search`: por cada columna configurada en `displayColumns`
-    // (ej. "concentracion", "dosisPrescrita") agregamos `${base.col}` que
-    // se resuelve contra la fila completa seleccionada por el usuario.
-    // Permite plantillas tipo "Dosis: ${presentacion.dosisPrescrita}"
-    // sin tener que mapear a widgets separados.
+    // Widgets `search`: por cada columna del Sheet (preferentemente
+    // `sheetColumns` — importadas con el botón "Importar columnas del
+    // Sheet" en Properties; fallback a `displayColumns` para widgets
+    // creados antes de que ese campo existiera) agregamos `${base.col}`
+    // en camelCase. El modal de resultados sigue decidiendo qué columnas
+    // ver con `displayColumns`; esto es independiente — todas quedan
+    // disponibles como placeholders.
     if (w.type === "search") {
       type Col = { key: string; label?: string };
-      const cols = (w.config?.displayColumns as Col[] | undefined) ?? [];
-      for (const col of cols) {
-        const colKey = normalizeKey(col.key ?? "");
+      const sheetCols = (w.config?.sheetColumns as string[] | undefined) ?? [];
+      const displayCols = (w.config?.displayColumns as Col[] | undefined) ?? [];
+      const sources: string[] =
+        sheetCols.length > 0 ? sheetCols : displayCols.map((c) => c.key).filter(Boolean);
+      // Deduplicar por key original para no listar dos chips iguales si
+      // sheetColumns y displayColumns se solapan en algún momento.
+      const seen = new Set<string>();
+      for (const sourceKey of sources) {
+        if (!sourceKey || seen.has(sourceKey)) continue;
+        seen.add(sourceKey);
+        const colKey = toCamelKey(sourceKey);
         if (!colKey) continue;
         list.push({
           placeholder: `\${${base}.${colKey}}`,
-          description: `${w.label}${descSuffix} → ${col.label || col.key}`,
+          description: `${w.label}${descSuffix} → ${sourceKey}`,
           widgetType: w.type,
         });
       }
@@ -145,55 +189,84 @@ export function expandFormData(
   hiddenIds?: Set<string>,
 ): Record<string, string> {
   const out: Record<string, string> = {};
+  // Doble emisión por valor: `set(baseCamel, valor)` + el equivalente en
+  // la vieja normalización lowercase. Esto permite que plantillas creadas
+  // antes del cambio a camelCase (que usan `${nombredelpaciente}`,
+  // `${seleccionelapresentaciondextandi}`, etc.) sigan resolviendo sin
+  // tocar nada. Mientras tanto, los chips nuevos muestran la variante
+  // camelCase que es la "canónica" de ahora en adelante.
+  const putDual = (base: string, legacyBase: string, value: string) => {
+    out[base] = value;
+    if (legacyBase && legacyBase !== base) out[legacyBase] = value;
+  };
   // Mismo contador que buildPlaceholders — iterando sobre los widgets en el
   // MISMO orden la asignación queda sincronizada: el segundo widget "Cargo"
   // produce placeholder `${cargo1}` en buildPlaceholders y aquí recibe la
   // key `cargo1` → el mapper del PDF/Email encuentra el valor correcto.
   const used = new Map<string, number>();
+  const usedLegacy = new Map<string, number>();
 
   for (const w of widgets) {
     if (hiddenIds?.has(w.id)) continue;
     const manual = (w.placeholder ?? "").trim();
-    const raw = manual ? normalizeKey(manual) : normalizeKey(w.label);
+    const raw = manual ? toCamelKey(manual) : toCamelKey(w.label);
+    const legacyRaw = manual ? normalizeKey(manual) : normalizeKey(w.label);
     if (!raw) continue;
     const base = uniqueBaseKey(raw, used);
+    const legacyBase = legacyRaw ? uniqueBaseKey(legacyRaw, usedLegacy) : "";
     const rawVal = data[w.id];
 
     if (w.type === "subform") {
       const fields = (w.config?.fields as SubformField[] | undefined) ?? [];
       const entries = parseSubformEntries(rawVal);
-      out[base] = typeof rawVal === "string" ? rawVal : JSON.stringify(entries);
-      out[`${base}:tabla`] = renderSubformTable(fields, entries);
-      out[`${base}.count`] = String(entries.length);
+      const serial =
+        typeof rawVal === "string" ? rawVal : JSON.stringify(entries);
+      putDual(base, legacyBase, serial);
+      putDual(`${base}:tabla`, legacyBase ? `${legacyBase}:tabla` : "", renderSubformTable(fields, entries));
+      putDual(`${base}.count`, legacyBase ? `${legacyBase}.count` : "", String(entries.length));
       const usedField = new Map<string, number>();
+      const usedFieldLegacy = new Map<string, number>();
       for (const f of fields) {
-        const fRaw = normalizeKey(f.label);
+        const fRaw = toCamelKey(f.label);
+        const fRawLegacy = normalizeKey(f.label);
         if (!fRaw) continue;
         const fk = uniqueBaseKey(fRaw, usedField);
-        out[`${base}.${fk}`] = entries
+        const fkLegacy = fRawLegacy ? uniqueBaseKey(fRawLegacy, usedFieldLegacy) : "";
+        const value = entries
           .map((e) => escapeHtml(String(e[f.id] ?? "")))
           .filter(Boolean)
           .join("<br>");
+        putDual(
+          `${base}.${fk}`,
+          legacyBase && fkLegacy ? `${legacyBase}.${fkLegacy}` : "",
+          value,
+        );
       }
       continue;
     }
 
-    if (rawVal == null) {
-      out[base] = "";
-    } else if (typeof rawVal === "string") {
-      out[base] = rawVal;
-    } else {
-      out[base] = JSON.stringify(rawVal);
-    }
+    const valueStr =
+      rawVal == null
+        ? ""
+        : typeof rawVal === "string"
+        ? rawVal
+        : JSON.stringify(rawVal);
+    putDual(base, legacyBase, valueStr);
 
     // Widgets `search`: expone cada columna de la fila seleccionada bajo
     // `${base.col}`. La fila completa viaja como JSON en
     // `data["${widgetId}__row"]`. Si no hay fila (usuario no seleccionó
-    // nada todavía), los sub-placeholders quedan vacíos.
+    // nada todavía), los sub-placeholders quedan vacíos. Fuente de
+    // columnas: `sheetColumns` (importadas) > fallback `displayColumns`.
     if (w.type === "search") {
       type Col = { key: string; label?: string };
-      const cols = (w.config?.displayColumns as Col[] | undefined) ?? [];
-      if (cols.length > 0) {
+      const sheetCols = (w.config?.sheetColumns as string[] | undefined) ?? [];
+      const displayCols = (w.config?.displayColumns as Col[] | undefined) ?? [];
+      const sources: string[] =
+        sheetCols.length > 0
+          ? sheetCols
+          : displayCols.map((c) => c.key).filter(Boolean);
+      if (sources.length > 0) {
         const rowRaw = data[`${w.id}__row`];
         let row: Record<string, unknown> = {};
         if (typeof rowRaw === "string" && rowRaw) {
@@ -204,12 +277,21 @@ export function expandFormData(
             }
           } catch { /* fila inválida: columnas quedan vacías */ }
         }
-        for (const col of cols) {
-          const colKey = normalizeKey(col.key ?? "");
-          if (!colKey) continue;
-          const v = row[col.key];
-          out[`${base}.${colKey}`] =
+        const seen = new Set<string>();
+        for (const sourceKey of sources) {
+          if (!sourceKey || seen.has(sourceKey)) continue;
+          seen.add(sourceKey);
+          const colCamel = toCamelKey(sourceKey);
+          const colLegacy = normalizeKey(sourceKey);
+          if (!colCamel) continue;
+          const v = row[sourceKey];
+          const vs =
             v == null ? "" : typeof v === "string" ? v : String(v);
+          putDual(
+            `${base}.${colCamel}`,
+            legacyBase && colLegacy ? `${legacyBase}.${colLegacy}` : "",
+            vs,
+          );
         }
       }
     }

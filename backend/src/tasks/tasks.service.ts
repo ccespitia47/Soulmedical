@@ -1667,29 +1667,54 @@ export class TasksService {
       type?: string;
       label: string;
       placeholder?: string;
-      config?: { displayColumns?: SearchCol[] };
+      config?: { displayColumns?: SearchCol[]; sheetColumns?: string[] };
     }>;
+    // Dos normalizadores en paralelo (espejan src/utils/placeholders.ts):
+    //   - toCamelKey → key canónica nueva (lo que ve el admin en los chips).
+    //   - normalize  → key vieja lowercase; la emitimos en paralelo para
+    //     que plantillas creadas antes del cambio sigan resolviendo.
     const normalize = (s: string) =>
       (s || '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/gi, '');
+    const toCamelKey = (s: string): string => {
+      const cleaned = (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+      const tokens = cleaned.split(/[^a-zA-Z0-9]+|(?<=[a-z])(?=[A-Z])/).filter(Boolean);
+      if (tokens.length === 0) return '';
+      const [first, ...rest] = tokens;
+      return (
+        first.toLowerCase() +
+        rest.map((t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()).join('')
+      );
+    };
     const used = new Map<string, number>();
+    const usedLegacy = new Map<string, number>();
+    const assign = (base: string, counter: Map<string, number>) => {
+      const current = counter.get(base) ?? 0;
+      counter.set(base, current + 1);
+      return current === 0 ? base : `${base}${current}`;
+    };
+    const putDual = (camelKey: string, legacyKey: string, value: string) => {
+      out[camelKey] = value;
+      if (legacyKey && legacyKey !== camelKey) out[legacyKey] = value;
+    };
     for (const w of widgets) {
-      // Si el admin definió un placeholder manual en el widget, lo usamos;
-      // si no, caemos a normalize(label) con sufijo numérico para evitar
-      // colisiones entre widgets con el mismo label.
       const manual = (w.placeholder ?? '').trim();
-      const rawKey = manual ? normalize(manual) : normalize(w.label);
-      if (!rawKey) continue;
-      const current = used.get(rawKey) ?? 0;
-      used.set(rawKey, current + 1);
-      const key = current === 0 ? rawKey : `${rawKey}${current}`;
-      out[key] = finalData[w.id] ?? '';
+      const camelBase = manual ? toCamelKey(manual) : toCamelKey(w.label);
+      const legacyBase = manual ? normalize(manual) : normalize(w.label);
+      if (!camelBase) continue;
+      const camelKey = assign(camelBase, used);
+      const legacyKey = legacyBase ? assign(legacyBase, usedLegacy) : '';
+      putDual(camelKey, legacyKey, finalData[w.id] ?? '');
 
       // Widgets `search`: expone cada columna de la fila seleccionada
-      // bajo `${key}.col`. La fila completa viaja como JSON en
-      // finalData[`${widgetId}__row`]. Espeja src/utils/placeholders.ts.
+      // bajo `${key}.col`. Fuente: sheetColumns > displayColumns.
       if (w.type === 'search') {
-        const cols = w.config?.displayColumns ?? [];
-        if (cols.length > 0) {
+        const sheetCols = w.config?.sheetColumns ?? [];
+        const displayCols = w.config?.displayColumns ?? [];
+        const sources: string[] =
+          sheetCols.length > 0
+            ? sheetCols
+            : displayCols.map((c) => c.key).filter(Boolean);
+        if (sources.length > 0) {
           const rowRaw = finalData[`${w.id}__row`];
           let row: Record<string, unknown> = {};
           if (typeof rowRaw === 'string' && rowRaw) {
@@ -1700,12 +1725,20 @@ export class TasksService {
               }
             } catch { /* fila mal formada: columnas vacías */ }
           }
-          for (const col of cols) {
-            const colKey = normalize(col.key ?? '');
-            if (!colKey) continue;
-            const v = row[col.key];
-            out[`${key}.${colKey}`] =
-              v == null ? '' : typeof v === 'string' ? v : String(v);
+          const seen = new Set<string>();
+          for (const sourceKey of sources) {
+            if (!sourceKey || seen.has(sourceKey)) continue;
+            seen.add(sourceKey);
+            const colCamel = toCamelKey(sourceKey);
+            const colLegacy = normalize(sourceKey);
+            if (!colCamel) continue;
+            const v = row[sourceKey];
+            const vs = v == null ? '' : typeof v === 'string' ? v : String(v);
+            putDual(
+              `${camelKey}.${colCamel}`,
+              legacyKey && colLegacy ? `${legacyKey}.${colLegacy}` : '',
+              vs,
+            );
           }
         }
       }

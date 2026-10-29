@@ -66,10 +66,22 @@ export default function SearchProperties({ widget, updateWidget, allWidgets }: W
           setSheetsHeaders([]);
         } else {
           setSheetsHeaders(headers);
+          // Persiste los headers en `config.sheetColumns` para que todas
+          // las columnas del Sheet queden disponibles como placeholders
+          // (`${widget.col}`) sin que el admin tenga que agregarlas a
+          // `displayColumns` (ese array sigue decidiendo qué columnas se
+          // ven en el modal de resultados — es independiente).
+          const prev = config.sheetColumns ?? [];
+          const changed =
+            prev.length !== headers.length ||
+            prev.some((h, i) => h !== headers[i]);
+          const changes: Partial<SearchWidgetConfig> = {};
+          if (changed) changes.sheetColumns = headers;
           // Guardar el gid detectado en la config para el fetch real
           if (parsed.gid && parsed.gid !== config.sheetsGid) {
-            setConfig({ sheetsGid: parsed.gid });
+            changes.sheetsGid = parsed.gid;
           }
+          if (Object.keys(changes).length > 0) setConfig(changes);
         }
       } catch (err) {
         // Los fetch al gviz/tq de un Sheet privado se convierten en redirect
@@ -106,6 +118,13 @@ export default function SearchProperties({ widget, updateWidget, allWidgets }: W
           setExcelHeaders([]);
         } else {
           setExcelHeaders(headers);
+          // Mismo criterio que Sheets: persistir los headers para que
+          // queden expuestos como placeholders del PDF/Email.
+          const prev = config.sheetColumns ?? [];
+          const changed =
+            prev.length !== headers.length ||
+            prev.some((h, i) => h !== headers[i]);
+          if (changed) setConfig({ sheetColumns: headers });
         }
       } catch (err) {
         console.error("[SearchWidget] Error detectando Excel:", err);
