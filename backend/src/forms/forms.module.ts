@@ -16,6 +16,7 @@ import { ExcelPreviewService } from './excel-preview.service';
 import { ExcelPreviewController } from './excel-preview.controller';
 import { PdfFillService } from './pdf-fill.service';
 import { PdfFillController } from './pdf-fill.controller';
+import { SearchSourceController } from './search-source.controller';
 import { EmailModule } from '../email/email.module';
 import { FilesModule } from '../files/files.module';
 import { UsersModule } from '../users/users.module';
@@ -64,7 +65,7 @@ import { AdminAuditModule } from '../admin-audit/admin-audit.module';
     // públicos verificados por email — son JWTs aparte del de sesión.
     JwtModule.register({ secret: JWT_SECRET }),
   ],
-  controllers: [FormsController, FormAssetsController, ExcelPreviewController, PdfFillController],
+  controllers: [FormsController, FormAssetsController, ExcelPreviewController, PdfFillController, SearchSourceController],
   providers: [
     FormsService,
     AssignmentsTreeService,

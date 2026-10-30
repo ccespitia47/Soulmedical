@@ -78,20 +78,45 @@ function buildCsvUrl(
   return `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?${params.toString()}`;
 }
 
-/** Descarga la primera fila (headers) de la hoja indicada. Útil para poblar
- *  dropdowns en el panel de configuración. */
+/** Descarga la primera fila (headers) de la hoja indicada vía proxy backend.
+ *
+ * El fetch directo al endpoint /pub?output=csv de un Sheet "Publicado en
+ * la Web" (URL /d/e/...) responde con 307 → googleusercontent.com, y el
+ * navegador bloquea el redirect por CORS (googleusercontent no envía
+ * Access-Control-Allow-Origin). Resultado: fetch devolvía [] silenciosamente
+ * y los widgets quedaban sin `sheetColumns` → sin chips `${widget.col}`.
+ *
+ * El backend (POST /forms/search-source/sheets-headers) no tiene esa
+ * restricción. Devuelve `{ headers, gid }`. Si el usuario pegó una URL con
+ * #gid=…, el gid detectado se guarda vía el caller en `config.sheetsGid`.
+ */
 export async function fetchSheetsHeaders(url: string): Promise<string[]> {
   const parsed = parseSheetsUrl(url);
   if (!parsed) return [];
-  // El endpoint /pub?output=csv devuelve el sheet completo (no acepta 'range'),
-  // así que descargamos y tomamos solo la primera fila. Para /gviz/tq sí
-  // podemos limitar con range para reducir bytes.
-  const csvUrl = buildCsvUrl(parsed.id, parsed.gid, parsed.published, parsed.published ? undefined : "A1:Z1");
-  const res = await fetch(csvUrl);
-  if (!res.ok) return [];
-  const text = await res.text();
-  const rows = parseCsv(text);
-  return (rows[0] ?? []).map((c) => c.trim()).filter(Boolean);
+  const base = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
+  const token = localStorage.getItem("token") ?? "";
+  const res = await fetch(`${base}/forms/search-source/sheets-headers`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ url }),
+  });
+  if (!res.ok) {
+    // El backend ya devuelve el motivo (401/403/400 con message). Loggeamos
+    // para que el admin lo vea en consola; el caller muestra un mensaje
+    // genérico en UI porque no todos los errores son recuperables desde ahí.
+    try {
+      const err = await res.json();
+      console.warn("[fetchSheetsHeaders] backend:", res.status, err?.message);
+    } catch {
+      console.warn("[fetchSheetsHeaders] backend status:", res.status);
+    }
+    return [];
+  }
+  const data = (await res.json()) as { headers?: string[] };
+  return Array.isArray(data?.headers) ? data.headers : [];
 }
 
 export async function searchGoogleSheets(config: SearchWidgetConfig, q: string): Promise<Row[]> {
