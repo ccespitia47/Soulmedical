@@ -2,8 +2,20 @@
 
 export type ExcelFieldMapping = {
   coord: string;        // Coordenada de la celda: "A1", "B5", etc.
-  placeholder: string;  // Ej: "${nombre}"
+  placeholder: string;  // Ej: "${nombre}" (único placeholder "canónico" de este mapping)
   description: string;  // Label del campo del formulario
+  /**
+   * Template completo del contenido de la celda. Opcional; si está presente,
+   * el backend lo usa como fuente de verdad y reemplaza los `${...}` que
+   * encuentre adentro con los valores del formulario. Permite mezclar texto
+   * fijo + placeholder en la misma celda: ej. `"Nombre: ${nombrePaciente}"`
+   * o `"${primerApellido}, ${segundoApellido}"`.
+   *
+   * Si no está, el back usa el comportamiento legacy: reemplaza TODO el
+   * contenido de la celda por el valor de `placeholder` (plantillas creadas
+   * antes de este cambio siguen funcionando sin tocar nada).
+   */
+  template?: string;
 };
 
 export type PdfFieldMapping = {

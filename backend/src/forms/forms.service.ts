@@ -583,7 +583,7 @@ export class FormsService implements OnModuleInit {
       pdfBase64?: string;
       pdfMappings?: Array<{ placeholder: string; x: number; y: number; page: number; fontSize?: number }>;
       excelBase64?: string;
-      excelMappings?: Array<{ coord: string; placeholder: string }>;
+      excelMappings?: Array<{ coord: string; placeholder: string; template?: string }>;
       excelLogoBase64?: string;
       excelFilename?: string;
       attachPDF?: boolean;
@@ -729,7 +729,7 @@ export class FormsService implements OnModuleInit {
   ): Promise<import('../email/email.types').EmailAttachment | null> {
     const template = (overrideTemplate ?? form.emailTemplate ?? {}) as {
       excelBase64?: string;
-      excelMappings?: Array<{ coord: string; placeholder: string }>;
+      excelMappings?: Array<{ coord: string; placeholder: string; template?: string }>;
       excelLogoBase64?: string;
       pdfBase64?: string;
       pdfMappings?: Array<{

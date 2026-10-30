@@ -110,17 +110,27 @@ export default function ExcelMapper({
   };
 
   const handleCellClick = useCallback(
-    (coord: string, isMappable: boolean) => {
+    (coord: string, isMappable: boolean, existingText: string) => {
       if (!isMappable || !selectedPlaceholder) return;
       // Si esta celda ya estaba mapeada, ignoramos — el usuario usa el
       // botón ✕ del badge para quitar.
       if (mappings[coord]) return;
+      // Si la celda ya tenía texto, concatenamos el placeholder al final
+      // para que quede "texto existente ${placeholder}" (ej. "Nombre:
+      // ${nombrePaciente}"). El backend reemplaza los `${...}` dentro del
+      // template al generar PDF. Si la celda estaba vacía, el template es
+      // igual al placeholder suelto — mismo render que antes.
+      const trimmed = existingText.trim();
+      const template = trimmed
+        ? `${trimmed} ${selectedPlaceholder.placeholder}`
+        : selectedPlaceholder.placeholder;
       setMappings((prev) => ({
         ...prev,
         [coord]: {
           coord,
           placeholder: selectedPlaceholder.placeholder,
           description: selectedPlaceholder.description,
+          template,
         },
       }));
       const idx = availablePlaceholders.indexOf(selectedPlaceholder);

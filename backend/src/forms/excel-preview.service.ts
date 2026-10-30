@@ -17,6 +17,15 @@ const execFileP = promisify(execFile);
 export type CellMapping = {
   coord: string;
   placeholder: string;
+  /**
+   * Template completo de la celda, opcional. Si está presente, se usa
+   * como texto final de la celda reemplazando TODOS los `${...}` que
+   * contenga con los valores del formulario — permite mezclar texto fijo
+   * con uno o varios placeholders ("Nombre: ${nombrePaciente}"). Si no
+   * está, se mantiene el comportamiento legacy: la celda se reemplaza
+   * por el valor único de `placeholder`.
+   */
+  template?: string;
 };
 
 function resolveSofficePath(): string {
@@ -440,11 +449,25 @@ export class ExcelPreviewService {
         continue;
       }
 
-      const key = m.placeholder.replace(/^\$\{/, '').replace(/\}$/, '');
-      const val = values[key];
-      if (val === undefined) continue;
+      // Si el mapping viene con template (ej. "Nombre: ${nombrePaciente}"),
+      // reemplazamos TODOS los `${...}` adentro con sus valores. Permite
+      // mezclar texto fijo con uno o varios placeholders en la misma celda.
+      // Fallback legacy (sin template): la celda se reemplaza por el valor
+      // único de `placeholder` como antes.
+      let finalText: string;
+      if (m.template !== undefined && m.template !== null) {
+        finalText = m.template.replace(/\$\{([^}]+)\}/g, (_, k) => {
+          const v = values[k];
+          return v === undefined || v === null ? '' : String(v);
+        });
+      } else {
+        const key = m.placeholder.replace(/^\$\{/, '').replace(/\}$/, '');
+        const val = values[key];
+        if (val === undefined) continue;
+        finalText = val;
+      }
       const cell = ws.getCell(m.coord);
-      cell.value = val;
+      cell.value = finalText;
       // wrapText solo si la celda está en un merge ancho: en celdas de una
       // sola columna wrapText parte el valor por caracteres (ej: un documento
       // de identidad "11111111111" se veía cortado a "11" porque el resto

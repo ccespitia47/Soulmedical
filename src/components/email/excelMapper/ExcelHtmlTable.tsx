@@ -8,7 +8,13 @@ type Props = {
   mappings: Record<string, ExcelFieldMapping>;
   selectedPlaceholder: PlaceholderItem | null;
   customLogo: string | null;
-  onCellClick: (coord: string, isMappable: boolean) => void;
+  /**
+   * `existingText` es el textContent de la celda ANTES del click — se usa
+   * para construir el template cuando ya hay texto fijo ("Nombre: " +
+   * ${chip} → "Nombre: ${nombrePaciente}"). Vacío si la celda está vacía
+   * o si la celda ya estaba mapeada (ahí no hay texto real sino el badge).
+   */
+  onCellClick: (coord: string, isMappable: boolean, existingText: string) => void;
   onRemoveMapping: (coord: string) => void;
   /** Opcional: si está definido, un doble-click en una celda sin mapear
    *  habilita edición in-place de su texto. Al blur / Enter se dispara
@@ -123,8 +129,12 @@ export default function ExcelHtmlTable({
       cell.setAttribute("data-mapped", "true");
       // Limpiar contenido y colocar solo el badge + botón (así no se ve
       // encimado con el contenido original de la celda vacía).
+      // Mostramos el template completo cuando existe ("Nombre: ${nombrePaciente}")
+      // para que el admin vea exactamente lo que va a quedar en la celda. Si
+      // no hay template (mappings legacy), caemos al placeholder suelto.
+      const badgeText = mapping.template ?? mapping.placeholder;
       cell.innerHTML = `
-        <span class="lo-mapping-badge">${escapeHtml(mapping.placeholder)}</span>
+        <span class="lo-mapping-badge">${escapeHtml(badgeText)}</span>
         <button class="lo-remove-btn" data-remove="${cssEscape(coord)}" type="button">✕</button>
       `;
     }
@@ -145,7 +155,13 @@ export default function ExcelHtmlTable({
       if (cell.getAttribute("data-editing") === "true") return;
       const coord = cell.getAttribute("data-coord") || "";
       const isMappable = cell.getAttribute("data-mappable") === "true";
-      onCellClick(coord, isMappable);
+      // Si la celda ya tiene mapping, el DOM muestra el badge — no es texto
+      // real del Excel. En ese caso pasamos string vacío y el caller ignora
+      // el click igual (ya hay mapping). Para celdas sin mapping, textContent
+      // es el texto literal que LibreOffice renderizó.
+      const isMapped = cell.getAttribute("data-mapped") === "true";
+      const existingText = isMapped ? "" : (cell.textContent ?? "").trim();
+      onCellClick(coord, isMappable, existingText);
     };
     wrapper.addEventListener("click", onClick);
 
