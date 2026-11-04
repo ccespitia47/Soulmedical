@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { SubformEntry, SubformField } from "../subform.types";
+import { sanitizeHtml } from "../../../../utils/sanitize";
 
 const INPUT_BASE =
   "box-border w-full rounded-[7px] border-[1.5px] border-slate-200 bg-neutral-50 px-3 py-2.5 font-sans text-[13.5px] text-gray-900 outline-none focus:border-[#00c2a8]";
@@ -26,10 +27,14 @@ export default function FieldInput({ field, value, onChange, entry, fields }: Fi
   }
 
   if (field.type === "htmlblock") {
+    // Sanitizamos el HTML igual que el widget htmlblock del form principal
+    // para evitar XSS si un admin malicioso mete <script>…</script> en el
+    // htmlContent de un subformulario.
+    const raw = field.htmlContent || field.placeholder || "";
     return (
       <div
         className="prose prose-sm max-w-none text-[13.5px] text-slate-700"
-        dangerouslySetInnerHTML={{ __html: field.htmlContent || field.placeholder || "" }}
+        dangerouslySetInnerHTML={{ __html: sanitizeHtml(raw) }}
       />
     );
   }
@@ -83,66 +88,53 @@ export default function FieldInput({ field, value, onChange, entry, fields }: Fi
         required={field.required}
         value={value}
         placeholder={field.placeholder}
+        maxLength={field.maxLength}
         onChange={(e) => onChange(e.target.value)}
-        rows={3}
+        rows={field.rows ?? 3}
         className={`${INPUT_BASE} resize-y`}
       />
     );
   }
 
-  // ── Select / Search (search sin fuente externa — opciones predefinidas, igual que select) ──
-  if (field.type === "select" || field.type === "search") {
-    return (
-      <select
-        name={field.id}
-        required={field.required}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={`${INPUT_BASE} cursor-pointer`}
-      >
-        <option value="">-- Selecciona --</option>
-        {(field.options || []).map((opt) => (
-          <option key={opt} value={opt}>
-            {opt}
-          </option>
-        ))}
-      </select>
-    );
+  // ── Text (con defaultValue, maxLength y filtros de teclado) ──
+  if (field.type === "text") {
+    return <TextInput field={field} value={value} onChange={onChange} />;
   }
 
-  // ── Radio / Opción única ──
+  // ── Select / Search ──
+  if (field.type === "select" || field.type === "search") {
+    return <SelectInput field={field} value={value} onChange={onChange} />;
+  }
+
+  // ── Radio ──
   if (field.type === "radio") {
-    return (
-      <div className="flex flex-col gap-1.5">
-        {(field.options || []).map((opt) => (
-          <label key={opt} className="flex cursor-pointer items-center gap-2 text-[13px]">
-            <input
-              type="radio"
-              name={field.id}
-              value={opt}
-              checked={value === opt}
-              onChange={() => onChange(opt)}
-            />
-            {opt}
-          </label>
-        ))}
-      </div>
-    );
+    return <RadioInput field={field} value={value} onChange={onChange} />;
   }
 
   // ── Checkbox multi ──
   if (field.type === "checkbox") {
-    let selected: string[] = [];
-    try {
-      selected = value ? JSON.parse(value) : [];
-    } catch {
-      selected = [];
-    }
+    // Formato comma-separated (compatible con el widget checkbox del form
+    // principal y con los exports/placeholders). Toleramos JSON legado por
+    // si hay submissions viejas en la DB con `'["a","b"]'`.
+    const parseValue = (raw: string): string[] => {
+      const t = raw.trim();
+      if (!t) return [];
+      if (t.startsWith("[")) {
+        try {
+          const arr = JSON.parse(t);
+          return Array.isArray(arr) ? arr.map(String) : [];
+        } catch {
+          /* fallthrough a comma-split */
+        }
+      }
+      return t.split(",").map((s) => s.trim()).filter(Boolean);
+    };
+    const selected = parseValue(value);
     const toggle = (opt: string) => {
       const next = selected.includes(opt)
         ? selected.filter((x) => x !== opt)
         : [...selected, opt];
-      onChange(JSON.stringify(next));
+      onChange(next.join(","));
     };
     return (
       <div className="flex flex-col gap-1.5">
@@ -160,30 +152,22 @@ export default function FieldInput({ field, value, onChange, entry, fields }: Fi
     );
   }
 
-  // ── Price (number con prefix visual) ──
+  // ── Price ──
   if (field.type === "price") {
-    const prefix = field.pricePrefix || "$";
-    return (
-      <div className="relative">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-500">
-          {prefix}
-        </span>
-        <input
-          type="number"
-          name={field.id}
-          required={field.required}
-          value={value}
-          placeholder={field.placeholder}
-          onChange={(e) => onChange(e.target.value)}
-          className={`${INPUT_BASE} pl-10`}
-        />
-      </div>
-    );
+    return <PriceInput field={field} value={value} onChange={onChange} />;
   }
 
   // ── Signature (canvas base64) ──
   if (field.type === "signature") {
-    return <SignaturePad value={value} onChange={onChange} name={field.id} />;
+    return (
+      <SignaturePad
+        value={value}
+        onChange={onChange}
+        name={field.id}
+        penColor={field.penColor || "#000000"}
+        penWidth={field.penWidth ?? 2}
+      />
+    );
   }
 
   // ── Photo (file → base64) ──
@@ -221,18 +205,9 @@ export default function FieldInput({ field, value, onChange, entry, fields }: Fi
     );
   }
 
-  // ── Calc (suma de campos number del mismo row) ──
+  // ── Calc ──
   if (field.type === "calc") {
-    const sum = computeCalc(field, entry, fields);
-    const display = sum.toFixed(2);
-    // Actualiza value hacia arriba para que quede en el entry serializado.
-    if (value !== display) onChange(display);
-    return (
-      <div className="flex items-center justify-between rounded-md border-[1.5px] border-cyan-400 bg-cyan-50/50 px-3 py-2.5 font-mono text-[15px] font-bold text-cyan-700">
-        <span>Σ</span>
-        <span>{display}</span>
-      </div>
-    );
+    return <CalcInput field={field} value={value} onChange={onChange} entry={entry} fields={fields} />;
   }
 
   // ── Quiz question (radio con puntos) ──
@@ -264,17 +239,9 @@ export default function FieldInput({ field, value, onChange, entry, fields }: Fi
     );
   }
 
-  // ── Quiz score (suma de puntos ganados en todos los quiz_question del row) ──
+  // ── Quiz score ──
   if (field.type === "quiz_score") {
-    const total = computeQuizScore(entry, fields);
-    const display = String(total);
-    if (value !== display) onChange(display);
-    return (
-      <div className="flex items-center justify-between rounded-md border-[1.5px] border-amber-400 bg-amber-50 px-3 py-2.5 font-mono text-[15px] font-bold text-amber-700">
-        <span>🏆 Nota</span>
-        <span>{display}</span>
-      </div>
-    );
+    return <QuizScoreInput field={field} value={value} onChange={onChange} entry={entry} fields={fields} />;
   }
 
   // text / number / email / phone / date / time
@@ -363,15 +330,645 @@ function computeQuizScore(entry?: SubformEntry, fields?: SubformField[]): number
   return sum;
 }
 
+// ─── RadioInput: mismo look que el widget radio del form principal ──────
+function RadioInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: SubformField;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const vertical = field.verticalAlign ?? true;
+  const remember = field.rememberInput ?? false;
+  const storageKey = `soulforms_subform_radio_${field.id}`;
+  const defaultValue = field.defaultValue || "";
+
+  // Al montar: si no hay value, usar la última entrada recordada o el default.
+  useEffect(() => {
+    if (value) return;
+    if (remember) {
+      try {
+        const stored = localStorage.getItem(storageKey);
+        if (stored) {
+          onChange(stored);
+          return;
+        }
+      } catch {
+        /* storage bloqueado */
+      }
+    }
+    if (defaultValue) onChange(defaultValue);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!remember || !value) return;
+    try {
+      localStorage.setItem(storageKey, value);
+    } catch {
+      /* storage bloqueado */
+    }
+  }, [remember, value, storageKey]);
+
+  const options = field.options || [];
+
+  return (
+    <div
+      style={{
+        display: vertical ? "flex" : "grid",
+        flexDirection: vertical ? "column" : undefined,
+        gridTemplateColumns: vertical
+          ? undefined
+          : "repeat(auto-fit, minmax(140px, 1fr))",
+        gap: 8,
+      }}
+    >
+      {options.map((opt, index) => {
+        const isSelected = value === opt;
+        return (
+          <label
+            key={opt}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "8px 12px",
+              border: isSelected
+                ? "1.5px solid #0891b2"
+                : "1.5px solid #e2e8f0",
+              borderRadius: 8,
+              background: isSelected ? "#ecfeff" : "#f8fafc",
+              cursor: "pointer",
+              fontSize: 13.5,
+              color: "#111827",
+              transition: "all 0.15s ease-out",
+            }}
+          >
+            <input
+              type="radio"
+              name={field.id}
+              value={opt}
+              required={field.required && index === 0}
+              checked={isSelected}
+              onChange={() => onChange(opt)}
+              style={{ accentColor: "#0891b2", flexShrink: 0 }}
+            />
+            <span style={{ whiteSpace: vertical ? "normal" : "nowrap" }}>
+              {opt}
+            </span>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── TextInput: filtros de teclado + maxLength + defaultValue ───────────
+function TextInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: SubformField;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const allowNumbers = field.allowNumbers ?? true;
+  const allowSpecialChars = field.allowSpecialChars ?? true;
+  const allowLineBreaks = field.allowLineBreaks ?? false;
+
+  // Si viene vacío al montar, aplicar defaultValue.
+  useEffect(() => {
+    if (!value && field.defaultValue) onChange(field.defaultValue);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleKeyPress = (
+    e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) => {
+    if (allowNumbers && allowSpecialChars) return;
+    const char = e.key;
+    if (allowLineBreaks && char === "Enter") return;
+    const isLetter = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ]$/.test(char);
+    const isNumber = /^[0-9]$/.test(char);
+    const isSpace = char === " ";
+    const specialChars = "@#$%&*()_+=-{}[];':\"\\|,.<>/?!¡¿";
+    const isSpecialChar = specialChars.includes(char);
+    let allowed = isLetter || isSpace;
+    if (allowNumbers) allowed = allowed || isNumber;
+    if (allowSpecialChars) allowed = allowed || isSpecialChar;
+    if (!allowed) e.preventDefault();
+  };
+
+  if (allowLineBreaks) {
+    return (
+      <textarea
+        name={field.id}
+        required={field.required}
+        value={value}
+        placeholder={field.placeholder}
+        maxLength={field.maxLength}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyPress={handleKeyPress}
+        rows={field.rows ?? 3}
+        className={`${INPUT_BASE} resize-y`}
+      />
+    );
+  }
+  return (
+    <input
+      type="text"
+      name={field.id}
+      required={field.required}
+      value={value}
+      placeholder={field.placeholder}
+      maxLength={field.maxLength}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyPress={handleKeyPress}
+      className={INPUT_BASE}
+    />
+  );
+}
+
+// ─── SelectInput: multiple, expand, sortAlphabetically, defaultValue, remember
+function SelectInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: SubformField;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const multiple = field.multiple ?? false;
+  const expand = field.expand ?? false;
+  const sortAlphabetically = field.sortAlphabetically ?? false;
+  const remember = field.rememberInput ?? false;
+  const storageKey = `soulforms_subform_select_${field.id}`;
+
+  const raw = field.options || [];
+  const options = sortAlphabetically
+    ? [...raw].sort((a, b) =>
+        a.localeCompare(b, "es", { sensitivity: "base" }),
+      )
+    : raw;
+
+  // Init: defaultValue o localStorage.
+  useEffect(() => {
+    if (value) return;
+    if (remember) {
+      try {
+        const stored = localStorage.getItem(storageKey);
+        if (stored) {
+          onChange(stored);
+          return;
+        }
+      } catch {
+        /* storage bloqueado */
+      }
+    }
+    if (field.defaultValue) onChange(field.defaultValue);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!remember || !value) return;
+    try {
+      localStorage.setItem(storageKey, value);
+    } catch {
+      /* storage bloqueado */
+    }
+  }, [remember, value, storageKey]);
+
+  // Multi (comma-separated igual que el main / checkbox del subform).
+  const parseMulti = (raw: string): string[] => {
+    const t = raw.trim();
+    if (!t) return [];
+    if (t.startsWith("[")) {
+      try {
+        const arr = JSON.parse(t);
+        return Array.isArray(arr) ? arr.map(String) : [];
+      } catch {
+        /* fallthrough */
+      }
+    }
+    return t.split(",").map((s) => s.trim()).filter(Boolean);
+  };
+
+  if (expand) {
+    const selected = multiple ? parseMulti(value) : [value];
+    const toggle = (opt: string) => {
+      if (multiple) {
+        const next = selected.includes(opt)
+          ? selected.filter((x) => x !== opt)
+          : [...selected, opt];
+        onChange(next.join(","));
+      } else {
+        onChange(opt);
+      }
+    };
+    return (
+      <div className="flex flex-col gap-1.5">
+        {options.map((opt, i) => (
+          <label
+            key={opt}
+            className="flex cursor-pointer items-center gap-2 text-[13px]"
+          >
+            <input
+              type={multiple ? "checkbox" : "radio"}
+              name={field.id}
+              value={opt}
+              required={field.required && !multiple && i === 0}
+              checked={selected.includes(opt)}
+              onChange={() => toggle(opt)}
+            />
+            {opt}
+          </label>
+        ))}
+      </div>
+    );
+  }
+
+  if (multiple) {
+    const selected = parseMulti(value);
+    return (
+      <select
+        name={field.id}
+        required={field.required}
+        multiple
+        value={selected}
+        onChange={(e) => {
+          const picked = Array.from(e.target.selectedOptions).map(
+            (o) => o.value,
+          );
+          onChange(picked.join(","));
+        }}
+        className={`${INPUT_BASE} min-h-[80px] cursor-pointer`}
+      >
+        {options.map((opt) => (
+          <option key={opt} value={opt}>
+            {opt}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  return (
+    <select
+      name={field.id}
+      required={field.required}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={`${INPUT_BASE} cursor-pointer`}
+    >
+      <option value="">
+        {field.placeholder || "-- Selecciona --"}
+      </option>
+      {options.map((opt) => (
+        <option key={opt} value={opt}>
+          {opt}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+// ─── PriceInput: currency + decimalMark + precision + min/max + remember ─
+function PriceInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: SubformField;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const currency = field.currency || "COP";
+  const decimalMark = field.decimalMark || "comma";
+  const decimalPrecision = field.decimalPrecision ?? 2;
+  const minAmount = field.minAmount;
+  const maxAmount = field.maxAmount;
+  const remember = field.rememberInput ?? false;
+  const prefix = field.pricePrefix || "$";
+  const storageKey = `soulforms_subform_price_${field.id}`;
+
+  const [raw, setRaw] = useState(value);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (raw) return;
+    if (remember) {
+      try {
+        const stored = localStorage.getItem(storageKey);
+        if (stored) {
+          setRaw(stored);
+          onChange(stored.replace(",", "."));
+          return;
+        }
+      } catch {
+        /* storage bloqueado */
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let next = e.target.value;
+    if (decimalMark === "comma") next = next.replace(/[^0-9,]/g, "");
+    else next = next.replace(/[^0-9.]/g, "");
+    setRaw(next);
+    setError("");
+    const num = parseFloat(next.replace(",", "."));
+    if (!Number.isNaN(num)) {
+      if (minAmount !== undefined && num < minAmount) {
+        setError(`Mínimo: ${prefix} ${minAmount}`);
+      } else if (maxAmount !== undefined && num > maxAmount) {
+        setError(`Máximo: ${prefix} ${maxAmount}`);
+      }
+    }
+    const normalized = next.replace(",", ".");
+    onChange(normalized);
+    if (remember) {
+      try {
+        localStorage.setItem(storageKey, next);
+      } catch {
+        /* storage */
+      }
+    }
+  };
+
+  const placeholder =
+    decimalMark === "comma"
+      ? `0,${"0".repeat(decimalPrecision)}`
+      : `0.${"0".repeat(decimalPrecision)}`;
+
+  return (
+    <div>
+      <input type="hidden" name={field.id} value={raw.replace(",", ".")} />
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          border: `1.5px solid ${error ? "#ef4444" : "#e2e8f0"}`,
+          borderRadius: 7,
+          overflow: "hidden",
+          background: "white",
+        }}
+      >
+        <span
+          style={{
+            padding: "8px 10px",
+            background: "#f1f5f9",
+            borderRight: "1px solid #e2e8f0",
+            fontSize: 14,
+            fontWeight: 700,
+            color: "#0891b2",
+            flexShrink: 0,
+            fontFamily: "monospace",
+            minWidth: 30,
+            textAlign: "center",
+          }}
+        >
+          {prefix}
+        </span>
+        <input
+          type="text"
+          inputMode="decimal"
+          placeholder={field.placeholder || placeholder}
+          value={raw}
+          onChange={handleChange}
+          required={field.required}
+          style={{
+            flex: 1,
+            padding: "8px 12px",
+            border: "none",
+            fontSize: 13.5,
+            fontFamily: "inherit",
+            outline: "none",
+            background: "white",
+            color: "#111827",
+            minWidth: 0,
+          }}
+        />
+        <span
+          style={{
+            padding: "8px 10px",
+            fontSize: 11,
+            color: "#94a3b8",
+            flexShrink: 0,
+            fontFamily: "monospace",
+          }}
+        >
+          {currency}
+        </span>
+      </div>
+      {error && (
+        <p style={{ fontSize: 12, color: "#ef4444", margin: "5px 0 0" }}>
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ─── CalcInput: operator + initialValue + precision + formula fallback ──
+function CalcInput({
+  field,
+  value,
+  onChange,
+  entry,
+  fields,
+}: {
+  field: SubformField;
+  value: string;
+  onChange: (v: string) => void;
+  entry?: SubformEntry;
+  fields?: SubformField[];
+}) {
+  const precision = field.decimalPrecision ?? 2;
+  const isPrice = field.isPrice ?? false;
+  const prefix = field.pricePrefix || "$";
+
+  const result = useMemoLike(() => {
+    // Si hay fórmula, usar evaluador existente (compat con lo que ya guardaron).
+    if ((field.formula || "").trim()) return computeCalc(field, entry, fields);
+    // Si no, aplicar calcOperator sobre todos los campos number del row.
+    return applyOperator(field, entry, fields);
+  }, [field, entry, fields]);
+
+  const display =
+    result === null ? NA_RESULT : result.toFixed(precision);
+
+  useEffect(() => {
+    if (value !== display) onChange(display);
+  }, [display, value, onChange]);
+
+  return (
+    <div className="flex items-center justify-between rounded-md border-[1.5px] border-cyan-400 bg-cyan-50/50 px-3 py-2.5 font-mono text-[15px] font-bold text-cyan-700">
+      <span>{isPrice ? prefix : "Σ"}</span>
+      <span>{display}</span>
+    </div>
+  );
+}
+
+// ─── QuizScoreInput: visibility, showMax, precision, includedIds ────────
+function QuizScoreInput({
+  field,
+  value,
+  onChange,
+  entry,
+  fields,
+}: {
+  field: SubformField;
+  value: string;
+  onChange: (v: string) => void;
+  entry?: SubformEntry;
+  fields?: SubformField[];
+}) {
+  const visibility = field.visibility || "visible";
+  const showMax = field.showMax ?? true;
+  const precision = field.decimalPrecision ?? 1;
+  const includeQuestions = field.includeQuestions || "all";
+  const includedIds = field.includedIds || [];
+
+  const { total, max } = useMemoLike(() => {
+    if (!entry || !fields) return { total: 0, max: 0 };
+    let total = 0;
+    let max = 0;
+    for (const f of fields) {
+      if (f.type !== "quiz_question") continue;
+      if (includeQuestions === "select" && !includedIds.includes(f.id)) continue;
+      const correctIdx = f.correctOptionIndex ?? -1;
+      const correctOpt = (f.options || [])[correctIdx];
+      const points = f.points ?? 1;
+      max += points;
+      if (correctOpt && entry[f.id] === correctOpt) total += points;
+    }
+    return { total, max };
+  }, [entry, fields, includeQuestions, includedIds]);
+
+  const totalStr = total.toFixed(precision);
+  const display = showMax ? `${totalStr} / ${max.toFixed(precision)}` : totalStr;
+
+  useEffect(() => {
+    if (value !== totalStr) onChange(totalStr);
+  }, [totalStr, value, onChange]);
+
+  if (visibility === "hidden") {
+    return <input type="hidden" name={field.id} value={totalStr} />;
+  }
+  if (visibility === "after_submit") {
+    // Dentro del subform no sabemos si ya hubo submit; marcamos como pendiente.
+    return (
+      <>
+        <input type="hidden" name={field.id} value={totalStr} />
+        <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-[12px] text-slate-500">
+          La nota se mostrará después del envío
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between rounded-md border-[1.5px] border-amber-400 bg-amber-50 px-3 py-2.5 font-mono text-[15px] font-bold text-amber-700">
+      <span>🏆 Nota</span>
+      <span>{display}</span>
+      <input type="hidden" name={field.id} value={totalStr} />
+    </div>
+  );
+}
+
+const NA_RESULT = "—";
+
+/** React.useMemo shim local — evita import extra arriba del archivo.
+ * (Igual podríamos usar useMemo directo, pero ya tenemos useEffect/useState;
+ *  dejamos un wrapper por claridad.) */
+function useMemoLike<T>(fn: () => T, deps: unknown[]): T {
+  const ref = useRef<{ deps: unknown[]; val: T } | null>(null);
+  const same =
+    ref.current &&
+    ref.current.deps.length === deps.length &&
+    ref.current.deps.every((d, i) => d === deps[i]);
+  if (!same) ref.current = { deps, val: fn() };
+  return ref.current!.val;
+}
+
+/** Aplica calcOperator a todos los campos numéricos del row. */
+function applyOperator(
+  field: SubformField,
+  entry?: SubformEntry,
+  fields?: SubformField[],
+): number | null {
+  if (!entry || !fields) return 0;
+  const op = field.calcOperator || "sum";
+  const ignoreInvalid = field.ignoreInvalid ?? true;
+  const initial = field.initialValue;
+  const initialProvided = typeof initial === "number";
+
+  const values: number[] = [];
+  for (const f of fields) {
+    if (f.id === field.id) continue;
+    if (!["number", "price", "calc"].includes(f.type)) continue;
+    const raw = entry[f.id];
+    if (raw === undefined || raw === "") {
+      if (!ignoreInvalid) values.push(0);
+      continue;
+    }
+    const n = parseFloat(String(raw).replace(",", "."));
+    if (Number.isFinite(n)) values.push(n);
+    else if (!ignoreInvalid) values.push(0);
+  }
+
+  switch (op) {
+    case "sum":
+      return values.reduce((a, b) => a + b, initial ?? 0);
+    case "subtract": {
+      if (initialProvided) return values.reduce((a, b) => a - b, initial);
+      if (values.length === 0) return 0;
+      return values.slice(1).reduce((a, b) => a - b, values[0]);
+    }
+    case "multiply":
+      return values.reduce((a, b) => a * b, initialProvided ? initial : 1);
+    case "divide": {
+      const seed = initialProvided ? initial : values[0];
+      const rest = initialProvided ? values : values.slice(1);
+      let r = seed ?? 0;
+      for (const v of rest) {
+        if (v === 0) return null;
+        r /= v;
+      }
+      return r;
+    }
+    case "average":
+      if (values.length === 0) return initialProvided ? initial : 0;
+      return values.reduce((a, b) => a + b, 0) / values.length;
+    case "min":
+      return values.length === 0 ? null : Math.min(...values);
+    case "max":
+      return values.length === 0 ? null : Math.max(...values);
+    case "count":
+      return values.length;
+    default:
+      return 0;
+  }
+}
+
 // ─── SignaturePad: canvas básico con firma como base64 ───────────────────
 function SignaturePad({
   value,
   onChange,
   name,
+  penColor = "#000000",
+  penWidth = 2,
 }: {
   value: string;
   onChange: (v: string) => void;
   name: string;
+  penColor?: string;
+  penWidth?: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawing = useRef(false);
@@ -409,8 +1006,8 @@ function SignaturePad({
     const c = canvasRef.current!;
     const ctx = c.getContext("2d")!;
     const p = point(e);
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = penColor;
+    ctx.lineWidth = penWidth;
     ctx.lineCap = "round";
     ctx.beginPath();
     ctx.moveTo(last.current!.x, last.current!.y);

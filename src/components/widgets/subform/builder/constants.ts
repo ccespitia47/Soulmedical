@@ -40,7 +40,7 @@ export const FIELD_TYPES: { value: SubformFieldType; label: string }[] = [
   { value: "time",          label: "Hora"                },
   { value: "select",        label: "Desplegable"         },
   { value: "checkbox",      label: "Casilla"             },
-  { value: "radio",         label: "Opción única"        },
+  { value: "radio",         label: "Radio"               },
   { value: "search",        label: "Búsqueda"            },
   { value: "signature",     label: "Firma"               },
   { value: "photo",         label: "Foto"                },

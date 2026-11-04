@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { SubformField } from "../subform.types";
 import Icon from "../../../common/Icon";
 import SubformFieldTypeSelect from "./SubformFieldTypeSelect";
@@ -59,11 +60,33 @@ function FieldPreview({ field }: { field: SubformField }) {
         </select>
       )}
       {(field.type === "radio" || field.type === "checkbox") && (
-        <div className="flex flex-col gap-1.5">
+        <div
+          style={{
+            display:
+              field.type === "radio" && field.verticalAlign === false
+                ? "grid"
+                : "flex",
+            flexDirection:
+              field.type === "radio" && field.verticalAlign === false
+                ? undefined
+                : "column",
+            gridTemplateColumns:
+              field.type === "radio" && field.verticalAlign === false
+                ? "repeat(auto-fit, minmax(120px, 1fr))"
+                : undefined,
+            gap: 6,
+          }}
+        >
           {(field.options || []).map((o) => (
             <label
               key={o}
               className="flex items-center gap-1.5 text-[13px] text-slate-500"
+              style={{
+                whiteSpace:
+                  field.type === "radio" && field.verticalAlign === false
+                    ? "nowrap"
+                    : "normal",
+              }}
             >
               <input
                 type={field.type === "radio" ? "radio" : "checkbox"}
@@ -272,15 +295,10 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
               (una por línea)
             </span>
           </label>
-          <textarea
-            className={`${SUBFORM_INPUT_CLASS} min-h-[100px] resize-y font-sans leading-relaxed`}
-            value={(field.options || []).join("\n")}
-            placeholder={"Opción 1\nOpción 2"}
-            onChange={(e) =>
-              onUpdate(field.id, {
-                options: e.target.value.split("\n").filter(Boolean),
-              })
-            }
+          <OptionsTextarea
+            key={field.id}
+            options={field.options || []}
+            onChange={(opts) => onUpdate(field.id, { options: opts })}
           />
         </div>
       )}
@@ -288,15 +306,101 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
       {/* ── Configs específicas por tipo ── */}
 
       {field.type === "price" && (
-        <div className="mb-[18px]">
-          <label className={SUBFORM_LABEL_CLASS}>Prefijo</label>
-          <input
-            className={SUBFORM_INPUT_CLASS}
-            value={field.pricePrefix || "$"}
-            placeholder="$"
-            onChange={(e) => onUpdate(field.id, { pricePrefix: e.target.value })}
-          />
-        </div>
+        <>
+          <div className="mb-[18px]">
+            <label className={SUBFORM_LABEL_CLASS}>Prefijo (símbolo visible)</label>
+            <input
+              className={SUBFORM_INPUT_CLASS}
+              value={field.pricePrefix || "$"}
+              placeholder="$"
+              onChange={(e) => onUpdate(field.id, { pricePrefix: e.target.value })}
+            />
+          </div>
+          <div className="mb-[18px] grid grid-cols-2 gap-3">
+            <div>
+              <label className={SUBFORM_LABEL_CLASS}>Moneda</label>
+              <input
+                className={SUBFORM_INPUT_CLASS}
+                value={field.currency || "COP"}
+                placeholder="COP"
+                onChange={(e) =>
+                  onUpdate(field.id, { currency: e.target.value.toUpperCase() })
+                }
+              />
+            </div>
+            <div>
+              <label className={SUBFORM_LABEL_CLASS}>Separador decimal</label>
+              <select
+                className={SUBFORM_INPUT_CLASS}
+                value={field.decimalMark || "comma"}
+                onChange={(e) =>
+                  onUpdate(field.id, {
+                    decimalMark: e.target.value as "comma" | "dot",
+                  })
+                }
+              >
+                <option value="comma">Coma (1.234,56)</option>
+                <option value="dot">Punto (1,234.56)</option>
+              </select>
+            </div>
+          </div>
+          <div className="mb-[18px] grid grid-cols-3 gap-3">
+            <div>
+              <label className={SUBFORM_LABEL_CLASS}>Decimales</label>
+              <input
+                type="number"
+                min={0}
+                max={6}
+                className={SUBFORM_INPUT_CLASS}
+                value={field.decimalPrecision ?? 2}
+                onChange={(e) =>
+                  onUpdate(field.id, {
+                    decimalPrecision: parseInt(e.target.value) || 0,
+                  })
+                }
+              />
+            </div>
+            <div>
+              <label className={SUBFORM_LABEL_CLASS}>Mín</label>
+              <input
+                type="number"
+                className={SUBFORM_INPUT_CLASS}
+                value={field.minAmount ?? ""}
+                onChange={(e) =>
+                  onUpdate(field.id, {
+                    minAmount:
+                      e.target.value === "" ? undefined : parseFloat(e.target.value),
+                  })
+                }
+              />
+            </div>
+            <div>
+              <label className={SUBFORM_LABEL_CLASS}>Máx</label>
+              <input
+                type="number"
+                className={SUBFORM_INPUT_CLASS}
+                value={field.maxAmount ?? ""}
+                onChange={(e) =>
+                  onUpdate(field.id, {
+                    maxAmount:
+                      e.target.value === "" ? undefined : parseFloat(e.target.value),
+                  })
+                }
+              />
+            </div>
+          </div>
+          <label className="mb-[18px] flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+            <input
+              type="checkbox"
+              checked={field.rememberInput ?? false}
+              onChange={(e) =>
+                onUpdate(field.id, { rememberInput: e.target.checked })
+              }
+              className="h-4 w-4 accent-[#00c2a8]"
+            />
+            <span>Recordar última entrada en el dispositivo</span>
+          </label>
+        </>
       )}
 
       {(field.type === "image" || field.type === "video") && (
@@ -339,23 +443,128 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
       )}
 
       {field.type === "calc" && (
-        <div className="mb-[18px]">
-          <label className={SUBFORM_LABEL_CLASS}>
-            Fórmula{" "}
-            <span className="font-normal normal-case text-slate-400">
-              (usa ids de los otros campos — vacío = suma de todos los números)
-            </span>
-          </label>
-          <input
-            className={`${SUBFORM_INPUT_CLASS} font-mono`}
-            value={field.formula || ""}
-            placeholder="precio*cantidad"
-            onChange={(e) => onUpdate(field.id, { formula: e.target.value })}
-          />
-          <div className="mt-1 text-[11px] text-slate-400">
-            Operadores permitidos: + - * / ( )
+        <>
+          <div className="mb-[18px] grid grid-cols-2 gap-3">
+            <div>
+              <label className={SUBFORM_LABEL_CLASS}>Operador</label>
+              <select
+                className={SUBFORM_INPUT_CLASS}
+                value={field.calcOperator || "sum"}
+                onChange={(e) =>
+                  onUpdate(field.id, {
+                    calcOperator: e.target
+                      .value as SubformField["calcOperator"],
+                  })
+                }
+              >
+                <option value="sum">Sumar</option>
+                <option value="subtract">Restar</option>
+                <option value="multiply">Multiplicar</option>
+                <option value="divide">Dividir</option>
+                <option value="average">Promedio</option>
+                <option value="min">Mínimo</option>
+                <option value="max">Máximo</option>
+                <option value="count">Contar</option>
+              </select>
+            </div>
+            <div>
+              <label className={SUBFORM_LABEL_CLASS}>Decimales</label>
+              <input
+                type="number"
+                min={0}
+                max={6}
+                className={SUBFORM_INPUT_CLASS}
+                value={field.decimalPrecision ?? 2}
+                onChange={(e) =>
+                  onUpdate(field.id, {
+                    decimalPrecision: parseInt(e.target.value) || 0,
+                  })
+                }
+              />
+            </div>
           </div>
-        </div>
+          <div className="mb-[18px]">
+            <label className={SUBFORM_LABEL_CLASS}>
+              Fórmula{" "}
+              <span className="font-normal normal-case text-slate-400">
+                (opcional — si se llena, sobrescribe el operador)
+              </span>
+            </label>
+            <input
+              className={`${SUBFORM_INPUT_CLASS} font-mono`}
+              value={field.formula || ""}
+              placeholder="precio*cantidad"
+              onChange={(e) => onUpdate(field.id, { formula: e.target.value })}
+            />
+            <div className="mt-1 text-[11px] text-slate-400">
+              Operadores permitidos: + - * / ( ). Vacío = aplica el operador
+              de arriba a todos los campos number del subform.
+            </div>
+          </div>
+          <div className="mb-[18px]">
+            <label className={SUBFORM_LABEL_CLASS}>Valor inicial</label>
+            <input
+              type="number"
+              className={SUBFORM_INPUT_CLASS}
+              value={field.initialValue ?? ""}
+              placeholder="0"
+              onChange={(e) =>
+                onUpdate(field.id, {
+                  initialValue:
+                    e.target.value === "" ? undefined : parseFloat(e.target.value),
+                })
+              }
+            />
+          </div>
+          <label className="mb-2 flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+            <input
+              type="checkbox"
+              checked={field.ignoreInvalid ?? true}
+              onChange={(e) =>
+                onUpdate(field.id, { ignoreInvalid: e.target.checked })
+              }
+              className="h-4 w-4 accent-[#00c2a8]"
+            />
+            <span>Ignorar valores no numéricos</span>
+          </label>
+          <label className="mb-2 flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+            <input
+              type="checkbox"
+              checked={field.isPrice ?? false}
+              onChange={(e) =>
+                onUpdate(field.id, { isPrice: e.target.checked })
+              }
+              className="h-4 w-4 accent-[#00c2a8]"
+            />
+            <span>Mostrar como precio (usa el prefijo pricePrefix)</span>
+          </label>
+          {field.isPrice && (
+            <div className="mb-[18px] grid grid-cols-2 gap-3">
+              <div>
+                <label className={SUBFORM_LABEL_CLASS}>Prefijo</label>
+                <input
+                  className={SUBFORM_INPUT_CLASS}
+                  value={field.pricePrefix || "$"}
+                  onChange={(e) =>
+                    onUpdate(field.id, { pricePrefix: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <label className={SUBFORM_LABEL_CLASS}>Moneda</label>
+                <input
+                  className={SUBFORM_INPUT_CLASS}
+                  value={field.currency || "COP"}
+                  onChange={(e) =>
+                    onUpdate(field.id, {
+                      currency: e.target.value.toUpperCase(),
+                    })
+                  }
+                />
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {field.type === "quiz_question" && (
@@ -394,6 +603,307 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
         </>
       )}
 
+      {/* ── Text: valor por defecto + filtros de teclado ── */}
+      {field.type === "text" && (
+        <>
+          <div className="mb-[18px] grid grid-cols-2 gap-3">
+            <div>
+              <label className={SUBFORM_LABEL_CLASS}>Valor predeterminado</label>
+              <input
+                className={SUBFORM_INPUT_CLASS}
+                value={field.defaultValue || ""}
+                onChange={(e) =>
+                  onUpdate(field.id, { defaultValue: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <label className={SUBFORM_LABEL_CLASS}>Longitud máxima</label>
+              <input
+                type="number"
+                min={0}
+                className={SUBFORM_INPUT_CLASS}
+                value={field.maxLength ?? ""}
+                placeholder="Sin límite"
+                onChange={(e) =>
+                  onUpdate(field.id, {
+                    maxLength:
+                      e.target.value === "" ? undefined : parseInt(e.target.value),
+                  })
+                }
+              />
+            </div>
+          </div>
+          <label className="mb-2 flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+            <input
+              type="checkbox"
+              checked={field.allowNumbers ?? true}
+              onChange={(e) =>
+                onUpdate(field.id, { allowNumbers: e.target.checked })
+              }
+              className="h-4 w-4 accent-[#00c2a8]"
+            />
+            <span>Permitir dígitos</span>
+          </label>
+          <label className="mb-2 flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+            <input
+              type="checkbox"
+              checked={field.allowSpecialChars ?? true}
+              onChange={(e) =>
+                onUpdate(field.id, { allowSpecialChars: e.target.checked })
+              }
+              className="h-4 w-4 accent-[#00c2a8]"
+            />
+            <span>Permitir caracteres especiales (@ # $ …)</span>
+          </label>
+          <label className="mb-[18px] flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+            <input
+              type="checkbox"
+              checked={field.allowLineBreaks ?? false}
+              onChange={(e) =>
+                onUpdate(field.id, { allowLineBreaks: e.target.checked })
+              }
+              className="h-4 w-4 accent-[#00c2a8]"
+            />
+            <span>Permitir saltos de línea (convierte en área)</span>
+          </label>
+        </>
+      )}
+
+      {/* ── Select (Desplegable): default, multi, expand, sort, remember ── */}
+      {field.type === "select" && (
+        <>
+          <div className="mb-[18px]">
+            <label className={SUBFORM_LABEL_CLASS}>Valor predeterminado</label>
+            <select
+              className={SUBFORM_INPUT_CLASS}
+              value={field.defaultValue || ""}
+              onChange={(e) =>
+                onUpdate(field.id, { defaultValue: e.target.value })
+              }
+            >
+              <option value="">— Sin valor —</option>
+              {(field.options || []).map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
+          </div>
+          <label className="mb-2 flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+            <input
+              type="checkbox"
+              checked={field.sortAlphabetically ?? false}
+              onChange={(e) =>
+                onUpdate(field.id, { sortAlphabetically: e.target.checked })
+              }
+              className="h-4 w-4 accent-[#00c2a8]"
+            />
+            <span>Ordenar alfabéticamente</span>
+          </label>
+          <label className="mb-2 flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+            <input
+              type="checkbox"
+              checked={field.multiple ?? false}
+              onChange={(e) =>
+                onUpdate(field.id, {
+                  multiple: e.target.checked,
+                  defaultValue: e.target.checked ? "" : field.defaultValue,
+                })
+              }
+              className="h-4 w-4 accent-[#00c2a8]"
+            />
+            <span>Permitir múltiples selecciones</span>
+          </label>
+          <label className="mb-2 flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+            <input
+              type="checkbox"
+              checked={field.expand ?? false}
+              onChange={(e) => onUpdate(field.id, { expand: e.target.checked })}
+              className="h-4 w-4 accent-[#00c2a8]"
+            />
+            <span>Expandir (mostrar como radios/checkboxes)</span>
+          </label>
+          <label className="mb-[18px] flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+            <input
+              type="checkbox"
+              checked={field.rememberInput ?? false}
+              onChange={(e) =>
+                onUpdate(field.id, { rememberInput: e.target.checked })
+              }
+              className="h-4 w-4 accent-[#00c2a8]"
+            />
+            <span>Recordar última entrada en el dispositivo</span>
+          </label>
+        </>
+      )}
+
+      {/* ── Quiz score: incluir, visibilidad, decimales, mostrar máximo ── */}
+      {field.type === "quiz_score" && (
+        <>
+          <div className="mb-[18px] grid grid-cols-2 gap-3">
+            <div>
+              <label className={SUBFORM_LABEL_CLASS}>Visibilidad</label>
+              <select
+                className={SUBFORM_INPUT_CLASS}
+                value={field.visibility || "visible"}
+                onChange={(e) =>
+                  onUpdate(field.id, {
+                    visibility: e.target
+                      .value as SubformField["visibility"],
+                  })
+                }
+              >
+                <option value="visible">Siempre visible</option>
+                <option value="after_submit">Solo después de enviar</option>
+                <option value="hidden">Oculto al usuario</option>
+              </select>
+            </div>
+            <div>
+              <label className={SUBFORM_LABEL_CLASS}>Decimales</label>
+              <input
+                type="number"
+                min={0}
+                max={6}
+                className={SUBFORM_INPUT_CLASS}
+                value={field.decimalPrecision ?? 1}
+                onChange={(e) =>
+                  onUpdate(field.id, {
+                    decimalPrecision: parseInt(e.target.value) || 0,
+                  })
+                }
+              />
+            </div>
+          </div>
+          <label className="mb-[18px] flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+            <input
+              type="checkbox"
+              checked={field.showMax ?? true}
+              onChange={(e) =>
+                onUpdate(field.id, { showMax: e.target.checked })
+              }
+              className="h-4 w-4 accent-[#00c2a8]"
+            />
+            <span>Mostrar el máximo (ej. "7.5 / 10")</span>
+          </label>
+          <div className="mb-[18px]">
+            <label className={SUBFORM_LABEL_CLASS}>Preguntas a sumar</label>
+            <select
+              className={SUBFORM_INPUT_CLASS}
+              value={field.includeQuestions || "all"}
+              onChange={(e) =>
+                onUpdate(field.id, {
+                  includeQuestions: e.target
+                    .value as SubformField["includeQuestions"],
+                })
+              }
+            >
+              <option value="all">Todas las preguntas del subform</option>
+              <option value="select">Elegir manualmente</option>
+            </select>
+          </div>
+        </>
+      )}
+
+      {/* ── Signature: color y grosor del trazo ── */}
+      {field.type === "signature" && (
+        <div className="mb-[18px] grid grid-cols-2 gap-3">
+          <div>
+            <label className={SUBFORM_LABEL_CLASS}>Color del trazo</label>
+            <input
+              type="color"
+              className={`${SUBFORM_INPUT_CLASS} h-10 cursor-pointer p-1`}
+              value={field.penColor || "#000000"}
+              onChange={(e) => onUpdate(field.id, { penColor: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className={SUBFORM_LABEL_CLASS}>Grosor (px)</label>
+            <input
+              type="number"
+              min={1}
+              max={10}
+              className={SUBFORM_INPUT_CLASS}
+              value={field.penWidth ?? 2}
+              onChange={(e) =>
+                onUpdate(field.id, {
+                  penWidth: parseInt(e.target.value) || 2,
+                })
+              }
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── Radio: valor predeterminado, alineación, recordar entrada ── */}
+      {field.type === "radio" && (
+        <>
+          <div className="mb-[18px]">
+            <label className={SUBFORM_LABEL_CLASS}>Valor predeterminado</label>
+            <select
+              className={SUBFORM_INPUT_CLASS}
+              value={field.defaultValue || ""}
+              onChange={(e) =>
+                onUpdate(field.id, { defaultValue: e.target.value })
+              }
+            >
+              <option value="">— Ninguno —</option>
+              {(field.options || []).map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="mb-[18px]">
+            <label className={SUBFORM_LABEL_CLASS}>Alineación</label>
+            <div
+              className="grid grid-cols-2 gap-1.5 rounded-lg border-[1.5px] border-slate-200 bg-slate-100 p-1"
+            >
+              {([
+                { v: true, label: "Vertical", icon: "list" },
+                { v: false, label: "Horizontal", icon: "grid" },
+              ] as const).map((opt) => {
+                const active = (field.verticalAlign ?? true) === opt.v;
+                return (
+                  <button
+                    key={String(opt.v)}
+                    type="button"
+                    onClick={() =>
+                      onUpdate(field.id, { verticalAlign: opt.v })
+                    }
+                    className="flex cursor-pointer items-center justify-center gap-1.5 rounded-md border-none px-2.5 py-1.5 text-[12.5px] font-semibold transition-all"
+                    style={{
+                      background: active ? "white" : "transparent",
+                      color: active ? "#0891b2" : "#64748b",
+                      boxShadow: active
+                        ? "0 1px 3px rgba(0,0,0,0.08)"
+                        : "none",
+                    }}
+                  >
+                    <Icon name={opt.icon} size={13} />
+                    <span>{opt.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <label className="mb-[18px] flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+            <input
+              type="checkbox"
+              checked={field.rememberInput ?? false}
+              onChange={(e) =>
+                onUpdate(field.id, { rememberInput: e.target.checked })
+              }
+              className="h-4 w-4 accent-[#00c2a8]"
+            />
+            <span>Recordar última entrada en el dispositivo</span>
+          </label>
+        </>
+      )}
+
       {supportsRequired && (
         <label
           className="mb-[18px] flex cursor-pointer items-center gap-2.5 rounded-[10px] border-[1.5px] px-3.5 py-3 transition-colors"
@@ -427,5 +937,52 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
 
       <FieldPreview field={field} />
     </div>
+  );
+}
+
+/**
+ * Textarea para editar opciones (una por línea).
+ *
+ * Problema que resuelve: si guardamos directamente `split("\n").filter(Boolean)`
+ * en el estado padre, cada vez que el usuario presiona Enter se crea una
+ * línea vacía que el filter elimina al instante, y el textarea controlado
+ * se re-renderiza perdiendo el salto de línea → "Enter no hace nada".
+ *
+ * Fix: buffer local con el texto crudo (incluye líneas vacías mientras se
+ * edita), y propagamos al padre el array filtrado. El `key={field.id}` del
+ * caller sincroniza el buffer al cambiar de campo.
+ */
+function OptionsTextarea({
+  options,
+  onChange,
+}: {
+  options: string[];
+  onChange: (opts: string[]) => void;
+}) {
+  const [draft, setDraft] = useState(() => options.join("\n"));
+
+  // Si el padre actualiza options (ej. desde otra parte del UI), reflejar
+  // ese cambio EXCEPTO cuando el draft ya representa esas mismas options
+  // (evita wipear una línea vacía que el user acaba de abrir).
+  useEffect(() => {
+    const normalized = draft.split("\n").filter(Boolean);
+    const same =
+      normalized.length === options.length &&
+      normalized.every((v, i) => v === options[i]);
+    if (!same) setDraft(options.join("\n"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options]);
+
+  return (
+    <textarea
+      className={`${SUBFORM_INPUT_CLASS} min-h-[100px] resize-y font-sans leading-relaxed`}
+      value={draft}
+      placeholder={"Opción 1\nOpción 2"}
+      onChange={(e) => {
+        const next = e.target.value;
+        setDraft(next);
+        onChange(next.split("\n").filter(Boolean));
+      }}
+    />
   );
 }

@@ -48,6 +48,76 @@ export type SubformField = {
   correctOptionIndex?: number;
   /** quiz_question: puntos que vale la opción correcta. */
   points?: number;
+  /** radio: orientación de las opciones (default true = vertical). */
+  verticalAlign?: boolean;
+  /** radio / text / price / select: persiste la última entrada en localStorage. */
+  rememberInput?: boolean;
+
+  // ── text ─────────────────────────────────────────────────────────────
+  /** text: longitud máxima permitida. */
+  maxLength?: number;
+  /** text: permitir dígitos (default true). */
+  allowNumbers?: boolean;
+  /** text: permitir caracteres especiales (default true). */
+  allowSpecialChars?: boolean;
+  /** text: permitir Enter (convierte el input en textarea-like). */
+  allowLineBreaks?: boolean;
+  /** textarea: filas iniciales (default 3). */
+  rows?: number;
+
+  // ── number ───────────────────────────────────────────────────────────
+  /** number: valor mínimo. */
+  min?: number;
+  /** number: valor máximo. */
+  max?: number;
+  /** number: paso del input. */
+  step?: number;
+
+  // ── price ────────────────────────────────────────────────────────────
+  /** price: código de moneda (COP, USD, EUR, MXN…). */
+  currency?: string;
+  /** price: separador decimal ("comma" o "dot", match con el main). */
+  decimalMark?: "comma" | "dot";
+  /** price / calc / quiz_score: número de decimales a mostrar. */
+  decimalPrecision?: number;
+  /** price: monto mínimo. */
+  minAmount?: number;
+  /** price: monto máximo. */
+  maxAmount?: number;
+
+  // ── select ───────────────────────────────────────────────────────────
+  /** select: ordena A→Z las opciones en editor y render. */
+  sortAlphabetically?: boolean;
+  /** select: permite múltiples selecciones. */
+  multiple?: boolean;
+  /** select: renderiza expandido (radios/checkboxes) en vez de dropdown. */
+  expand?: boolean;
+
+  // ── signature ────────────────────────────────────────────────────────
+  /** signature: color del trazo. */
+  penColor?: string;
+  /** signature: grosor del trazo en px. */
+  penWidth?: number;
+
+  // ── calc ─────────────────────────────────────────────────────────────
+  /** calc: operador aplicado a los campos referenciados. */
+  calcOperator?: "sum" | "subtract" | "multiply" | "divide" | "average" | "min" | "max" | "count";
+  /** calc: valor inicial a sumar al resultado. */
+  initialValue?: number;
+  /** calc: ignorar valores no numéricos (default true). */
+  ignoreInvalid?: boolean;
+  /** calc: mostrar como precio con el prefijo `pricePrefix`. */
+  isPrice?: boolean;
+
+  // ── quiz_score ───────────────────────────────────────────────────────
+  /** quiz_score: incluir todas las preguntas o solo las de `includedIds`. */
+  includeQuestions?: "all" | "select";
+  /** quiz_score: ids de las preguntas a sumar (cuando includeQuestions="select"). */
+  includedIds?: string[];
+  /** quiz_score: "visible" siempre, "after_submit" solo tras enviar, "hidden". */
+  visibility?: "visible" | "after_submit" | "hidden";
+  /** quiz_score: mostrar también el puntaje máximo (ej. "7.5 / 10"). */
+  showMax?: boolean;
 };
 
 export type SubformEntry = Record<string, string>;
