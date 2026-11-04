@@ -8,6 +8,7 @@ import { RecordsController } from './records.controller';
 import { RecordsService } from './records.service';
 import { PdfRendererService } from './pdf-renderer.service';
 import { BulkPdfService } from './bulk-pdf.service';
+import { PlanningService } from './planning.service';
 import { FormsModule } from '../forms/forms.module';
 import { ApiKeysModule } from '../api-keys/api-keys.module';
 import { ApiKeyGuard } from '../auth/api-key.guard';
@@ -41,6 +42,7 @@ import { ReportsModule } from '../reports/reports.module';
     RecordsService,
     PdfRendererService,
     BulkPdfService,
+    PlanningService,
     ApiKeyGuard,
     PermissionsGuard,
   ],

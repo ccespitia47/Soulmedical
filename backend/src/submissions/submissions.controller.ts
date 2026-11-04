@@ -17,13 +17,40 @@ import { PermissionsGuard } from '../auth/permissions.guard';
 import { RequirePermission } from '../auth/permissions.decorator';
 import { Permission } from '../auth/permissions';
 import { SubmissionsService } from './submissions.service';
+import { PlanningService } from './planning.service';
 import { CreateSubmissionDto } from './dto/create-submission.dto';
 
 interface OptionalAuthRequest { user?: { id: number } }
 
 @Controller('')
 export class SubmissionsController {
-  constructor(private readonly submissionsService: SubmissionsService) {}
+  constructor(
+    private readonly submissionsService: SubmissionsService,
+    private readonly planningService: PlanningService,
+  ) {}
+
+  /**
+   * Devuelve las actividades que el usuario logueado planeó y aún no ha
+   * cumplido. El widget `pending_activity` del formulario de Cumplimiento
+   * llama a este endpoint al montarse. Montado ANTES de `submissions/:id`
+   * y de `forms/:formId/*` para que ninguna ruta parametrizada se lo coma.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('planning/pending')
+  findPendingActivities(
+    @Request() req: OptionalAuthRequest,
+    @Query('planningFormId') planningFormId: string,
+    @Query('subformWidgetId') subformWidgetId: string,
+  ) {
+    const user = req.user;
+    if (!user) throw new UnauthorizedException('Usuario no autenticado');
+    if (!planningFormId || !subformWidgetId) return [];
+    return this.planningService.findPending(
+      user.id,
+      planningFormId,
+      subformWidgetId,
+    );
+  }
 
   @UseGuards(OptionalJwtAuthGuard)
   @Post('forms/:formId/submit')

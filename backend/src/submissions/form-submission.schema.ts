@@ -45,6 +45,13 @@ export class FormSubmission {
   @Prop({ type: String, default: null })
   pdfFilename: string | null;
 
+  // Llaves "<submissionId>:<índice>" de las actividades planeadas que este
+  // envío (un Cumplimiento) da por cumplidas. Vacío en el resto de
+  // formularios. El índice único de abajo garantiza que una misma actividad
+  // nunca pueda cerrarse dos veces, incluso si llegan dos envíos en paralelo.
+  @Prop({ type: [String], default: [] })
+  completesActivities: string[];
+
   // ── Soft delete ──────────────────────────────────────────────────────────
   // Un registro "eliminado" nunca se borra físicamente: se marca con
   // `deletedAt` + quién lo hizo + por qué. Todas las queries de la app
@@ -64,6 +71,25 @@ export class FormSubmission {
 export const FormSubmissionSchema = SchemaFactory.createForClass(FormSubmission);
 
 FormSubmissionSchema.index({ formId: 1, submittedAt: -1 });
+
+// Una actividad planeada solo puede cumplirse una vez. El índice único
+// sobre el array `completesActivities` impide que dos cumplimientos
+// (aunque lleguen al mismo tiempo) cierren la misma actividad. Parcial:
+// solo aplica a documentos que efectivamente tengan al menos una llave
+// — los envíos sin actividades (todos los que no son Cumplimiento) no
+// pagan costo de índice.
+FormSubmissionSchema.index(
+  { completesActivities: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      'completesActivities.0': { $exists: true },
+    },
+  },
+);
+// Soporta la query "actividades que YO planeé" (findPending): busca por
+// formId + submittedById y ordena por submittedAt desc.
+FormSubmissionSchema.index({ formId: 1, submittedById: 1, submittedAt: -1 });
 
 FormSubmissionSchema.set('toJSON', {
   virtuals: true,

@@ -24,6 +24,7 @@ import { VideoWidget } from "./video/VideoWidget.ts";
 import { PriceWidget } from "./price/PriceWidget.ts";
 import { IdDocumentWidget } from "./idDocument/IdDocumentWidget.ts";
 import { TimeWidget } from "./time/TimeWidget.ts";
+import { PendingActivityWidget } from "./pendingactivity/PendingActivityWidget.ts";
 
 export const widgetRegistry: Record<string, WidgetDefinition> = {
   // Básicos
@@ -49,6 +50,7 @@ export const widgetRegistry: Record<string, WidgetDefinition> = {
   calc: CalcWidget,
   file: FileWidget,
   video: VideoWidget,
+  pending_activity: PendingActivityWidget,
   // Diseño
   header: HeaderWidget,
   html_block: HtmlBlockWidget,

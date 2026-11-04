@@ -30,6 +30,7 @@ const WIDGET_ICONS: Record<string, string> = {
   price: "price",
   id_document: "idCard",
   time: "clock",
+  pending_activity: "checkCircle",
 };
 
 /** Botón de un widget del palette: tile con icono SVG + label, hover elevado. */
@@ -96,7 +97,7 @@ function WidgetButton({
 const CATEGORIES: { label: string; types: string[] }[] = [
   { label: "BÁSICOS", types: ["text", "textarea", "number", "email", "phone", "date", "time", "price", "id_document"] },
   { label: "SELECCIÓN", types: ["select", "checkbox", "radio"] },
-  { label: "AVANZADOS", types: ["id_scanner", "signature", "photo", "file", "video", "subform", "search", "calc"] },
+  { label: "AVANZADOS", types: ["id_scanner", "signature", "photo", "file", "video", "subform", "search", "calc", "pending_activity"] },
   { label: "DISEÑO", types: ["header", "html_block", "image"] },
   { label: "EVALUACIÓN", types: ["quiz_question", "quiz_score"] },
 ];

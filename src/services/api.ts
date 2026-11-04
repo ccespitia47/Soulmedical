@@ -1120,3 +1120,26 @@ export function createApiKeyApi(name: string) {
 export function revokeApiKeyApi(id: string) {
   return request<void>(`/api-keys/${id}`, { method: 'DELETE' });
 }
+
+// ─── Planeación / Cumplimiento ───────────────────────────────────────────────
+// Backend: /planning/pending → PlanningService.findPending. El widget
+// `pending_activity` llama a este endpoint al montarse para listar las
+// actividades que el usuario planeó y aún no cumplió. `plannedAt` llega
+// como string ISO (JSON) aunque en el backend sea Date.
+
+export type PendingActivity = {
+  key: string;
+  submissionId: string;
+  index: number;
+  plannedAt: string;
+  fields: Record<string, unknown>;
+  context: Record<string, unknown>;
+};
+
+export function getPendingActivitiesApi(
+  planningFormId: string,
+  subformWidgetId: string,
+) {
+  const params = new URLSearchParams({ planningFormId, subformWidgetId });
+  return request<PendingActivity[]>(`/planning/pending?${params}`);
+}

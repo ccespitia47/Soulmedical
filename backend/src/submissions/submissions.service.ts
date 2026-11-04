@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { FormSubmission, FormSubmissionDocument } from './form-submission.schema';
@@ -6,6 +10,7 @@ import { FormsService } from '../forms/forms.service';
 import { CreateSubmissionDto } from './dto/create-submission.dto';
 import { FilesService } from '../files/files.service';
 import { generateExcelTemplateHtml, type ExcelFieldMapping } from './excel-template';
+import { PlanningService } from './planning.service';
 
 const BINARY_WIDGET_TYPES = new Set(['signature', 'photo']);
 const GRIDFS_PREFIX = 'gridfs:';
@@ -38,6 +43,7 @@ export class SubmissionsService {
     private readonly submissionModel: Model<FormSubmissionDocument>,
     private readonly formsService: FormsService,
     private readonly filesService: FilesService,
+    private readonly planningService: PlanningService,
   ) {}
 
   async submit(
@@ -51,6 +57,19 @@ export class SubmissionsService {
     taskId?: string,
   ): Promise<FormSubmissionDocument> {
     const form = await this.formsService.findOne(formId);
+
+    // Cumplimiento: actividades planeadas que este envío declara cerrar.
+    // Si el form no tiene widgets pending_activity, extractActivityKeys
+    // devuelve [] y assertCanComplete es no-op → sin impacto.
+    const completesActivities = this.planningService.extractActivityKeys(
+      form.schema as Record<string, unknown>,
+      dto.data,
+    );
+    await this.planningService.assertCanComplete(
+      completesActivities,
+      userId ?? null,
+    );
+
     const data = await this.offloadBinaries(form, dto.data, userId ?? null);
 
     // templateSnapshot se DERIVA del form (fuente de verdad) — nunca del
@@ -95,8 +114,25 @@ export class SubmissionsService {
       templateSnapshot,
       pdfFilename: dto.pdfFilename ?? null,
       taskId: taskId ?? null,
+      completesActivities,
     });
-    return submission.save();
+    try {
+      return await submission.save();
+    } catch (err) {
+      // Carrera: dos cumplimientos en paralelo tratando de cerrar la misma
+      // actividad. El índice único del schema rechaza el segundo con 11000.
+      // assertCanComplete ya hizo el pre-check amable; esto solo se dispara
+      // cuando los dos save() cruzan la verificación entre ellos.
+      if (
+        (err as { code?: number }).code === 11000 &&
+        completesActivities.length > 0
+      ) {
+        throw new ConflictException(
+          'Alguna actividad ya fue cumplida en otro envío. Recarga el formulario.',
+        );
+      }
+      throw err;
+    }
   }
 
   private async offloadBinaries(
