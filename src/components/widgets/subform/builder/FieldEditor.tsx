@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { SubformField } from "../subform.types";
 import Icon from "../../../common/Icon";
 import SubformFieldTypeSelect from "./SubformFieldTypeSelect";
+import { deleteFormAsset, uploadFormAsset } from "../../../../services/formAssets";
 import {
   FIELDS_WITH_OPTIONS,
   FIELD_TYPES,
@@ -403,13 +404,17 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
         </>
       )}
 
-      {(field.type === "image" || field.type === "video") && (
+      {field.type === "image" && (
+        <ImageSource field={field} onUpdate={onUpdate} />
+      )}
+
+      {field.type === "video" && (
         <div className="mb-[18px]">
           <label className={SUBFORM_LABEL_CLASS}>URL</label>
           <input
             className={SUBFORM_INPUT_CLASS}
             value={field.url || ""}
-            placeholder={field.type === "image" ? "https://…/imagen.png" : "https://youtube.com/watch?v=…"}
+            placeholder="https://youtube.com/watch?v=…"
             onChange={(e) => onUpdate(field.id, { url: e.target.value })}
           />
         </div>
@@ -1495,6 +1500,136 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
  * edita), y propagamos al padre el array filtrado. El `key={field.id}` del
  * caller sincroniza el buffer al cambiar de campo.
  */
+/**
+ * Panel de fuente de imagen para el campo `image` del subform.
+ * Soporta dos modos: upload a GridFS (guarda `imageFileId` + `url`) o
+ * URL externa (solo `url`). Reutiliza los endpoints `/forms/assets/*`
+ * del backend igual que el main widget Image.
+ */
+function ImageSource({
+  field,
+  onUpdate,
+}: {
+  field: SubformField;
+  onUpdate: (id: string, changes: Partial<SubformField>) => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const hasUpload = !!field.imageFileId;
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setError("");
+    setBusy(true);
+    const previousId = field.imageFileId;
+    const res = await uploadFormAsset(f);
+    setBusy(false);
+    if (fileRef.current) fileRef.current.value = "";
+    if (res.error) {
+      setError(res.error);
+      return;
+    }
+    onUpdate(field.id, { url: res.url, imageFileId: res.fileId });
+    if (previousId && previousId !== res.fileId) {
+      void deleteFormAsset(previousId);
+    }
+  };
+
+  const handleRemoveUpload = () => {
+    if (field.imageFileId) void deleteFormAsset(field.imageFileId);
+    onUpdate(field.id, { url: "", imageFileId: undefined });
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  return (
+    <div className="mb-[18px] flex flex-col gap-2.5">
+      <label className={SUBFORM_LABEL_CLASS}>Fuente de la imagen</label>
+
+      {/* Modo upload: preview + cambiar/borrar */}
+      {hasUpload ? (
+        <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+          <img
+            src={field.url}
+            alt="preview"
+            className="max-h-[120px] max-w-[200px] self-start rounded border border-slate-200 bg-white object-contain"
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={busy}
+              className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[12.5px] font-semibold text-cyan-700 disabled:cursor-not-allowed"
+            >
+              <Icon name="upload" size={12} /> Cambiar
+            </button>
+            <button
+              type="button"
+              onClick={handleRemoveUpload}
+              disabled={busy}
+              className="flex-1 cursor-pointer rounded-md border-none bg-red-500 px-3 py-1.5 text-[12.5px] font-semibold text-white disabled:cursor-not-allowed"
+            >
+              Borrar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={busy}
+          className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-md border-[1.5px] border-dashed border-slate-300 bg-slate-50 px-3 py-2.5 text-[13px] text-slate-600 disabled:cursor-not-allowed"
+        >
+          <Icon name="upload" size={13} />
+          {busy ? "Subiendo…" : "Subir imagen desde el dispositivo"}
+        </button>
+      )}
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFile}
+      />
+
+      {/* Divider "o" */}
+      <div className="my-1 flex items-center gap-2 text-[11px] uppercase tracking-wider text-slate-400">
+        <div className="h-px flex-1 bg-slate-200" />
+        <span>o</span>
+        <div className="h-px flex-1 bg-slate-200" />
+      </div>
+
+      {/* URL externa — queda disponible siempre; si el user escribe una URL
+          nueva estando en modo upload, limpiamos el imageFileId para evitar
+          el asset huérfano referenciado desde ningún lado. */}
+      <label className="text-[11.5px] font-medium text-slate-600">
+        URL externa
+      </label>
+      <input
+        className={SUBFORM_INPUT_CLASS}
+        value={field.url || ""}
+        placeholder="https://…/imagen.png"
+        disabled={hasUpload}
+        onChange={(e) =>
+          onUpdate(field.id, { url: e.target.value, imageFileId: undefined })
+        }
+      />
+      {hasUpload && (
+        <p className="text-[11px] text-slate-400">
+          Quita la imagen subida para poder usar una URL externa.
+        </p>
+      )}
+
+      {error && <p className="text-[11.5px] text-red-600">{error}</p>}
+      <p className="text-[11px] text-slate-400">
+        Formatos: PNG, JPG, WEBP, GIF · máx. 2 MB.
+      </p>
+    </div>
+  );
+}
+
 function OptionsTextarea({
   options,
   onChange,

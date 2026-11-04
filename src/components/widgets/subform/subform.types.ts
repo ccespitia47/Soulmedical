@@ -151,7 +151,9 @@ export type SubformField = {
   /** idDocument: formatea con separador de miles al tipear. */
   thousandsSeparator?: boolean;
 
-  // ── image (view-only del subform — URL externa) ──────────────────────
+  // ── image (view-only — URL externa o upload a GridFS) ────────────────
+  /** image: fileId en GridFS cuando la imagen fue subida (no URL externa). */
+  imageFileId?: string;
   /** image: ancho máximo en px (null = sin límite). */
   maxWidth?: number;
   /** image: alto máximo en px. */

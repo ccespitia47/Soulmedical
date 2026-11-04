@@ -4,6 +4,7 @@ import Icon from "../../../common/Icon";
 import FieldsList from "./FieldsList";
 import FieldEditor from "./FieldEditor";
 import SubformRulesPanel from "./SubformRulesPanel";
+import { deleteFormAsset } from "../../../../services/formAssets";
 
 type SubformBuilderModalProps = {
   widgetLabel: string;
@@ -39,7 +40,14 @@ export default function SubformBuilderModal({
   };
 
   const removeField = (id: string) => {
-    setLocalFields((prev) => prev.filter((f) => f.id !== id));
+    setLocalFields((prev) => {
+      const target = prev.find((f) => f.id === id);
+      // Si el field tenía una imagen subida a GridFS, eliminar el asset
+      // antes de descartar el field — si no se corre, queda huérfano.
+      // Best-effort: si el delete falla, no bloqueamos la edición.
+      if (target?.imageFileId) void deleteFormAsset(target.imageFileId);
+      return prev.filter((f) => f.id !== id);
+    });
     // Limpiar referencias en reglas
     setLocalRules((prev) =>
       prev.map((r) => ({
