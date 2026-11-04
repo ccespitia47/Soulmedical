@@ -19,10 +19,18 @@ type FieldInputProps = {
 export default function FieldInput({ field, value, onChange, entry, fields }: FieldInputProps) {
   // ── Decorativos (no envían valor pero el <input hidden> mantiene FormData feliz) ──
   if (field.type === "header") {
+    const text = field.headerText || field.label;
+    const size = field.headerSize || "medium";
+    const sizeClass =
+      size === "large"
+        ? "text-xl font-bold"
+        : size === "small"
+          ? "text-sm font-semibold"
+          : "text-base font-bold";
     return (
-      <h3 className="m-0 text-base font-bold text-slate-900">
-        {field.label}
-      </h3>
+      <div className={field.showDivider ? "border-b border-slate-200 pb-2" : ""}>
+        <h3 className={`m-0 text-slate-900 ${sizeClass}`}>{text}</h3>
+      </div>
     );
   }
 
@@ -48,11 +56,20 @@ export default function FieldInput({ field, value, onChange, entry, fields }: Fi
         </div>
       );
     }
+    const style: React.CSSProperties = {
+      maxWidth: field.maxWidth ? `${field.maxWidth}px` : undefined,
+      maxHeight: field.maxHeight ? `${field.maxHeight}px` : 240,
+      cursor: field.clickable ? "zoom-in" : "default",
+    };
     return (
       <img
         src={src}
         alt={field.label}
-        className="max-h-[240px] rounded-md border border-slate-200 object-contain"
+        className="rounded-md border border-slate-200 object-contain"
+        style={style}
+        onClick={() => {
+          if (field.clickable) window.open(src, "_blank", "noopener");
+        }}
       />
     );
   }
@@ -113,43 +130,7 @@ export default function FieldInput({ field, value, onChange, entry, fields }: Fi
 
   // ── Checkbox multi ──
   if (field.type === "checkbox") {
-    // Formato comma-separated (compatible con el widget checkbox del form
-    // principal y con los exports/placeholders). Toleramos JSON legado por
-    // si hay submissions viejas en la DB con `'["a","b"]'`.
-    const parseValue = (raw: string): string[] => {
-      const t = raw.trim();
-      if (!t) return [];
-      if (t.startsWith("[")) {
-        try {
-          const arr = JSON.parse(t);
-          return Array.isArray(arr) ? arr.map(String) : [];
-        } catch {
-          /* fallthrough a comma-split */
-        }
-      }
-      return t.split(",").map((s) => s.trim()).filter(Boolean);
-    };
-    const selected = parseValue(value);
-    const toggle = (opt: string) => {
-      const next = selected.includes(opt)
-        ? selected.filter((x) => x !== opt)
-        : [...selected, opt];
-      onChange(next.join(","));
-    };
-    return (
-      <div className="flex flex-col gap-1.5">
-        {(field.options || []).map((opt) => (
-          <label key={opt} className="flex cursor-pointer items-center gap-2 text-[13px]">
-            <input
-              type="checkbox"
-              checked={selected.includes(opt)}
-              onChange={() => toggle(opt)}
-            />
-            {opt}
-          </label>
-        ))}
-      </div>
-    );
+    return <CheckboxInput field={field} value={value} onChange={onChange} />;
   }
 
   // ── Price ──
@@ -173,7 +154,14 @@ export default function FieldInput({ field, value, onChange, entry, fields }: Fi
   // ── Photo (file → base64) ──
   if (field.type === "photo") {
     return (
-      <PhotoCapture value={value} onChange={onChange} name={field.id} />
+      <PhotoCapture
+        value={value}
+        onChange={onChange}
+        name={field.id}
+        allowCamera={field.allowCamera ?? true}
+        allowUpload={field.allowUpload ?? true}
+        maxSizeMB={field.maxSizeMB}
+      />
     );
   }
 
@@ -184,26 +172,15 @@ export default function FieldInput({ field, value, onChange, entry, fields }: Fi
         value={value}
         onChange={onChange}
         name={field.id}
-        accept={field.accept}
+        accept={field.accept || fileTypeToAccept(field.fileType)}
+        maxSizeMB={field.maxSizeMB}
       />
     );
   }
 
-  // ── Barcode / Scanner cédula / Documento ID — input de texto; la cámara
-  // es una mejora futura. Mantenemos semántica para la data. ──
-  if (field.type === "barcode" || field.type === "idscanner" || field.type === "idDocument") {
-    return (
-      <input
-        type="text"
-        name={field.id}
-        required={field.required}
-        value={value}
-        placeholder={field.placeholder || (field.type === "barcode" ? "Escanea o escribe código" : "Número de documento")}
-        onChange={(e) => onChange(e.target.value)}
-        className={INPUT_BASE}
-      />
-    );
-  }
+  // Nota: barcode / idscanner caen en el SimpleTextInput de abajo (texto
+  // plano con defaultValue/maxLength). La cámara real es mejora futura.
+  // idDocument tiene su propio IdDocumentInput con thousandsSeparator.
 
   // ── Calc ──
   if (field.type === "calc") {
@@ -244,27 +221,33 @@ export default function FieldInput({ field, value, onChange, entry, fields }: Fi
     return <QuizScoreInput field={field} value={value} onChange={onChange} entry={entry} fields={fields} />;
   }
 
-  // text / number / email / phone / date / time
-  const typeMap: Record<string, string> = {
-    text: "text",
-    number: "number",
-    email: "email",
-    phone: "tel",
-    date: "date",
-    time: "time",
-  };
+  // ── Number ──
+  if (field.type === "number") {
+    return <NumberInput field={field} value={value} onChange={onChange} />;
+  }
 
-  return (
-    <input
-      type={typeMap[field.type] || "text"}
-      name={field.id}
-      required={field.required}
-      value={value}
-      placeholder={field.placeholder}
-      onChange={(e) => onChange(e.target.value)}
-      className={INPUT_BASE}
-    />
-  );
+  // ── Date (defaultValue, minDate, maxDate) ──
+  if (field.type === "date") {
+    return <DateInput field={field} value={value} onChange={onChange} />;
+  }
+
+  // ── Time (nowByDefault + rememberInput) ──
+  if (field.type === "time") {
+    return <TimeInput field={field} value={value} onChange={onChange} />;
+  }
+
+  // ── Phone (prefijo visual + maxLength + defaultValue) ──
+  if (field.type === "phone") {
+    return <PhoneInput field={field} value={value} onChange={onChange} />;
+  }
+
+  // ── idDocument (thousandsSeparator opcional) ──
+  if (field.type === "idDocument") {
+    return <IdDocumentInput field={field} value={value} onChange={onChange} />;
+  }
+
+  // text / email / barcode / idscanner (textos planos con defaultValue)
+  return <SimpleTextInput field={field} value={value} onChange={onChange} />;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -956,6 +939,315 @@ function applyOperator(
   }
 }
 
+// ─── CheckboxInput: comma-separated + seed con defaultValue ────────────
+function CheckboxInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: SubformField;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  useDefaultSeed(value, field.defaultValue, onChange);
+  const parseValue = (raw: string): string[] => {
+    const t = raw.trim();
+    if (!t) return [];
+    if (t.startsWith("[")) {
+      try {
+        const arr = JSON.parse(t);
+        return Array.isArray(arr) ? arr.map(String) : [];
+      } catch {
+        /* fallthrough */
+      }
+    }
+    return t.split(",").map((s) => s.trim()).filter(Boolean);
+  };
+  const selected = parseValue(value);
+  const toggle = (opt: string) => {
+    const next = selected.includes(opt)
+      ? selected.filter((x) => x !== opt)
+      : [...selected, opt];
+    onChange(next.join(","));
+  };
+  return (
+    <div className="flex flex-col gap-1.5">
+      {(field.options || []).map((opt) => (
+        <label
+          key={opt}
+          className="flex cursor-pointer items-center gap-2 text-[13px]"
+        >
+          <input
+            type="checkbox"
+            checked={selected.includes(opt)}
+            onChange={() => toggle(opt)}
+          />
+          {opt}
+        </label>
+      ))}
+    </div>
+  );
+}
+
+// Mapa de categoría de archivo → `accept` del <input type="file">.
+function fileTypeToAccept(t: SubformField["fileType"]): string | undefined {
+  switch (t) {
+    case "documents":
+      return ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    case "images":
+      return "image/*";
+    case "audio":
+      return "audio/*";
+    case "video":
+      return "video/*";
+    default:
+      return undefined;
+  }
+}
+
+// ─── Subcomponentes con `useEffect` para defaultValue inicial ────────────
+
+function useDefaultSeed(
+  value: string,
+  defaultValue: string | undefined,
+  onChange: (v: string) => void,
+) {
+  useEffect(() => {
+    if (!value && defaultValue) onChange(defaultValue);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+}
+
+function NumberInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: SubformField;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  useDefaultSeed(value, field.defaultValue, onChange);
+  return (
+    <input
+      type="number"
+      name={field.id}
+      required={field.required}
+      value={value}
+      placeholder={field.placeholder}
+      min={field.min}
+      max={field.max}
+      step={field.step}
+      onChange={(e) => onChange(e.target.value)}
+      className={INPUT_BASE}
+    />
+  );
+}
+
+function DateInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: SubformField;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  useDefaultSeed(value, field.defaultValue, onChange);
+  return (
+    <input
+      type="date"
+      name={field.id}
+      required={field.required}
+      value={value}
+      min={field.minDate}
+      max={field.maxDate}
+      onChange={(e) => onChange(e.target.value)}
+      className={INPUT_BASE}
+    />
+  );
+}
+
+function TimeInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: SubformField;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const remember = field.rememberInput ?? false;
+  const storageKey = `soulforms_subform_time_${field.id}`;
+
+  useEffect(() => {
+    if (value) return;
+    if (remember) {
+      try {
+        const stored = localStorage.getItem(storageKey);
+        if (stored) {
+          onChange(stored);
+          return;
+        }
+      } catch {
+        /* storage */
+      }
+    }
+    if (field.nowByDefault) {
+      const d = new Date();
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      onChange(`${hh}:${mm}`);
+    } else if (field.defaultValue) {
+      onChange(field.defaultValue);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!remember || !value) return;
+    try {
+      localStorage.setItem(storageKey, value);
+    } catch {
+      /* storage */
+    }
+  }, [remember, value, storageKey]);
+
+  return (
+    <input
+      type="time"
+      name={field.id}
+      required={field.required}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={INPUT_BASE}
+    />
+  );
+}
+
+function PhoneInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: SubformField;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  useDefaultSeed(value, field.defaultValue, onChange);
+  const prefix = field.prefix || "";
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        border: "1.5px solid #e2e8f0",
+        borderRadius: 7,
+        overflow: "hidden",
+        background: "#fafafa",
+      }}
+    >
+      {prefix && (
+        <span
+          style={{
+            padding: "8px 10px",
+            background: "#f1f5f9",
+            borderRight: "1px solid #e2e8f0",
+            fontSize: 13.5,
+            color: "#475569",
+            fontFamily: "monospace",
+            flexShrink: 0,
+          }}
+        >
+          {prefix}
+        </span>
+      )}
+      <input
+        type="tel"
+        name={field.id}
+        required={field.required}
+        value={value}
+        placeholder={field.placeholder}
+        maxLength={field.maxLength}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          flex: 1,
+          padding: "8px 12px",
+          border: "none",
+          fontSize: 13.5,
+          fontFamily: "inherit",
+          outline: "none",
+          background: "transparent",
+          color: "#111827",
+          minWidth: 0,
+        }}
+      />
+    </div>
+  );
+}
+
+function IdDocumentInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: SubformField;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  useDefaultSeed(value, field.defaultValue, onChange);
+  const useSep = field.thousandsSeparator ?? false;
+  const formatted = useSep
+    ? value.replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, ".")
+    : value;
+  return (
+    <input
+      type="text"
+      name={field.id}
+      required={field.required}
+      value={formatted}
+      placeholder={field.placeholder || "Número de documento"}
+      onChange={(e) => {
+        const next = useSep
+          ? e.target.value.replace(/\./g, "")
+          : e.target.value;
+        onChange(next);
+      }}
+      className={INPUT_BASE}
+    />
+  );
+}
+
+function SimpleTextInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: SubformField;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  useDefaultSeed(value, field.defaultValue, onChange);
+  const typeMap: Record<string, string> = {
+    text: "text",
+    email: "email",
+    barcode: "text",
+    idscanner: "text",
+  };
+  return (
+    <input
+      type={typeMap[field.type] || "text"}
+      name={field.id}
+      required={field.required}
+      value={value}
+      placeholder={field.placeholder}
+      maxLength={field.maxLength}
+      onChange={(e) => onChange(e.target.value)}
+      className={INPUT_BASE}
+    />
+  );
+}
+
 // ─── SignaturePad: canvas básico con firma como base64 ───────────────────
 function SignaturePad({
   value,
@@ -1059,14 +1351,26 @@ function PhotoCapture({
   value,
   onChange,
   name,
+  allowCamera = true,
+  allowUpload = true,
+  maxSizeMB,
 }: {
   value: string;
   onChange: (v: string) => void;
   name: string;
+  allowCamera?: boolean;
+  allowUpload?: boolean;
+  maxSizeMB?: number;
 }) {
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
   const handle = (f: File | null) => {
     if (!f) return;
+    setError("");
+    if (maxSizeMB && f.size > maxSizeMB * 1024 * 1024) {
+      setError(`El archivo excede ${maxSizeMB} MB.`);
+      return;
+    }
     setBusy(true);
     const reader = new FileReader();
     reader.onload = () => {
@@ -1076,17 +1380,28 @@ function PhotoCapture({
     reader.onerror = () => setBusy(false);
     reader.readAsDataURL(f);
   };
+  // Si solo se permite cámara → `capture`. Si solo disco → sin capture.
+  // Si ambos → sin capture (el user elige al tocar el input).
+  const captureAttr = allowCamera && !allowUpload ? "environment" : undefined;
+  if (!allowCamera && !allowUpload) {
+    return (
+      <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-center text-xs text-slate-400">
+        Este campo no tiene fuentes de captura habilitadas.
+      </div>
+    );
+  }
   return (
     <div>
       <input type="hidden" name={name} value={value} />
       <input
         type="file"
         accept="image/*"
-        capture="environment"
+        capture={captureAttr}
         onChange={(e) => handle(e.target.files?.[0] ?? null)}
         className="text-sm"
       />
       {busy && <div className="mt-1 text-xs text-slate-500">Cargando…</div>}
+      {error && <div className="mt-1 text-xs text-red-600">⚠️ {error}</div>}
       {value && (
         <img
           src={value}
@@ -1113,16 +1428,24 @@ function FileAttach({
   onChange,
   name,
   accept,
+  maxSizeMB,
 }: {
   value: string;
   onChange: (v: string) => void;
   name: string;
   accept?: string;
+  maxSizeMB?: number;
 }) {
   const [busy, setBusy] = useState(false);
   const [fileName, setFileName] = useState<string>("");
+  const [error, setError] = useState("");
   const handle = (f: File | null) => {
     if (!f) return;
+    setError("");
+    if (maxSizeMB && f.size > maxSizeMB * 1024 * 1024) {
+      setError(`El archivo excede ${maxSizeMB} MB.`);
+      return;
+    }
     setBusy(true);
     setFileName(f.name);
     const reader = new FileReader();
@@ -1143,7 +1466,8 @@ function FileAttach({
         className="text-sm"
       />
       {busy && <div className="mt-1 text-xs text-slate-500">Cargando…</div>}
-      {value && !busy && (
+      {error && <div className="mt-1 text-xs text-red-600">⚠️ {error}</div>}
+      {value && !busy && !error && (
         <div className="mt-1 text-xs text-emerald-700">✓ Archivo adjuntado {fileName && `(${fileName})`}</div>
       )}
     </div>

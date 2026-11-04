@@ -118,6 +118,70 @@ export type SubformField = {
   visibility?: "visible" | "after_submit" | "hidden";
   /** quiz_score: mostrar también el puntaje máximo (ej. "7.5 / 10"). */
   showMax?: boolean;
+
+  // ── phone ────────────────────────────────────────────────────────────
+  /** phone: prefijo fijo mostrado (+57, +1…). */
+  prefix?: string;
+
+  // ── time ─────────────────────────────────────────────────────────────
+  /** time: si está vacío al montar, setea HH:mm actual. */
+  nowByDefault?: boolean;
+
+  // ── photo ────────────────────────────────────────────────────────────
+  /** photo: permitir abrir la cámara del dispositivo (default true). */
+  allowCamera?: boolean;
+  /** photo: permitir seleccionar archivo del disco (default true). */
+  allowUpload?: boolean;
+
+  // ── photo / file / video (compartido) ────────────────────────────────
+  /** photo / file / video: tamaño máximo del archivo en MB. */
+  maxSizeMB?: number;
+
+  // ── file ─────────────────────────────────────────────────────────────
+  /** file: categoría de archivos permitidos (atajo sobre `accept`). */
+  fileType?: "documents" | "images" | "audio" | "video" | "any";
+
+  // ── date ─────────────────────────────────────────────────────────────
+  /** date: fecha mínima permitida (YYYY-MM-DD). */
+  minDate?: string;
+  /** date: fecha máxima permitida (YYYY-MM-DD). */
+  maxDate?: string;
+
+  // ── idDocument ───────────────────────────────────────────────────────
+  /** idDocument: formatea con separador de miles al tipear. */
+  thousandsSeparator?: boolean;
+
+  // ── image (view-only del subform — URL externa) ──────────────────────
+  /** image: ancho máximo en px (null = sin límite). */
+  maxWidth?: number;
+  /** image: alto máximo en px. */
+  maxHeight?: number;
+  /** image: abre modal con la imagen ampliada al click. */
+  clickable?: boolean;
+
+  // ── video ────────────────────────────────────────────────────────────
+  /** video: duración máxima permitida en segundos. */
+  maxDurationSecs?: number;
+
+  // ── header ───────────────────────────────────────────────────────────
+  /** header: texto del encabezado (separado de `label`). */
+  headerText?: string;
+  /** header: tamaño visual (small / medium / large). */
+  headerSize?: "small" | "medium" | "large";
+  /** header: mostrar línea divisoria debajo. */
+  showDivider?: boolean;
+
+  // ── barcode ──────────────────────────────────────────────────────────
+  /** barcode: habilita botón de "escanear" (preview, sin cámara real). */
+  scannerEnabled?: boolean;
+
+  // ── idscanner ────────────────────────────────────────────────────────
+  /** idscanner: qué campos extraer (nombre, numero, fechaNacimiento, …). */
+  idscannerFields?: string[];
+  /** idscanner: permitir edición manual del resultado. */
+  allowManual?: boolean;
+  /** idscanner: tipo de documento (auto / cc / ce / ti / passport). */
+  documentType?: "auto" | "cc" | "ce" | "ti" | "passport";
 };
 
 export type SubformEntry = Record<string, string>;

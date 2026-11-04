@@ -603,6 +603,549 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
         </>
       )}
 
+      {/* ── Textarea: rows + maxLength + defaultValue ── */}
+      {field.type === "textarea" && (
+        <div className="mb-[18px] grid grid-cols-3 gap-3">
+          <div>
+            <label className={SUBFORM_LABEL_CLASS}>Valor predeterminado</label>
+            <input
+              className={SUBFORM_INPUT_CLASS}
+              value={field.defaultValue || ""}
+              onChange={(e) => onUpdate(field.id, { defaultValue: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className={SUBFORM_LABEL_CLASS}>Filas</label>
+            <input
+              type="number"
+              min={1}
+              max={20}
+              className={SUBFORM_INPUT_CLASS}
+              value={field.rows ?? 3}
+              onChange={(e) =>
+                onUpdate(field.id, { rows: parseInt(e.target.value) || 3 })
+              }
+            />
+          </div>
+          <div>
+            <label className={SUBFORM_LABEL_CLASS}>Long. máxima</label>
+            <input
+              type="number"
+              min={0}
+              className={SUBFORM_INPUT_CLASS}
+              value={field.maxLength ?? ""}
+              placeholder="Sin límite"
+              onChange={(e) =>
+                onUpdate(field.id, {
+                  maxLength:
+                    e.target.value === "" ? undefined : parseInt(e.target.value),
+                })
+              }
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── Number: min/max/step + defaultValue ── */}
+      {field.type === "number" && (
+        <div className="mb-[18px] grid grid-cols-2 gap-3">
+          <div>
+            <label className={SUBFORM_LABEL_CLASS}>Valor predeterminado</label>
+            <input
+              type="number"
+              className={SUBFORM_INPUT_CLASS}
+              value={field.defaultValue ?? ""}
+              onChange={(e) =>
+                onUpdate(field.id, { defaultValue: e.target.value })
+              }
+            />
+          </div>
+          <div>
+            <label className={SUBFORM_LABEL_CLASS}>Paso (step)</label>
+            <input
+              type="number"
+              className={SUBFORM_INPUT_CLASS}
+              value={field.step ?? ""}
+              placeholder="1"
+              onChange={(e) =>
+                onUpdate(field.id, {
+                  step:
+                    e.target.value === "" ? undefined : parseFloat(e.target.value),
+                })
+              }
+            />
+          </div>
+          <div>
+            <label className={SUBFORM_LABEL_CLASS}>Mínimo</label>
+            <input
+              type="number"
+              className={SUBFORM_INPUT_CLASS}
+              value={field.min ?? ""}
+              onChange={(e) =>
+                onUpdate(field.id, {
+                  min:
+                    e.target.value === "" ? undefined : parseFloat(e.target.value),
+                })
+              }
+            />
+          </div>
+          <div>
+            <label className={SUBFORM_LABEL_CLASS}>Máximo</label>
+            <input
+              type="number"
+              className={SUBFORM_INPUT_CLASS}
+              value={field.max ?? ""}
+              onChange={(e) =>
+                onUpdate(field.id, {
+                  max:
+                    e.target.value === "" ? undefined : parseFloat(e.target.value),
+                })
+              }
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── Phone: prefijo + maxLength + defaultValue ── */}
+      {field.type === "phone" && (
+        <div className="mb-[18px] grid grid-cols-3 gap-3">
+          <div>
+            <label className={SUBFORM_LABEL_CLASS}>Prefijo</label>
+            <input
+              className={SUBFORM_INPUT_CLASS}
+              value={field.prefix || ""}
+              placeholder="+57"
+              onChange={(e) => onUpdate(field.id, { prefix: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className={SUBFORM_LABEL_CLASS}>Long. máxima</label>
+            <input
+              type="number"
+              min={0}
+              className={SUBFORM_INPUT_CLASS}
+              value={field.maxLength ?? ""}
+              placeholder="10"
+              onChange={(e) =>
+                onUpdate(field.id, {
+                  maxLength:
+                    e.target.value === "" ? undefined : parseInt(e.target.value),
+                })
+              }
+            />
+          </div>
+          <div>
+            <label className={SUBFORM_LABEL_CLASS}>Valor por defecto</label>
+            <input
+              className={SUBFORM_INPUT_CLASS}
+              value={field.defaultValue || ""}
+              onChange={(e) =>
+                onUpdate(field.id, { defaultValue: e.target.value })
+              }
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── Date: min/max + defaultValue ── */}
+      {field.type === "date" && (
+        <div className="mb-[18px] grid grid-cols-3 gap-3">
+          <div>
+            <label className={SUBFORM_LABEL_CLASS}>Valor predeterminado</label>
+            <input
+              type="date"
+              className={SUBFORM_INPUT_CLASS}
+              value={field.defaultValue || ""}
+              onChange={(e) =>
+                onUpdate(field.id, { defaultValue: e.target.value })
+              }
+            />
+          </div>
+          <div>
+            <label className={SUBFORM_LABEL_CLASS}>Fecha mínima</label>
+            <input
+              type="date"
+              className={SUBFORM_INPUT_CLASS}
+              value={field.minDate || ""}
+              onChange={(e) => onUpdate(field.id, { minDate: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className={SUBFORM_LABEL_CLASS}>Fecha máxima</label>
+            <input
+              type="date"
+              className={SUBFORM_INPUT_CLASS}
+              value={field.maxDate || ""}
+              onChange={(e) => onUpdate(field.id, { maxDate: e.target.value })}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── Time: now by default + rememberInput ── */}
+      {field.type === "time" && (
+        <>
+          <label className="mb-2 flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+            <input
+              type="checkbox"
+              checked={field.nowByDefault ?? false}
+              onChange={(e) =>
+                onUpdate(field.id, { nowByDefault: e.target.checked })
+              }
+              className="h-4 w-4 accent-[#00c2a8]"
+            />
+            <span>Pre-rellenar con la hora actual</span>
+          </label>
+          <label className="mb-[18px] flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+            <input
+              type="checkbox"
+              checked={field.rememberInput ?? false}
+              onChange={(e) =>
+                onUpdate(field.id, { rememberInput: e.target.checked })
+              }
+              className="h-4 w-4 accent-[#00c2a8]"
+            />
+            <span>Recordar última entrada</span>
+          </label>
+        </>
+      )}
+
+      {/* ── Checkbox: defaultValue (CSV) ── */}
+      {field.type === "checkbox" && (
+        <div className="mb-[18px]">
+          <label className={SUBFORM_LABEL_CLASS}>
+            Opciones preseleccionadas
+            <span className="font-normal normal-case text-slate-400">
+              {" "}(separadas por coma)
+            </span>
+          </label>
+          <input
+            className={SUBFORM_INPUT_CLASS}
+            value={field.defaultValue || ""}
+            placeholder="Opción 1, Opción 2"
+            onChange={(e) =>
+              onUpdate(field.id, { defaultValue: e.target.value })
+            }
+          />
+        </div>
+      )}
+
+      {/* ── Photo: cámara / disco / tamaño máximo ── */}
+      {field.type === "photo" && (
+        <>
+          <div className="mb-[18px]">
+            <label className={SUBFORM_LABEL_CLASS}>Tamaño máximo (MB)</label>
+            <input
+              type="number"
+              min={0.1}
+              step={0.1}
+              className={SUBFORM_INPUT_CLASS}
+              value={field.maxSizeMB ?? ""}
+              placeholder="Sin límite"
+              onChange={(e) =>
+                onUpdate(field.id, {
+                  maxSizeMB:
+                    e.target.value === "" ? undefined : parseFloat(e.target.value),
+                })
+              }
+            />
+          </div>
+          <label className="mb-2 flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+            <input
+              type="checkbox"
+              checked={field.allowCamera ?? true}
+              onChange={(e) =>
+                onUpdate(field.id, { allowCamera: e.target.checked })
+              }
+              className="h-4 w-4 accent-[#00c2a8]"
+            />
+            <span>Permitir abrir la cámara</span>
+          </label>
+          <label className="mb-[18px] flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+            <input
+              type="checkbox"
+              checked={field.allowUpload ?? true}
+              onChange={(e) =>
+                onUpdate(field.id, { allowUpload: e.target.checked })
+              }
+              className="h-4 w-4 accent-[#00c2a8]"
+            />
+            <span>Permitir subir desde el dispositivo</span>
+          </label>
+        </>
+      )}
+
+      {/* ── File: fileType + maxSizeMB ── */}
+      {field.type === "file" && (
+        <div className="mb-[18px] grid grid-cols-2 gap-3">
+          <div>
+            <label className={SUBFORM_LABEL_CLASS}>Tipo permitido</label>
+            <select
+              className={SUBFORM_INPUT_CLASS}
+              value={field.fileType || "any"}
+              onChange={(e) =>
+                onUpdate(field.id, {
+                  fileType: e.target.value as SubformField["fileType"],
+                })
+              }
+            >
+              <option value="any">Cualquier tipo</option>
+              <option value="documents">Documentos (PDF, Word, Excel)</option>
+              <option value="images">Imágenes</option>
+              <option value="audio">Audio</option>
+              <option value="video">Video</option>
+            </select>
+          </div>
+          <div>
+            <label className={SUBFORM_LABEL_CLASS}>Tamaño máx. (MB)</label>
+            <input
+              type="number"
+              min={0.1}
+              step={0.1}
+              className={SUBFORM_INPUT_CLASS}
+              value={field.maxSizeMB ?? ""}
+              placeholder="Sin límite"
+              onChange={(e) =>
+                onUpdate(field.id, {
+                  maxSizeMB:
+                    e.target.value === "" ? undefined : parseFloat(e.target.value),
+                })
+              }
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── idDocument: thousandsSeparator ── */}
+      {field.type === "idDocument" && (
+        <label className="mb-[18px] flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+          <input
+            type="checkbox"
+            checked={field.thousandsSeparator ?? false}
+            onChange={(e) =>
+              onUpdate(field.id, { thousandsSeparator: e.target.checked })
+            }
+            className="h-4 w-4 accent-[#00c2a8]"
+          />
+          <span>Formatear con separador de miles (1.234.567)</span>
+        </label>
+      )}
+
+      {/* ── Image: maxWidth/maxHeight/clickable ── */}
+      {field.type === "image" && (
+        <div className="mb-[18px] grid grid-cols-3 gap-3">
+          <div>
+            <label className={SUBFORM_LABEL_CLASS}>Ancho máx. (px)</label>
+            <input
+              type="number"
+              min={0}
+              className={SUBFORM_INPUT_CLASS}
+              value={field.maxWidth ?? ""}
+              placeholder="Auto"
+              onChange={(e) =>
+                onUpdate(field.id, {
+                  maxWidth:
+                    e.target.value === "" ? undefined : parseInt(e.target.value),
+                })
+              }
+            />
+          </div>
+          <div>
+            <label className={SUBFORM_LABEL_CLASS}>Alto máx. (px)</label>
+            <input
+              type="number"
+              min={0}
+              className={SUBFORM_INPUT_CLASS}
+              value={field.maxHeight ?? ""}
+              placeholder="Auto"
+              onChange={(e) =>
+                onUpdate(field.id, {
+                  maxHeight:
+                    e.target.value === "" ? undefined : parseInt(e.target.value),
+                })
+              }
+            />
+          </div>
+          <label className="col-span-3 flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+            <input
+              type="checkbox"
+              checked={field.clickable ?? false}
+              onChange={(e) =>
+                onUpdate(field.id, { clickable: e.target.checked })
+              }
+              className="h-4 w-4 accent-[#00c2a8]"
+            />
+            <span>Click abre la imagen ampliada</span>
+          </label>
+        </div>
+      )}
+
+      {/* ── Video: maxDurationSecs + maxSizeMB ── */}
+      {field.type === "video" && (
+        <div className="mb-[18px] grid grid-cols-2 gap-3">
+          <div>
+            <label className={SUBFORM_LABEL_CLASS}>Duración máx. (s)</label>
+            <input
+              type="number"
+              min={0}
+              className={SUBFORM_INPUT_CLASS}
+              value={field.maxDurationSecs ?? ""}
+              placeholder="Sin límite"
+              onChange={(e) =>
+                onUpdate(field.id, {
+                  maxDurationSecs:
+                    e.target.value === "" ? undefined : parseInt(e.target.value),
+                })
+              }
+            />
+          </div>
+          <div>
+            <label className={SUBFORM_LABEL_CLASS}>Tamaño máx. (MB)</label>
+            <input
+              type="number"
+              min={0.1}
+              step={0.1}
+              className={SUBFORM_INPUT_CLASS}
+              value={field.maxSizeMB ?? ""}
+              placeholder="Sin límite"
+              onChange={(e) =>
+                onUpdate(field.id, {
+                  maxSizeMB:
+                    e.target.value === "" ? undefined : parseFloat(e.target.value),
+                })
+              }
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── Header: text + size + divider ── */}
+      {field.type === "header" && (
+        <>
+          <div className="mb-[18px]">
+            <label className={SUBFORM_LABEL_CLASS}>Texto del encabezado</label>
+            <input
+              className={SUBFORM_INPUT_CLASS}
+              value={field.headerText || ""}
+              placeholder="Datos del paciente"
+              onChange={(e) =>
+                onUpdate(field.id, { headerText: e.target.value })
+              }
+            />
+          </div>
+          <div className="mb-[18px]">
+            <label className={SUBFORM_LABEL_CLASS}>Tamaño</label>
+            <select
+              className={SUBFORM_INPUT_CLASS}
+              value={field.headerSize || "medium"}
+              onChange={(e) =>
+                onUpdate(field.id, {
+                  headerSize: e.target.value as SubformField["headerSize"],
+                })
+              }
+            >
+              <option value="small">Pequeño</option>
+              <option value="medium">Mediano</option>
+              <option value="large">Grande</option>
+            </select>
+          </div>
+          <label className="mb-[18px] flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+            <input
+              type="checkbox"
+              checked={field.showDivider ?? false}
+              onChange={(e) =>
+                onUpdate(field.id, { showDivider: e.target.checked })
+              }
+              className="h-4 w-4 accent-[#00c2a8]"
+            />
+            <span>Mostrar línea divisoria debajo</span>
+          </label>
+        </>
+      )}
+
+      {/* ── Barcode: scannerEnabled ── */}
+      {field.type === "barcode" && (
+        <label className="mb-[18px] flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+          <input
+            type="checkbox"
+            checked={field.scannerEnabled ?? false}
+            onChange={(e) =>
+              onUpdate(field.id, { scannerEnabled: e.target.checked })
+            }
+            className="h-4 w-4 accent-[#00c2a8]"
+          />
+          <span>Habilitar botón "Escanear" (preview, sin cámara real aún)</span>
+        </label>
+      )}
+
+      {/* ── idscanner: documentType, allowManual, fields a extraer ── */}
+      {field.type === "idscanner" && (
+        <>
+          <div className="mb-[18px]">
+            <label className={SUBFORM_LABEL_CLASS}>Tipo de documento</label>
+            <select
+              className={SUBFORM_INPUT_CLASS}
+              value={field.documentType || "auto"}
+              onChange={(e) =>
+                onUpdate(field.id, {
+                  documentType: e.target
+                    .value as SubformField["documentType"],
+                })
+              }
+            >
+              <option value="auto">Detección automática</option>
+              <option value="cc">Cédula de Ciudadanía (CC)</option>
+              <option value="ce">Cédula de Extranjería (CE)</option>
+              <option value="ti">Tarjeta de Identidad (TI)</option>
+              <option value="passport">Pasaporte</option>
+            </select>
+          </div>
+          <div className="mb-[18px]">
+            <label className={SUBFORM_LABEL_CLASS}>Campos a extraer</label>
+            <div className="flex flex-col gap-1">
+              {[
+                { id: "nombre", label: "Nombre completo" },
+                { id: "numero", label: "Número de documento" },
+                { id: "fechaNacimiento", label: "Fecha de nacimiento" },
+                { id: "sexo", label: "Sexo" },
+                { id: "fechaExpedicion", label: "Fecha de expedición" },
+                { id: "lugarExpedicion", label: "Lugar de expedición" },
+              ].map((f) => {
+                const checked = (field.idscannerFields || ["numero", "nombre"]).includes(f.id);
+                return (
+                  <label key={f.id} className="flex items-center gap-2 text-[13px] text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        const cur = field.idscannerFields || ["numero", "nombre"];
+                        const next = e.target.checked
+                          ? [...cur, f.id]
+                          : cur.filter((x) => x !== f.id);
+                        onUpdate(field.id, { idscannerFields: next });
+                      }}
+                      className="h-4 w-4 accent-[#00c2a8]"
+                    />
+                    {f.label}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+          <label className="mb-[18px] flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+            <input
+              type="checkbox"
+              checked={field.allowManual ?? true}
+              onChange={(e) =>
+                onUpdate(field.id, { allowManual: e.target.checked })
+              }
+              className="h-4 w-4 accent-[#00c2a8]"
+            />
+            <span>Permitir edición manual del resultado</span>
+          </label>
+        </>
+      )}
+
       {/* ── Text: valor por defecto + filtros de teclado ── */}
       {field.type === "text" && (
         <>
