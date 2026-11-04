@@ -44,10 +44,31 @@ export default function RuleEditor({
   const triggerWidgets = widgets.filter((w) => TRIGGER_TYPES.includes(w.type));
   const targetWidgets = widgets.filter((w) => !UNTARGETABLE_TYPES.includes(w.type));
 
+  // Convierte `config.options` a `string[]` sin importar el shape
+  // guardado. Formularios viejos tienen `string[]`; los nuevos
+  // (radio/select con opciones + imágenes) tienen `{id, label,
+  // imageId?, imageUrl?}[]`. Si no normalizamos, el panel de reglas
+  // renderiza el objeto como child JSX → React error #31 ("object
+  // with keys {id, label}") y la pantalla entera revienta.
   const getOptions = (widgetId: string): string[] => {
     const w = widgets.find((w) => w.id === widgetId);
     if (!w) return [];
-    return (w.config.options as string[]) ?? [];
+    const raw = w.config.options;
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object") {
+          const o = item as Record<string, unknown>;
+          return typeof o.label === "string"
+            ? o.label
+            : typeof o.value === "string"
+            ? o.value
+            : "";
+        }
+        return "";
+      })
+      .filter((s) => s.length > 0);
   };
 
   const addCondition = () => {
