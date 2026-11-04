@@ -22,6 +22,9 @@ import { Permission } from '../auth/permissions';
  * columnas.
  *
  * El backend hace el fetch sin restricción CORS y devuelve los headers.
+ * Prueba varios formatos de export en cascada (gviz → export → pub) y
+ * detecta cuando Google responde con HTML (sign-in page) para devolver
+ * un error claro al admin en lugar de columnas vacías.
  */
 @Controller('forms/search-source')
 export class SearchSourceController {
@@ -38,31 +41,65 @@ export class SearchSourceController {
     if (!parsed) {
       throw new BadRequestException('URL de Google Sheets no reconocida.');
     }
-    const params = new URLSearchParams(
-      parsed.published ? { output: 'csv' } : { tqx: 'out:csv' },
-    );
-    if (parsed.gid) params.set('gid', parsed.gid);
-    if (!parsed.published) params.set('range', 'A1:Z1');
-    const csvUrl = parsed.published
-      ? `https://docs.google.com/spreadsheets/d/e/${parsed.id}/pub?${params.toString()}`
-      : `https://docs.google.com/spreadsheets/d/${parsed.id}/gviz/tq?${params.toString()}`;
-    try {
-      const res = await fetch(csvUrl);
-      if (!res.ok) {
-        throw new BadRequestException(
-          `Google Sheets devolvió ${res.status}. Verifica que el Sheet sea público ('Cualquiera con el enlace') o esté 'Publicado en la Web'.`,
-        );
-      }
-      const text = await res.text();
-      const rows = parseCsv(text);
-      const headers = (rows[0] ?? []).map((c) => c.trim()).filter(Boolean);
-      return { headers, gid: parsed.gid };
-    } catch (e) {
-      if (e instanceof BadRequestException) throw e;
-      throw new BadRequestException(
-        `Error al leer el Sheet: ${(e as Error).message}`,
+
+    // Candidatos en orden de preferencia según el tipo de URL. gviz es el
+    // más tolerante para enlaces "Compartir"; export es alternativa; pub
+    // es el único válido para enlaces "Publicado en la Web" (/d/e/).
+    const candidates: string[] = [];
+    if (parsed.published) {
+      const params = new URLSearchParams({ output: 'csv' });
+      if (parsed.gid) params.set('gid', parsed.gid);
+      candidates.push(
+        `https://docs.google.com/spreadsheets/d/e/${parsed.id}/pub?${params.toString()}`,
+      );
+    } else {
+      const gvizParams = new URLSearchParams({ tqx: 'out:csv' });
+      if (parsed.gid) gvizParams.set('gid', parsed.gid);
+      gvizParams.set('range', 'A1:Z1');
+      candidates.push(
+        `https://docs.google.com/spreadsheets/d/${parsed.id}/gviz/tq?${gvizParams.toString()}`,
+      );
+      const exportParams = new URLSearchParams({ format: 'csv' });
+      if (parsed.gid) exportParams.set('gid', parsed.gid);
+      exportParams.set('range', 'A1:Z1');
+      candidates.push(
+        `https://docs.google.com/spreadsheets/d/${parsed.id}/export?${exportParams.toString()}`,
       );
     }
+
+    const attempts: string[] = [];
+    for (const csvUrl of candidates) {
+      try {
+        const res = await fetch(csvUrl, { redirect: 'follow' });
+        const ct = (res.headers.get('content-type') ?? '').toLowerCase();
+        if (!res.ok) {
+          attempts.push(`${new URL(csvUrl).pathname} → ${res.status}`);
+          continue;
+        }
+        const text = await res.text();
+        // Google responde HTML (sign-in / error page) cuando el Sheet no
+        // es accesible anónimamente aunque devuelva 200 OK.
+        if (ct.includes('text/html') || /^\s*<!doctype html/i.test(text)) {
+          attempts.push(`${new URL(csvUrl).pathname} → HTML (sin acceso)`);
+          continue;
+        }
+        const rows = parseCsv(text);
+        const headers = (rows[0] ?? []).map((c) => c.trim()).filter(Boolean);
+        if (headers.length === 0) {
+          attempts.push(`${new URL(csvUrl).pathname} → CSV sin headers`);
+          continue;
+        }
+        return { headers, gid: parsed.gid };
+      } catch (e) {
+        attempts.push(
+          `${new URL(csvUrl).pathname} → ${(e as Error).message}`,
+        );
+      }
+    }
+
+    throw new BadRequestException(
+      `No se pudo leer el Sheet. Verifica que el acceso general sea 'Cualquiera con el enlace' (Lector). Intentos: ${attempts.join('; ')}`,
+    );
   }
 }
 

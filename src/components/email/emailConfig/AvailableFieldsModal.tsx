@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { WidgetInstance } from "../../../types/widget.types";
 import type { EmailRecipient } from "../../../types/email-template.types";
-import { fetchSheetsHeaders } from "../../widgets/search/sources/googleSheets";
+import { fetchSheetsHeadersDetailed } from "../../widgets/search/sources/googleSheets";
 import { randomUUID } from "../../../utils/uuid";
 import LookupConfigModal from "./LookupConfigModal";
 
@@ -84,11 +84,19 @@ export default function AvailableFieldsModal({
     for (const g of groups) {
       if (headers[g.sheetUrl]) continue;
       setHeaders((p) => ({ ...p, [g.sheetUrl]: { status: "loading" } }));
-      fetchSheetsHeaders(g.sheetUrl)
-        .then((cols) =>
+      fetchSheetsHeadersDetailed(g.sheetUrl)
+        .then((r) =>
           setHeaders((p) => ({
             ...p,
-            [g.sheetUrl]: { status: "ready", headers: cols },
+            [g.sheetUrl]:
+              r.headers.length > 0
+                ? { status: "ready", headers: r.headers }
+                : {
+                    status: "error",
+                    message:
+                      r.error ??
+                      "El Sheet no devolvió columnas. Verifica el acceso 'Cualquiera con el enlace'.",
+                  },
           })),
         )
         .catch((e) =>

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { WidgetInstance } from "../../../types/widget.types";
 import type { EmailRecipient } from "../../../types/email-template.types";
-import { fetchSheetsHeaders } from "../../widgets/search/sources/googleSheets";
+import { fetchSheetsHeadersDetailed } from "../../widgets/search/sources/googleSheets";
 import { randomUUID } from "../../../utils/uuid";
 
 type Props = {
@@ -69,13 +69,16 @@ export default function LookupConfigModal({
     setLoading(true);
     setError(null);
     try {
-      const cols = await fetchSheetsHeaders(sheetUrl.trim());
-      if (cols.length === 0) {
-        setError("El Sheet no devolvió columnas. ¿Está publicado?");
+      const r = await fetchSheetsHeadersDetailed(sheetUrl.trim());
+      if (r.headers.length === 0) {
+        setError(
+          r.error ??
+            "El Sheet no devolvió columnas. Verifica el acceso 'Cualquiera con el enlace'.",
+        );
         setLoading(false);
         return;
       }
-      setHeaders(cols);
+      setHeaders(r.headers);
       setStep("loaded");
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo cargar el Sheet");

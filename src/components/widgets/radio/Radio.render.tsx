@@ -52,22 +52,27 @@ export default function RadioRender({ widget, hiddenWidgetIds }: WidgetRenderPro
         style={{
           display: verticalAlign ? "flex" : "grid",
           flexDirection: verticalAlign ? "column" : undefined,
+          // auto-fit (no auto-fill) colapsa tracks vacías y expande las
+          // existentes para llenar el contenedor — así 2 chips en un
+          // formulario ancho se reparten el espacio en vez de quedar
+          // encogidos a la izquierda con un hueco a la derecha.
           gridTemplateColumns: verticalAlign
             ? undefined
-            : "repeat(auto-fill, minmax(140px, 1fr))",
+            : "repeat(auto-fit, minmax(140px, 1fr))",
           gap: 8,
         }}
       >
         {options.map((opt, index) => {
           const isSelected = selected === opt.label;
+          const hasImg = useImageLabels && opt.imageUrl;
           return (
             <label
               key={opt.id}
               style={{
                 display: "flex",
-                alignItems: useImageLabels && opt.imageUrl ? "flex-start" : "center",
+                alignItems: hasImg ? "flex-start" : "center",
                 gap: 10,
-                padding: useImageLabels && opt.imageUrl ? 10 : "8px 12px",
+                padding: hasImg ? 10 : "8px 12px",
                 border: isSelected
                   ? "1.5px solid #0891b2"
                   : "1.5px solid #e2e8f0",
@@ -86,9 +91,9 @@ export default function RadioRender({ widget, hiddenWidgetIds }: WidgetRenderPro
                 required={widget.required && index === 0}
                 checked={isSelected}
                 onChange={() => setSelected(opt.label)}
-                style={{ accentColor: "#0891b2", marginTop: useImageLabels && opt.imageUrl ? 4 : 0 }}
+                style={{ accentColor: "#0891b2", marginTop: hasImg ? 4 : 0, flexShrink: 0 }}
               />
-              {useImageLabels && opt.imageUrl && (
+              {hasImg && (
                 <img
                   src={opt.imageUrl}
                   alt=""
@@ -103,7 +108,15 @@ export default function RadioRender({ widget, hiddenWidgetIds }: WidgetRenderPro
                   }}
                 />
               )}
-              <span style={{ flex: 1 }}>{opt.label}</span>
+              <span
+                style={{
+                  // En horizontal sin imagen, dejamos el texto en una línea
+                  // para que no parta "Planeacion Actividades" en dos.
+                  whiteSpace: verticalAlign || hasImg ? "normal" : "nowrap",
+                }}
+              >
+                {opt.label}
+              </span>
             </label>
           );
         })}

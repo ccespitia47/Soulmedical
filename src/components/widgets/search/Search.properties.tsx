@@ -3,7 +3,7 @@ import type { WidgetPropertiesProps } from "../../../types/widget.types";
 import type { SearchWidgetConfig, SearchSourceType, FieldMapping } from "./search.types";
 import { useFolderStore } from "../../../store/useFolderStore";
 import { useProjectStore } from "../../../store/useProjectStore";
-import { fetchSheetsHeaders, parseSheetsUrl } from "./sources/googleSheets";
+import { fetchSheetsHeadersDetailed, parseSheetsUrl } from "./sources/googleSheets";
 import { fetchExcelHeaders } from "./sources/excelWeb";
 
 
@@ -58,10 +58,12 @@ export default function SearchProperties({ widget, updateWidget, allWidgets }: W
     setSheetsError(null);
     const t = setTimeout(async () => {
       try {
-        const headers = await fetchSheetsHeaders(url);
+        const r = await fetchSheetsHeadersDetailed(url);
+        const headers = r.headers;
         if (headers.length === 0) {
           setSheetsError(
-            "No se pudieron leer las columnas. Comparte el Sheet como 'Cualquiera con el enlace' (Lector) o cambia el acceso general a público.",
+            r.error ??
+              "No se pudieron leer las columnas. Comparte el Sheet como 'Cualquiera con el enlace' (Lector) o cambia el acceso general a público.",
           );
           setSheetsHeaders([]);
         } else {
@@ -366,10 +368,12 @@ export default function SearchProperties({ widget, updateWidget, allWidgets }: W
                 setSheetsDetecting(true);
                 setSheetsError(null);
                 try {
-                  const headers = await fetchSheetsHeaders(url);
+                  const r = await fetchSheetsHeadersDetailed(url);
+                  const headers = r.headers;
                   if (headers.length === 0) {
                     setSheetsError(
-                      "No se leyeron columnas. Verifica que el Sheet sea público ('Cualquiera con el enlace').",
+                      r.error ??
+                        "No se leyeron columnas. Verifica que el Sheet sea público ('Cualquiera con el enlace').",
                     );
                     setSheetsHeaders([]);
                   } else {

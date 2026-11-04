@@ -89,34 +89,55 @@ function buildCsvUrl(
  * El backend (POST /forms/search-source/sheets-headers) no tiene esa
  * restricción. Devuelve `{ headers, gid }`. Si el usuario pegó una URL con
  * #gid=…, el gid detectado se guarda vía el caller en `config.sheetsGid`.
+ *
+ * Firma legacy: devuelve `string[]` (caller no distingue error de vacío).
+ * Nueva firma: `fetchSheetsHeadersDetailed` devuelve también el error.
  */
 export async function fetchSheetsHeaders(url: string): Promise<string[]> {
+  const r = await fetchSheetsHeadersDetailed(url);
+  return r.headers;
+}
+
+export async function fetchSheetsHeadersDetailed(
+  url: string,
+): Promise<{ headers: string[]; error?: string }> {
   const parsed = parseSheetsUrl(url);
-  if (!parsed) return [];
-  const base = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
+  if (!parsed) return { headers: [], error: "URL de Google Sheets no reconocida." };
+  // El backend tiene globalPrefix 'api' (main.ts) y Caddy solo hace
+  // reverse_proxy para /api/* — un POST sin /api cae en file_server y
+  // devuelve 405 Method Not Allowed. SIEMPRE anteponer /api.
+  const base = `${import.meta.env.VITE_API_URL ?? "http://localhost:3001"}/api`;
   const token = localStorage.getItem("token") ?? "";
-  const res = await fetch(`${base}/forms/search-source/sheets-headers`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ url }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${base}/forms/search-source/sheets-headers`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ url }),
+    });
+  } catch (e) {
+    return {
+      headers: [],
+      error: `No se pudo contactar el backend: ${(e as Error).message}`,
+    };
+  }
   if (!res.ok) {
-    // El backend ya devuelve el motivo (401/403/400 con message). Loggeamos
-    // para que el admin lo vea en consola; el caller muestra un mensaje
-    // genérico en UI porque no todos los errores son recuperables desde ahí.
+    let msg = `Backend respondió ${res.status}`;
     try {
       const err = await res.json();
-      console.warn("[fetchSheetsHeaders] backend:", res.status, err?.message);
+      if (err?.message) msg = String(err.message);
     } catch {
-      console.warn("[fetchSheetsHeaders] backend status:", res.status);
+      /* body no JSON */
     }
-    return [];
+    console.warn("[fetchSheetsHeaders] backend:", res.status, msg);
+    return { headers: [], error: msg };
   }
   const data = (await res.json()) as { headers?: string[] };
-  return Array.isArray(data?.headers) ? data.headers : [];
+  const headers = Array.isArray(data?.headers) ? data.headers : [];
+  return { headers };
 }
 
 export async function searchGoogleSheets(config: SearchWidgetConfig, q: string): Promise<Row[]> {

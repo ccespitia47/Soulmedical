@@ -29,7 +29,7 @@ export default function RadioPreview({ widget }: WidgetPreviewProps) {
           flexDirection: verticalAlign ? "column" : undefined,
           gridTemplateColumns: verticalAlign
             ? undefined
-            : "repeat(auto-fill, minmax(120px, 1fr))",
+            : "repeat(auto-fit, minmax(120px, 1fr))",
           gap: 6,
         }}
       >
@@ -43,6 +43,7 @@ export default function RadioPreview({ widget }: WidgetPreviewProps) {
               fontSize: 13,
               color: "#9ca3af",
               cursor: "not-allowed",
+              whiteSpace: verticalAlign ? "normal" : "nowrap",
             }}
           >
             <input

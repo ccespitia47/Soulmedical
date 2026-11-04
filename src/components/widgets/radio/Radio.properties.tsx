@@ -180,16 +180,57 @@ export default function RadioProperties({
         </select>
       </div>
 
-      {/* Alineación vertical */}
-      <label style={CHECKBOX_ROW}>
-        <input
-          type="checkbox"
-          checked={verticalAlign}
-          onChange={(e) => set({ verticalAlign: e.target.checked })}
-          style={{ accentColor: "#0891b2" }}
-        />
-        <span>Alineación vertical</span>
-      </label>
+      {/* Alineación */}
+      <div style={{ marginBottom: 14 }}>
+        <label style={LABEL}>Alineación</label>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 6,
+            padding: 4,
+            background: "#f1f5f9",
+            border: "1.5px solid #e2e8f0",
+            borderRadius: 8,
+          }}
+        >
+          {([
+            { v: true, label: "Vertical", icon: "list" },
+            { v: false, label: "Horizontal", icon: "grid" },
+          ] as const).map((opt) => {
+            const active = verticalAlign === opt.v;
+            return (
+              <button
+                key={String(opt.v)}
+                type="button"
+                onClick={() => set({ verticalAlign: opt.v })}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                  padding: "7px 10px",
+                  borderRadius: 6,
+                  border: "none",
+                  cursor: "pointer",
+                  background: active ? "white" : "transparent",
+                  color: active ? "#0891b2" : "#64748b",
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  fontFamily: "inherit",
+                  boxShadow: active
+                    ? "0 1px 3px rgba(0,0,0,0.08)"
+                    : "none",
+                  transition: "all 0.15s ease-out",
+                }}
+              >
+                <Icon name={opt.icon} size={13} />
+                <span>{opt.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Obligatorio */}
       <label style={CHECKBOX_ROW}>
