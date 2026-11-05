@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { WidgetPropertiesProps } from "../../../types/widget.types";
 import { useFolderStore } from "../../../store/useFolderStore";
 import { useProjectStore } from "../../../store/useProjectStore";
@@ -50,16 +51,38 @@ export default function PendingActivityProperties({
   const set = (changes: Record<string, unknown>) =>
     updateWidget(widget.id, { config: { ...cfg, ...changes } });
 
-  const { folders } = useFolderStore();
+  const { folders, loadFormDetails } = useFolderStore();
   const { selectedProjectId } = useProjectStore();
-  const forms = folders
-    .filter((f) => !selectedProjectId || f.projectId === selectedProjectId)
-    .flatMap((f) => (f.forms ?? []) as FormEntry[]);
+  const foldersInProject = folders.filter(
+    (f) => !selectedProjectId || f.projectId === selectedProjectId,
+  );
+  const forms = foldersInProject.flatMap(
+    (f) => (f.forms ?? []) as FormEntry[],
+  );
 
   const planningForm = forms.find((f) => f.id === cfg.planningFormId);
   const subforms = (planningForm?.widgets ?? []).filter(
     (w) => w.type === "subform",
   );
+
+  // Los forms "hermanos" del proyecto están en modo resumen (widgets=[])
+  // hasta que alguien los abre en el Builder — por eso el selector mostraba
+  // "no tiene subformulario" aunque sí los tiene. Hidratamos el form
+  // seleccionado on-demand. `loadFormDetails` es idempotente (si ya está
+  // hidratado, re-sincroniza; no hace daño).
+  const planningFormId = cfg.planningFormId as string | undefined;
+  const needsHydration =
+    !!planningFormId &&
+    !!planningForm &&
+    (planningForm.widgets ?? []).length === 0;
+  useEffect(() => {
+    if (!needsHydration || !planningFormId) return;
+    const folder = foldersInProject.find((f) =>
+      (f.forms ?? []).some((frm) => frm.id === planningFormId),
+    );
+    if (folder) void loadFormDetails(folder.id, planningFormId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planningFormId, needsHydration]);
   const subform = subforms.find((w) => w.id === cfg.subformWidgetId);
   const subFields = (subform?.config?.fields as SubField[]) ?? [];
   const displayFields = (cfg.displayFields as string[]) ?? [];
@@ -107,7 +130,9 @@ export default function PendingActivityProperties({
       {planningForm && (
         <div style={{ marginBottom: 14 }}>
           <label style={LABEL}>Subformulario de actividades</label>
-          {subforms.length === 0 ? (
+          {needsHydration ? (
+            <p style={HINT}>Cargando campos del formulario…</p>
+          ) : subforms.length === 0 ? (
             <p style={{ ...HINT, color: "#ef4444" }}>
               Ese formulario no tiene un subformulario. Agrega uno con las
               actividades.
