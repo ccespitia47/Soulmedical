@@ -258,6 +258,33 @@ export type SubformField = {
    * (Prop solo vive aquí → rename puro, bajo riesgo.)
    */
   idscannerFields?: string[];
+
+  // ── search (externo — google sheets / excel web / sql) ───────────────
+  /** search: fuente de datos a consultar. */
+  searchSource?: "google_sheets" | "excel_web" | "sql";
+  /** search: URL del Google Sheet (compartido o publicado). */
+  sheetsUrl?: string;
+  /** search: gid de la hoja específica (parseado de la URL). */
+  sheetsGid?: string;
+  /** search: columna por la que se filtra la búsqueda en Sheets. */
+  sheetsSearchCol?: string;
+  /** search: columnas detectadas del Sheet para poblar displayColumns/mappings. */
+  sheetColumns?: string[];
+  /** search: URL del Excel publicado en OneDrive/SharePoint. */
+  excelUrl?: string;
+  /** search: columna por la que se filtra la búsqueda en Excel. */
+  excelSearchCol?: string;
+  /** search: endpoint backend para consultas SQL (recibe { q }, responde { rows }). */
+  sqlEndpoint?: string;
+  /** search: columnas que se muestran en el modal de resultados. */
+  displayColumns?: { key: string; label: string }[];
+  /** search: mínimo de caracteres para disparar la búsqueda (default 2). */
+  searchMinChars?: number;
+  /**
+   * search: al seleccionar un resultado del modal, rellena OTROS fields del
+   * mismo subform-row con el valor de la columna indicada de la fuente.
+   */
+  searchMappings?: Array<{ sourceField: string; targetFieldId: string }>;
   /** idscanner: permitir edición manual del resultado. */
   allowManual?: boolean;
   /** idscanner: tipo de documento (auto / cc / ce / ti / passport). */

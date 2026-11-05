@@ -7,6 +7,9 @@ import {
 } from "../../../../services/submissionUploads";
 import { COUNTRIES } from "../../../../lib/countries";
 import Icon from "../../../common/Icon";
+import { searchGoogleSheets } from "../../search/sources/googleSheets";
+import { searchExcelWeb } from "../../search/sources/excelWeb";
+import type { SearchWidgetConfig } from "../../search/search.types";
 
 const INPUT_BASE =
   "box-border w-full rounded-[7px] border-[1.5px] border-slate-200 bg-neutral-50 px-3 py-2.5 font-sans text-[13.5px] text-gray-900 outline-none focus:border-[#00c2a8]";
@@ -20,9 +23,19 @@ type FieldInputProps = {
    *  row. Opcional para no romper usos antiguos. */
   entry?: SubformEntry;
   fields?: SubformField[];
+  /** Actualiza varios fields del row a la vez — lo usa `search` para
+   *  rellenar otros fields desde el resultado seleccionado del modal. */
+  onPatchEntry?: (patch: Record<string, string>) => void;
 };
 
-export default function FieldInput({ field, value, onChange, entry, fields }: FieldInputProps) {
+export default function FieldInput({
+  field,
+  value,
+  onChange,
+  entry,
+  fields,
+  onPatchEntry,
+}: FieldInputProps) {
   // ── Decorativos (no envían valor pero el <input hidden> mantiene FormData feliz) ──
   if (field.type === "header") {
     const text = field.headerText || field.label;
@@ -106,9 +119,27 @@ export default function FieldInput({ field, value, onChange, entry, fields }: Fi
     return <TextInput field={field} value={value} onChange={onChange} />;
   }
 
-  // ── Select / Search ──
-  if (field.type === "select" || field.type === "search") {
+  // ── Select ──
+  if (field.type === "select") {
     return <SelectInput field={field} value={value} onChange={onChange} />;
+  }
+
+  // ── Search (externo: google_sheets / excel_web / sql) ──
+  if (field.type === "search") {
+    // Si el admin no configuró una fuente, caemos al SelectInput "legacy"
+    // que trata options como fallback — útil para search configurados antes
+    // de que existiera la feature de fuentes externas.
+    if (!field.searchSource) {
+      return <SelectInput field={field} value={value} onChange={onChange} />;
+    }
+    return (
+      <SearchInput
+        field={field}
+        value={value}
+        onChange={onChange}
+        onPatchEntry={onPatchEntry}
+      />
+    );
   }
 
   // ── Radio ──
@@ -1707,5 +1738,274 @@ function VideoCapture({
         onChange={handleChange}
       />
     </div>
+  );
+}
+
+/**
+ * Widget `search` del subform — mismo flujo que el main: input + botón que
+ * abre un modal con resultados consultados en vivo de la fuente externa.
+ *
+ * Al seleccionar un row, guarda el value (de la columna de búsqueda o la
+ * primera displayColumn) y, si hay searchMappings, rellena los otros
+ * fields del mismo subform-row vía onPatchEntry. Esto es lo que hace útil
+ * tener el widget: una sola búsqueda llena múltiples campos (ej. buscar
+ * paciente → traer nombre, cédula, teléfono).
+ *
+ * Las funciones de fetch se reusan del main widget (googleSheets.ts,
+ * excelWeb.ts). SQL por ahora cae a un fetch inline simple — si crece lo
+ * extraemos a un source propio.
+ */
+type SearchRow = Record<string, unknown>;
+
+function SearchInput({
+  field,
+  value,
+  onChange,
+  onPatchEntry,
+}: {
+  field: SubformField;
+  value: string;
+  onChange: (v: string) => void;
+  onPatchEntry?: (patch: Record<string, string>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [rows, setRows] = useState<SearchRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const minChars = field.searchMinChars ?? 2;
+
+  // Construye el SearchWidgetConfig que esperan searchGoogleSheets /
+  // searchExcelWeb — es la forma más pragmática de reusar su lógica sin
+  // duplicar el parseo de URLs, CSV, etc.
+  const toMainConfig = (): SearchWidgetConfig => ({
+    sourceType:
+      field.searchSource === "excel_web"
+        ? "excel_web"
+        : field.searchSource === "sql"
+          ? "sql"
+          : "google_sheets",
+    sheetsUrl: field.sheetsUrl,
+    sheetsGid: field.sheetsGid,
+    sheetsSearchCol: field.sheetsSearchCol,
+    sheetColumns: field.sheetColumns,
+    excelUrl: field.excelUrl,
+    excelSearchCol: field.excelSearchCol,
+    sqlEndpoint: field.sqlEndpoint,
+    displayColumns: field.displayColumns,
+    minChars,
+  });
+
+  const runSearch = async (query: string) => {
+    setError("");
+    setLoading(true);
+    const cfg = toMainConfig();
+    try {
+      let result: SearchRow[] = [];
+      if (field.searchSource === "google_sheets") {
+        result = await searchGoogleSheets(cfg, query);
+      } else if (field.searchSource === "excel_web") {
+        result = await searchExcelWeb(cfg, query);
+      } else if (field.searchSource === "sql" && field.sqlEndpoint) {
+        const base =
+          field.sqlEndpoint.startsWith("/") || field.sqlEndpoint.startsWith("http")
+            ? field.sqlEndpoint
+            : `/api/${field.sqlEndpoint}`;
+        const token = localStorage.getItem("token") ?? "";
+        const res = await fetch(base, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ q: query }),
+        });
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          result = Array.isArray(data?.rows) ? data.rows : [];
+        } else {
+          setError(`Backend respondió ${res.status}`);
+        }
+      }
+      setRows(result);
+    } catch (e) {
+      setError((e as Error).message || "Error al consultar la fuente");
+      setRows([]);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    // Preview inicial al abrir: una búsqueda vacía — Sheets devuelve 50
+    // primeras filas, Excel devuelve 0 (su backend no soporta preview).
+    void runSearch("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (q.length < minChars) {
+      // Vuelve al preview inicial cuando el usuario borra.
+      if (q.length === 0) void runSearch("");
+      return;
+    }
+    const t = window.setTimeout(() => void runSearch(q), 300);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, open]);
+
+  const pickRow = (row: SearchRow) => {
+    // El value primario es la columna de búsqueda — si no existe, la
+    // primera displayColumn — si no, el primer campo del row.
+    const searchCol =
+      field.searchSource === "excel_web"
+        ? field.excelSearchCol
+        : field.sheetsSearchCol;
+    const firstDisplay = field.displayColumns?.[0]?.key;
+    const primaryKey =
+      (searchCol && row[searchCol] != null && searchCol) ||
+      (firstDisplay && row[firstDisplay] != null && firstDisplay) ||
+      Object.keys(row)[0];
+    const primaryVal = primaryKey ? String(row[primaryKey] ?? "") : "";
+    onChange(primaryVal);
+
+    // Aplica mappings: columna fuente → field del subform.
+    if (onPatchEntry && field.searchMappings?.length) {
+      const patch: Record<string, string> = {};
+      for (const m of field.searchMappings) {
+        if (!m.sourceField || !m.targetFieldId) continue;
+        const v = row[m.sourceField];
+        if (v != null) patch[m.targetFieldId] = String(v);
+      }
+      if (Object.keys(patch).length > 0) onPatchEntry(patch);
+    }
+
+    setOpen(false);
+  };
+
+  const displayCols =
+    field.displayColumns && field.displayColumns.length > 0
+      ? field.displayColumns
+      : (field.sheetColumns || []).map((k) => ({ key: k, label: k }));
+
+  return (
+    <>
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          name={field.id}
+          required={field.required}
+          value={value}
+          placeholder={field.placeholder || "Haz clic en Buscar…"}
+          readOnly
+          onClick={() => setOpen(true)}
+          className={`${INPUT_BASE} cursor-pointer`}
+        />
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="flex flex-shrink-0 cursor-pointer items-center gap-1.5 rounded-[7px] border-[1.5px] border-slate-200 bg-white px-3 py-2 text-[13px] font-semibold text-cyan-700 hover:border-cyan-600"
+        >
+          <Icon name="search" size={14} /> Buscar
+        </button>
+        {value && (
+          <button
+            type="button"
+            title="Limpiar"
+            onClick={() => onChange("")}
+            className="flex h-8 w-8 flex-shrink-0 cursor-pointer items-center justify-center rounded-md border-[1.5px] border-slate-200 bg-white text-[14px] text-slate-400 hover:text-red-500"
+          >
+            ×
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <div
+          className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/60 p-6"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="flex max-h-[80vh] w-full max-w-[720px] flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <Icon name="search" size={16} /> Buscar
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="cursor-pointer rounded border-none bg-transparent text-slate-500 hover:text-slate-800"
+              >
+                <Icon name="x" size={16} />
+              </button>
+            </div>
+            <div className="border-b border-slate-200 px-5 py-3">
+              <input
+                autoFocus
+                type="text"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder={
+                  minChars > 0
+                    ? `Escribe al menos ${minChars} caracteres…`
+                    : "Escribe para buscar…"
+                }
+                className={INPUT_BASE}
+              />
+              {error && (
+                <p className="mt-1.5 text-[12px] text-red-600">{error}</p>
+              )}
+            </div>
+            <div className="flex-1 overflow-y-auto px-2 py-2">
+              {loading ? (
+                <p className="px-3 py-6 text-center text-[13px] text-slate-500">
+                  Buscando…
+                </p>
+              ) : rows.length === 0 ? (
+                <p className="px-3 py-6 text-center text-[13px] text-slate-400">
+                  Sin resultados
+                </p>
+              ) : (
+                <table className="w-full border-collapse text-[13px]">
+                  <thead className="sticky top-0 bg-slate-50">
+                    <tr>
+                      {displayCols.map((c) => (
+                        <th
+                          key={c.key}
+                          className="border-b border-slate-200 px-2 py-1.5 text-left text-[11.5px] font-semibold uppercase tracking-wide text-slate-500"
+                        >
+                          {c.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row, i) => (
+                      <tr
+                        key={i}
+                        className="cursor-pointer border-b border-slate-100 hover:bg-cyan-50"
+                        onClick={() => pickRow(row)}
+                      >
+                        {displayCols.map((c) => (
+                          <td
+                            key={c.key}
+                            className="px-2 py-1.5 text-slate-700"
+                          >
+                            {String(row[c.key] ?? "")}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

@@ -92,6 +92,9 @@ export default function EntryModal({
                   }
                   entry={draft}
                   fields={fields}
+                  onPatchEntry={(patch) =>
+                    setDraft((prev) => ({ ...prev, ...patch }))
+                  }
                 />
               </div>
             ))

@@ -163,7 +163,11 @@ export default function SubformBuilderModal({
               onMove={moveField}
             />
             <div className="flex-1 overflow-y-auto px-7 py-6">
-              <FieldEditor field={editingField} onUpdate={updateField} />
+              <FieldEditor
+                field={editingField}
+                onUpdate={updateField}
+                allFields={localFields}
+              />
             </div>
           </div>
         ) : (

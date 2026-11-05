@@ -6,6 +6,8 @@ import { deleteFormAsset, uploadFormAsset } from "../../../../services/formAsset
 import { COUNTRIES } from "../../../../lib/countries";
 import { ID_DOC_COUNTRIES, ID_DOC_COUNTRY_MAP } from "../../../../lib/idDocuments";
 import { sanitizeHtml } from "../../../../utils/sanitize";
+import { fetchSheetsHeadersDetailed, parseSheetsUrl } from "../../search/sources/googleSheets";
+import { fetchExcelHeaders } from "../../search/sources/excelWeb";
 import {
   FIELDS_WITH_OPTIONS,
   FIELD_TYPES,
@@ -17,6 +19,9 @@ import {
 type FieldEditorProps = {
   field: SubformField | null;
   onUpdate: (id: string, changes: Partial<SubformField>) => void;
+  /** Todos los fields del subform — necesario para los mappings de `search`
+   *  (seleccionar un targetFieldId entre los otros campos del subform). */
+  allFields?: SubformField[];
 };
 
 function PreviewPlaceholder({
@@ -200,7 +205,11 @@ function FieldPreview({ field }: { field: SubformField }) {
   );
 }
 
-export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
+export default function FieldEditor({
+  field,
+  onUpdate,
+  allFields = [],
+}: FieldEditorProps) {
   if (!field) {
     return (
       <div className="flex h-full flex-col items-center justify-center text-center text-slate-400">
@@ -1275,6 +1284,11 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
         </>
       )}
 
+      {/* ── Search externo (Google Sheets / Excel Web / SQL) ── */}
+      {field.type === "search" && (
+        <SearchSourceEditor field={field} onUpdate={onUpdate} allFields={allFields} />
+      )}
+
       {/* ── Text: valor por defecto + filtros de teclado ── */}
       {field.type === "text" && (
         <>
@@ -2082,5 +2096,374 @@ function RichRadioOptions({
         + Añadir opción
       </button>
     </div>
+  );
+}
+
+/**
+ * Panel de configuración para el widget `search` del subform.
+ *
+ * Soporta google_sheets, excel_web y sql (las mismas fuentes externas del
+ * main search widget). No incluye form_submissions ni group — menos útiles
+ * dentro de un subform; se pueden agregar después.
+ *
+ * Al pegar la URL de Sheets o Excel, auto-detecta las columnas via backend
+ * proxy (el fetch directo falla por CORS en Sheets publicados). Esas
+ * columnas alimentan los selectores de displayColumns y de sourceField
+ * en los mappings.
+ *
+ * Los mappings rellenan OTROS fields del mismo subform-row al seleccionar
+ * un resultado en el modal. targetFieldId sale de allFields (excluyendo
+ * este mismo campo).
+ */
+function SearchSourceEditor({
+  field,
+  onUpdate,
+  allFields,
+}: {
+  field: SubformField;
+  onUpdate: (id: string, changes: Partial<SubformField>) => void;
+  allFields: SubformField[];
+}) {
+  const source = field.searchSource || "google_sheets";
+  const columns = field.sheetColumns || [];
+  const displayCols = field.displayColumns || [];
+  const mappings = field.searchMappings || [];
+
+  const [sheetsBusy, setSheetsBusy] = useState(false);
+  const [sheetsError, setSheetsError] = useState("");
+
+  const detectSheetsHeaders = async (url: string) => {
+    setSheetsError("");
+    if (!url.trim()) {
+      onUpdate(field.id, { sheetColumns: [] });
+      return;
+    }
+    setSheetsBusy(true);
+    const parsed = parseSheetsUrl(url);
+    const gidFromUrl = parsed?.gid ?? undefined;
+    const r = await fetchSheetsHeadersDetailed(url);
+    setSheetsBusy(false);
+    if (r.error) {
+      setSheetsError(r.error);
+      return;
+    }
+    onUpdate(field.id, {
+      sheetColumns: r.headers,
+      ...(gidFromUrl ? { sheetsGid: gidFromUrl } : {}),
+    });
+  };
+
+  const detectExcelHeaders = async (url: string) => {
+    setSheetsError("");
+    if (!url.trim()) {
+      onUpdate(field.id, { sheetColumns: [] });
+      return;
+    }
+    setSheetsBusy(true);
+    const headers = await fetchExcelHeaders(url);
+    setSheetsBusy(false);
+    if (headers.length === 0) {
+      setSheetsError("No se pudieron leer los headers del Excel.");
+      return;
+    }
+    onUpdate(field.id, { sheetColumns: headers });
+  };
+
+  const toggleDisplayCol = (key: string) => {
+    const exists = displayCols.find((c) => c.key === key);
+    const next = exists
+      ? displayCols.filter((c) => c.key !== key)
+      : [...displayCols, { key, label: key }];
+    onUpdate(field.id, { displayColumns: next });
+  };
+
+  const updateDisplayLabel = (key: string, label: string) => {
+    const next = displayCols.map((c) =>
+      c.key === key ? { ...c, label } : c,
+    );
+    onUpdate(field.id, { displayColumns: next });
+  };
+
+  const addMapping = () => {
+    onUpdate(field.id, {
+      searchMappings: [
+        ...mappings,
+        { sourceField: columns[0] || "", targetFieldId: "" },
+      ],
+    });
+  };
+
+  const updateMapping = (
+    idx: number,
+    changes: Partial<(typeof mappings)[0]>,
+  ) => {
+    const next = mappings.map((m, i) => (i === idx ? { ...m, ...changes } : m));
+    onUpdate(field.id, { searchMappings: next });
+  };
+
+  const removeMapping = (idx: number) => {
+    onUpdate(field.id, {
+      searchMappings: mappings.filter((_, i) => i !== idx),
+    });
+  };
+
+  const mappableFields = allFields.filter(
+    (f) =>
+      f.id !== field.id &&
+      ![
+        "header",
+        "htmlblock",
+        "image",
+        "video",
+        "signature",
+        "photo",
+        "file",
+        "calc",
+        "quiz_score",
+      ].includes(f.type),
+  );
+
+  return (
+    <>
+      <div className="mb-[18px]">
+        <label className={SUBFORM_LABEL_CLASS}>Fuente de datos</label>
+        <select
+          className={SUBFORM_INPUT_CLASS}
+          value={source}
+          onChange={(e) =>
+            onUpdate(field.id, {
+              searchSource: e.target.value as SubformField["searchSource"],
+              sheetColumns: [],
+              displayColumns: [],
+              searchMappings: [],
+            })
+          }
+        >
+          <option value="google_sheets">Google Sheets</option>
+          <option value="excel_web">Excel en la web (OneDrive)</option>
+          <option value="sql">Consulta SQL (endpoint backend)</option>
+        </select>
+      </div>
+
+      {source === "google_sheets" && (
+        <>
+          <div className="mb-[18px]">
+            <label className={SUBFORM_LABEL_CLASS}>URL del Google Sheet</label>
+            <input
+              className={SUBFORM_INPUT_CLASS}
+              value={field.sheetsUrl || ""}
+              placeholder="https://docs.google.com/spreadsheets/d/…"
+              onChange={(e) => onUpdate(field.id, { sheetsUrl: e.target.value })}
+              onBlur={(e) => void detectSheetsHeaders(e.target.value)}
+            />
+            <p className="mt-1 text-[11px] leading-snug text-slate-400">
+              El Sheet debe estar "Compartir con enlace" o "Publicar en la Web".
+              Al pegar la URL se detectan las columnas automáticamente.
+            </p>
+          </div>
+          {columns.length > 0 && (
+            <div className="mb-[18px]">
+              <label className={SUBFORM_LABEL_CLASS}>Columna de búsqueda</label>
+              <select
+                className={SUBFORM_INPUT_CLASS}
+                value={field.sheetsSearchCol || ""}
+                onChange={(e) =>
+                  onUpdate(field.id, { sheetsSearchCol: e.target.value })
+                }
+              >
+                <option value="">— Elige una columna —</option>
+                {columns.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </>
+      )}
+
+      {source === "excel_web" && (
+        <>
+          <div className="mb-[18px]">
+            <label className={SUBFORM_LABEL_CLASS}>URL del Excel</label>
+            <input
+              className={SUBFORM_INPUT_CLASS}
+              value={field.excelUrl || ""}
+              placeholder="https://…/sharepoint.com/…/archivo.xlsx"
+              onChange={(e) => onUpdate(field.id, { excelUrl: e.target.value })}
+              onBlur={(e) => void detectExcelHeaders(e.target.value)}
+            />
+            <p className="mt-1 text-[11px] leading-snug text-slate-400">
+              El Excel debe estar publicado en OneDrive/SharePoint. Al pegar la
+              URL se detectan las columnas automáticamente.
+            </p>
+          </div>
+          {columns.length > 0 && (
+            <div className="mb-[18px]">
+              <label className={SUBFORM_LABEL_CLASS}>Columna de búsqueda</label>
+              <select
+                className={SUBFORM_INPUT_CLASS}
+                value={field.excelSearchCol || ""}
+                onChange={(e) =>
+                  onUpdate(field.id, { excelSearchCol: e.target.value })
+                }
+              >
+                <option value="">— Elige una columna —</option>
+                {columns.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </>
+      )}
+
+      {source === "sql" && (
+        <div className="mb-[18px]">
+          <label className={SUBFORM_LABEL_CLASS}>Endpoint SQL del backend</label>
+          <input
+            className={SUBFORM_INPUT_CLASS}
+            value={field.sqlEndpoint || ""}
+            placeholder="/api/forms/search-source/sql/mi-consulta"
+            onChange={(e) => onUpdate(field.id, { sqlEndpoint: e.target.value })}
+          />
+          <p className="mt-1 text-[11px] leading-snug text-slate-400">
+            El endpoint recibe <code>{"{ q: string }"}</code> y debe responder{" "}
+            <code>{"{ rows: [...] }"}</code>.
+          </p>
+        </div>
+      )}
+
+      {sheetsBusy && (
+        <p className="mb-2 text-[11.5px] text-slate-500">
+          Detectando columnas…
+        </p>
+      )}
+      {sheetsError && (
+        <p className="mb-2 text-[11.5px] text-red-600">{sheetsError}</p>
+      )}
+
+      {columns.length > 0 && (
+        <div className="mb-[18px]">
+          <label className={SUBFORM_LABEL_CLASS}>Columnas a mostrar</label>
+          <div className="flex flex-col gap-1 rounded-lg border border-slate-200 bg-slate-50 p-2">
+            {columns.map((col) => {
+              const picked = displayCols.find((c) => c.key === col);
+              return (
+                <div key={col} className="flex items-center gap-2 text-[13px]">
+                  <input
+                    type="checkbox"
+                    checked={!!picked}
+                    onChange={() => toggleDisplayCol(col)}
+                    className="h-4 w-4 accent-[#00c2a8]"
+                  />
+                  <span className="min-w-[120px] font-mono text-[12px] text-slate-600">
+                    {col}
+                  </span>
+                  {picked && (
+                    <input
+                      className={`${SUBFORM_INPUT_CLASS} flex-1 py-1 text-[12px]`}
+                      value={picked.label}
+                      placeholder="Etiqueta visible"
+                      onChange={(e) => updateDisplayLabel(col, e.target.value)}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-1 text-[11px] leading-snug text-slate-400">
+            El usuario ve estas columnas en el modal de resultados.
+          </p>
+        </div>
+      )}
+
+      <div className="mb-[18px] grid grid-cols-2 gap-3">
+        <div>
+          <label className={SUBFORM_LABEL_CLASS}>Mín. caracteres</label>
+          <input
+            type="number"
+            min={0}
+            max={10}
+            className={SUBFORM_INPUT_CLASS}
+            value={field.searchMinChars ?? 2}
+            onChange={(e) =>
+              onUpdate(field.id, {
+                searchMinChars: parseInt(e.target.value) || 0,
+              })
+            }
+          />
+        </div>
+      </div>
+
+      {columns.length > 0 && mappableFields.length > 0 && (
+        <div className="mb-[18px]">
+          <div className="mb-1.5 flex items-center justify-between">
+            <label className={`${SUBFORM_LABEL_CLASS} mb-0`}>
+              Rellenar otros campos al seleccionar
+            </label>
+            <button
+              type="button"
+              onClick={addMapping}
+              className="cursor-pointer rounded-md border-[1.5px] border-slate-200 bg-white px-2 py-1 text-[11.5px] font-semibold text-cyan-700 hover:border-cyan-600"
+            >
+              + Añadir
+            </button>
+          </div>
+          {mappings.length === 0 ? (
+            <p className="text-[11.5px] text-slate-400">
+              Sin mapeos. Añade uno para auto-rellenar un campo del subform con
+              un valor del resultado.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {mappings.map((m, idx) => (
+                <div key={idx} className="flex items-center gap-1.5">
+                  <select
+                    className={`${SUBFORM_INPUT_CLASS} flex-1 py-1 text-[12px]`}
+                    value={m.sourceField}
+                    onChange={(e) =>
+                      updateMapping(idx, { sourceField: e.target.value })
+                    }
+                  >
+                    <option value="">— Columna de la fuente —</option>
+                    {columns.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[11px] text-slate-400">→</span>
+                  <select
+                    className={`${SUBFORM_INPUT_CLASS} flex-1 py-1 text-[12px]`}
+                    value={m.targetFieldId}
+                    onChange={(e) =>
+                      updateMapping(idx, { targetFieldId: e.target.value })
+                    }
+                  >
+                    <option value="">— Campo del subform —</option>
+                    {mappableFields.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.label || f.id}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => removeMapping(idx)}
+                    className="flex h-7 w-7 flex-shrink-0 cursor-pointer items-center justify-center rounded-md border-[1.5px] border-slate-200 bg-white text-[14px] leading-none text-slate-400 hover:text-red-500"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </>
   );
 }
