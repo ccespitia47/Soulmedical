@@ -1967,24 +1967,34 @@ function SearchInput({
               </button>
             </div>
             <div className="border-b border-slate-200 px-5 py-3">
-              <input
-                autoFocus
-                type="text"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder={
-                  minChars > 0
-                    ? `Escribe al menos ${minChars} caracteres…`
-                    : "Escribe para buscar…"
-                }
-                className={INPUT_BASE}
-              />
+              <div className="relative">
+                <input
+                  autoFocus
+                  type="text"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder={
+                    minChars > 0
+                      ? `Escribe al menos ${minChars} caracteres…`
+                      : "Escribe para buscar…"
+                  }
+                  className={`${INPUT_BASE} pr-9`}
+                />
+                {loading && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-slate-400">
+                    ⏳
+                  </span>
+                )}
+              </div>
               {error && (
                 <p className="mt-1.5 text-[12px] text-red-600">{error}</p>
               )}
             </div>
             <div className="flex-1 overflow-y-auto px-2 py-2">
-              {loading ? (
+              {/* Si ya hay rows previos, mantenerlos visibles mientras se
+                  busca — evita el flash feo de "Buscando…" vaciando la tabla
+                  en cada tecla. El spinner del input ya indica la actividad. */}
+              {loading && rows.length === 0 ? (
                 <p className="px-3 py-6 text-center text-[13px] text-slate-500">
                   Buscando…
                 </p>
