@@ -24,7 +24,9 @@ export type SubformFieldType =
   | "search"
   | "calc"
   | "quiz_question"
-  | "quiz_score";
+  | "quiz_score"
+  // ── Subform anidado (ver `childFields` + `childRules` en SubformField). ──
+  | "subform";
 
 /**
  * ── Deuda técnica: renames pendientes contra el schema del formulario
@@ -258,6 +260,17 @@ export type SubformField = {
    * (Prop solo vive aquí → rename puro, bajo riesgo.)
    */
   idscannerFields?: string[];
+
+  // ── subform anidado ──────────────────────────────────────────────────
+  /**
+   * Cuando `type === "subform"`: fields del subformulario anidado.
+   * El valor de este field en el entry del padre se serializa como JSON
+   * string de `SubformEntry[]` (mismo contrato que un subform top-level).
+   * Admite N niveles de anidación.
+   */
+  childFields?: SubformField[];
+  /** Cuando `type === "subform"`: reglas propias del subform anidado. */
+  childRules?: SubformRule[];
 
   // ── search (externo — google sheets / excel web / sql) ───────────────
   /** search: fuente de datos a consultar. */

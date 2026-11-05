@@ -245,6 +245,7 @@ export default function FieldEditor({
     "calc",
     "quiz_question",
     "quiz_score",
+    "subform",
   ]);
   const hasPlaceholder = !noPlaceholder.has(field.type);
   // Tipos que no se pueden marcar como obligatorios (decorativos / calculados).
@@ -1287,6 +1288,11 @@ export default function FieldEditor({
       {/* ── Search externo (Google Sheets / Excel Web / SQL) ── */}
       {field.type === "search" && (
         <SearchSourceEditor field={field} onUpdate={onUpdate} allFields={allFields} />
+      )}
+
+      {/* ── Subform anidado ── */}
+      {field.type === "subform" && (
+        <NestedSubformEditor field={field} onUpdate={onUpdate} />
       )}
 
       {/* ── Text: valor por defecto + filtros de teclado ── */}
@@ -2490,6 +2496,83 @@ function SearchSourceEditor({
             </div>
           )}
         </div>
+      )}
+    </>
+  );
+}
+
+/**
+ * Editor del subform anidado. El `SubformBuilderModal` se re-abre como
+ * ventana superpuesta y el admin edita los `childFields` / `childRules`
+ * del field como si fuera un subform top-level — gracias a que el modal
+ * usa este mismo `FieldEditor`, la anidación funciona a N niveles sin
+ * componentes adicionales (`FieldEditor` → `type==="subform"` → nuevo
+ * `NestedSubformEditor` → nuevo `SubformBuilderModal`).
+ *
+ * Importación perezosa (require en el click) para romper el ciclo
+ * FieldEditor ↔ SubformBuilderModal — ESM puede resolverlo pero algunas
+ * configuraciones de Vite/HMR fallan silenciosamente, y pagar un
+ * `import()` dinámico cuesta un microsegundo al abrir el modal.
+ */
+function NestedSubformEditor({
+  field,
+  onUpdate,
+}: {
+  field: SubformField;
+  onUpdate: (id: string, changes: Partial<SubformField>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [ModalLazy, setModalLazy] = useState<
+    typeof import("./SubformBuilderModal").default | null
+  >(null);
+
+  const childFields = field.childFields ?? [];
+  const childRules = field.childRules ?? [];
+
+  const openEditor = async () => {
+    if (!ModalLazy) {
+      const mod = await import("./SubformBuilderModal");
+      setModalLazy(() => mod.default);
+    }
+    setOpen(true);
+  };
+
+  return (
+    <>
+      <div className="mb-[18px] rounded-lg border-[1.5px] border-dashed border-slate-200 bg-slate-50 p-3">
+        <div className="mb-2 flex items-center gap-2 text-[13px] text-slate-700">
+          <Icon name="table" size={14} />
+          <span className="font-semibold">Subformulario anidado</span>
+        </div>
+        <p className="mb-2.5 text-[12px] text-slate-500">
+          {childFields.length === 0
+            ? "Sin campos configurados todavía."
+            : `${childFields.length} campo(s) · ${childRules.length} regla(s).`}
+        </p>
+        <button
+          type="button"
+          onClick={() => void openEditor()}
+          className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border-[1.5px] border-slate-300 bg-white px-3 py-1.5 text-[12.5px] font-semibold text-cyan-700 hover:border-cyan-600"
+        >
+          <Icon name="edit" size={12} />{" "}
+          {childFields.length === 0 ? "Configurar campos" : "Editar campos"}
+        </button>
+      </div>
+
+      {open && ModalLazy && (
+        <ModalLazy
+          widgetLabel={field.label || "Subformulario anidado"}
+          fields={childFields}
+          rules={childRules}
+          onSave={(nextFields, nextRules) => {
+            onUpdate(field.id, {
+              childFields: nextFields,
+              childRules: nextRules,
+            });
+            setOpen(false);
+          }}
+          onClose={() => setOpen(false)}
+        />
       )}
     </>
   );

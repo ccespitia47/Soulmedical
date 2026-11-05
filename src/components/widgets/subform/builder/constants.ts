@@ -27,6 +27,7 @@ export const SUBFORM_FIELD_ICONS: Record<SubformFieldType, string> = {
   calc:          "calc",
   quiz_question: "help",
   quiz_score:    "award",
+  subform:       "table",
 };
 
 export const FIELD_TYPES: { value: SubformFieldType; label: string }[] = [
@@ -55,6 +56,7 @@ export const FIELD_TYPES: { value: SubformFieldType; label: string }[] = [
   { value: "calc",          label: "Cálculo"             },
   { value: "quiz_question", label: "Pregunta de quiz"    },
   { value: "quiz_score",    label: "Nota final (quiz)"   },
+  { value: "subform",       label: "Subformulario anidado" },
 ];
 
 export const OPERATOR_LABELS: Record<SubformRuleOperator, string> = {
