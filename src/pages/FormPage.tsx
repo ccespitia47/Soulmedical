@@ -52,6 +52,14 @@ export default function FormPage({
   const [showSuccess, setShowSuccess] = useState(false);
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  // Contador que se incrementa al cerrar el modal de éxito; va como `key`
+  // del FormBody para forzar el remount completo de los widgets. Sin esto,
+  // widgets con estado React interno (p. ej. PendingActivity cachea la
+  // lista de pendientes y la selección) conservan datos del envío anterior
+  // aunque `setFieldValues({})` y `formRef.reset()` corran. Remontar
+  // dispara los useEffect de fetch iniciales, y las actividades que el
+  // envío acaba de cerrar ya no vuelven del backend como pendientes.
+  const [formKey, setFormKey] = useState(0);
   const [emailStatus, setEmailStatus] = useState<EmailStatus>("idle");
   const [emailError, setEmailError] = useState<string | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
@@ -458,12 +466,16 @@ export default function FormPage({
     setEmailStatus("idle");
     setEmailError(null);
     formRef.current?.reset();
+    // Remount: los widgets con estado interno (PendingActivity, Signature,
+    // Photo, etc.) resetean su UI y re-fetchean lo que necesiten.
+    setFormKey((k) => k + 1);
   };
 
   return (
     <div className="flex min-h-screen flex-col bg-[#f0f4f8] font-sans">
       {!isPublic && <FormHeader formName={formName} onClose={onClose} />}
       <FormBody
+        key={formKey}
         ref={formRef}
         formName={formName}
         widgets={widgets}
