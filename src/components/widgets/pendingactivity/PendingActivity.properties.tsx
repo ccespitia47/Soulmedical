@@ -61,9 +61,36 @@ export default function PendingActivityProperties({
   );
 
   const planningForm = forms.find((f) => f.id === cfg.planningFormId);
-  const subforms = (planningForm?.widgets ?? []).filter(
-    (w) => w.type === "subform",
-  );
+  // Walk recursivo: enumera subforms top-level + sus childFields tipo
+  // "subform" a cualquier profundidad. `path` es la ruta con puntos
+  // (ej. "visitas.actividades") que el backend entiende, y `label` es
+  // la cadena jerárquica visible ("Visitas › Actividades").
+  type SubformNode = { path: string; label: string; fields: SubField[] };
+  const subforms: SubformNode[] = (() => {
+    const out: SubformNode[] = [];
+    function walk(node: SchemaWidget | SubField, path: string, label: string) {
+      // Tanto el widget top-level `subform` como un SubformField anidado
+      // con type === "subform" guardan sus hijos en `config.fields`
+      // (widget) o en `childFields` (field anidado). Normalizo acá.
+      const cfg = (node as SchemaWidget).config as Record<string, unknown> | undefined;
+      const fields: SubField[] = Array.isArray(cfg?.fields)
+        ? (cfg.fields as SubField[])
+        : Array.isArray((node as { childFields?: SubField[] }).childFields)
+          ? ((node as { childFields?: SubField[] }).childFields as SubField[])
+          : [];
+      out.push({ path, label, fields });
+      // Buscamos más subforms anidados dentro de los fields.
+      for (const f of fields) {
+        if ((f as { type?: string }).type === "subform") {
+          walk(f, `${path}.${f.id}`, `${label} › ${f.label || "Subformulario"}`);
+        }
+      }
+    }
+    for (const w of (planningForm?.widgets ?? []) as SchemaWidget[]) {
+      if (w.type === "subform") walk(w, w.id, w.label || "Subformulario");
+    }
+    return out;
+  })();
 
   // Los forms "hermanos" del proyecto están en modo resumen (widgets=[])
   // hasta que alguien los abre en el Builder — por eso el selector mostraba
@@ -91,8 +118,8 @@ export default function PendingActivityProperties({
       ? [cfg.subformWidgetId as string]
       : [];
 
-  const selectedSubforms = subforms.filter((w) =>
-    subformWidgetIds.includes(w.id),
+  const selectedSubforms = subforms.filter((sf) =>
+    subformWidgetIds.includes(sf.path),
   );
   // Union de fields de TODOS los subforms seleccionados (dedup por id).
   // El admin marca qué mostrar; si un field no existe en un subform
@@ -102,7 +129,7 @@ export default function PendingActivityProperties({
     const seen = new Set<string>();
     const out: SubField[] = [];
     for (const sf of selectedSubforms) {
-      for (const f of (sf.config?.fields as SubField[]) ?? []) {
+      for (const f of sf.fields) {
         if (!seen.has(f.id)) {
           seen.add(f.id);
           out.push(f);
@@ -113,18 +140,17 @@ export default function PendingActivityProperties({
   })();
   const displayFields = (cfg.displayFields as string[]) ?? [];
 
-  const toggleSubform = (id: string) => {
-    const next = subformWidgetIds.includes(id)
-      ? subformWidgetIds.filter((x) => x !== id)
-      : [...subformWidgetIds, id];
+  const togglePath = (path: string) => {
+    const next = subformWidgetIds.includes(path)
+      ? subformWidgetIds.filter((x) => x !== path)
+      : [...subformWidgetIds, path];
     // Al cambiar la selección, limpiamos displayFields que ya no existen
     // en los subforms activos (evita checkboxes huérfanos en el runtime).
-    const nextIds = new Set(next);
-    const nextSubforms = subforms.filter((w) => nextIds.has(w.id));
+    const nextPaths = new Set(next);
+    const nextSubforms = subforms.filter((sf) => nextPaths.has(sf.path));
     const nextFieldIds = new Set<string>();
     for (const sf of nextSubforms)
-      for (const f of (sf.config?.fields as SubField[]) ?? [])
-        nextFieldIds.add(f.id);
+      for (const f of sf.fields) nextFieldIds.add(f.id);
     const prunedDisplay = displayFields.filter((id) => nextFieldIds.has(id));
     set({
       subformWidgetIds: next,
@@ -199,11 +225,16 @@ export default function PendingActivityProperties({
                   padding: 8,
                 }}
               >
-                {subforms.map((w) => {
-                  const active = subformWidgetIds.includes(w.id);
+                {subforms.map((sf) => {
+                  const active = subformWidgetIds.includes(sf.path);
+                  // Indentación visual proporcional a la profundidad del
+                  // subform anidado (cantidad de "." en el path). Hace
+                  // obvio qué es padre y qué hijo cuando el admin ve la
+                  // lista.
+                  const depth = sf.path.split(".").length - 1;
                   return (
                     <label
-                      key={w.id}
+                      key={sf.path}
                       style={{
                         display: "flex",
                         alignItems: "center",
@@ -211,6 +242,7 @@ export default function PendingActivityProperties({
                         fontSize: 13,
                         cursor: "pointer",
                         padding: "4px 6px",
+                        paddingLeft: 6 + depth * 14,
                         borderRadius: 5,
                         background: active ? "#ecfeff" : "transparent",
                         fontWeight: active ? 600 : 400,
@@ -220,17 +252,18 @@ export default function PendingActivityProperties({
                       <input
                         type="checkbox"
                         checked={active}
-                        onChange={() => toggleSubform(w.id)}
+                        onChange={() => togglePath(sf.path)}
                         style={{ accentColor: "#0891b2" }}
                       />
-                      <span style={{ flex: 1 }}>{w.label}</span>
+                      <span style={{ flex: 1 }}>{sf.label}</span>
                     </label>
                   );
                 })}
               </div>
               <p style={HINT}>
                 Podés activar varios — el widget unirá las actividades
-                pendientes de todos los subformularios marcados.
+                pendientes de todos los subformularios marcados (incluyendo
+                anidados).
               </p>
             </>
           )}
