@@ -1,10 +1,10 @@
 import { useEffect, useRef } from "react";
 import { clearSession, getToken, refreshTokenApi, saveSession, getStoredUser } from "../services/api";
 
-const IDLE_LIMIT_MS = 60 * 60 * 1000; // 1 h sin actividad → logout
-const REFRESH_LEAD_MS = 60 * 1000; // Refrescar 60s antes de expirar
+const IDLE_LIMIT_MS = 60 * 60 * 1000; // 1h sin actividad → logout
+const REFRESH_LEAD_MS = 60 * 1000; // Refrescar cada 60s antes de expirar
 const REFRESH_MIN_DELAY_MS = 5 * 1000; // Nunca refrescar tan seguido que sature el backend
-const REFRESH_RETRY_MS = 30 * 1000; // Reintentar refresh a los 30s si falló y aún queda tiempo
+const REFRESH_RETRY_MS = 30 * 1000; // Reintentar refrescar a los 30s si falló
 const WINDOW_ACTIVITY_EVENTS: (keyof WindowEventMap)[] = [
   "mousedown",
   "mousemove",
