@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { SubformField } from "../subform.types";
 import Icon from "../../../common/Icon";
 import SubformFieldTypeSelect from "./SubformFieldTypeSelect";
@@ -2131,6 +2131,17 @@ function SearchSourceEditor({
 
   const [sheetsBusy, setSheetsBusy] = useState(false);
   const [sheetsError, setSheetsError] = useState("");
+
+  // Si el field aún no tiene `searchSource`, lo seedeamos a
+  // "google_sheets" en el schema — si no, el user puede configurar la URL
+  // sin tocar el <select> y el runtime queda sin fuente (cayendo a
+  // SelectInput vacío con la option "Opción 1" huérfana).
+  useEffect(() => {
+    if (!field.searchSource) {
+      onUpdate(field.id, { searchSource: "google_sheets" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [field.id]);
 
   const detectSheetsHeaders = async (url: string) => {
     setSheetsError("");

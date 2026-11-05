@@ -126,12 +126,6 @@ export default function FieldInput({
 
   // ── Search (externo: google_sheets / excel_web / sql) ──
   if (field.type === "search") {
-    // Si el admin no configuró una fuente, caemos al SelectInput "legacy"
-    // que trata options como fallback — útil para search configurados antes
-    // de que existiera la feature de fuentes externas.
-    if (!field.searchSource) {
-      return <SelectInput field={field} value={value} onChange={onChange} />;
-    }
     return (
       <SearchInput
         field={field}
@@ -1774,6 +1768,25 @@ function SearchInput({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const minChars = field.searchMinChars ?? 2;
+
+  // Determina si la fuente está "lista" — hay URL/endpoint según el tipo.
+  // Un search sin configuración completa no abre el modal; mostramos un
+  // estado explícito en lugar de un select vacío que confundía al usuario.
+  const source = field.searchSource;
+  const configured =
+    (source === "google_sheets" && !!field.sheetsUrl) ||
+    (source === "excel_web" && !!field.excelUrl) ||
+    (source === "sql" && !!field.sqlEndpoint);
+
+  if (!configured) {
+    return (
+      <div className="rounded-[7px] border border-dashed border-slate-300 bg-slate-50 px-3 py-2.5 text-[12.5px] text-slate-500">
+        <Icon name="search" size={13} /> Este campo de búsqueda aún no tiene
+        una fuente de datos configurada. Pídele al admin del formulario que
+        complete la URL de Google Sheets / Excel o el endpoint SQL.
+      </div>
+    );
+  }
 
   // Construye el SearchWidgetConfig que esperan searchGoogleSheets /
   // searchExcelWeb — es la forma más pragmática de reusar su lógica sin
