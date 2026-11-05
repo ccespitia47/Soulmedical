@@ -80,11 +80,12 @@ export const HAS_VALUE_OPTIONS: { value: string; label: string }[] = [
   { value: "no", label: "No" },
 ];
 
+// search NO va acá: sus "opciones" vienen de la fuente externa (sheets/
+// excel/sql) configurada en SearchSourceEditor, no de un array manual.
 export const FIELDS_WITH_OPTIONS: SubformFieldType[] = [
   "select",
   "radio",
   "checkbox",
-  "search",
   "quiz_question",
 ];
 
