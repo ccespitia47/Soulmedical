@@ -100,6 +100,8 @@ export type SubformField = {
   penColor?: string;
   /** signature: grosor del trazo en px. */
   penWidth?: number;
+  /** signature: en tareas multi-destinatario, número del paso (1, 2…) que debe firmar; 0 = cualquiera. */
+  assignedStep?: number;
 
   // ── calc ─────────────────────────────────────────────────────────────
   /** calc: operador aplicado a los campos referenciados. */
@@ -124,6 +126,10 @@ export type SubformField = {
   // ── phone ────────────────────────────────────────────────────────────
   /** phone: prefijo fijo mostrado (+57, +1…). */
   prefix?: string;
+  /** phone: muestra un selector de país que sobrescribe `prefix` en runtime. */
+  enableCountrySelector?: boolean;
+  /** phone: código ISO del país por defecto cuando enableCountrySelector=true (ej. "CO"). */
+  defaultCountry?: string;
 
   // ── time ─────────────────────────────────────────────────────────────
   /** time: si está vacío al montar, setea HH:mm actual. */
@@ -150,8 +156,16 @@ export type SubformField = {
   maxDate?: string;
 
   // ── idDocument ───────────────────────────────────────────────────────
-  /** idDocument: formatea con separador de miles al tipear. */
-  thousandsSeparator?: boolean;
+  /** idDocument: países habilitados (códigos ISO). Si está vacío = solo CO. */
+  countries?: string[];
+  // (defaultCountry está arriba, compartido con phone)
+  /**
+   * idDocument: separador de miles.
+   * - String ("none" | "dot" | "comma"): formato alineado con main.
+   * - boolean legacy: true→"dot", false→"none" (se mantiene por compat con
+   *   configs guardadas antes de este cambio).
+   */
+  thousandsSeparator?: "none" | "dot" | "comma" | boolean;
 
   // ── image (view-only — URL externa o upload a GridFS) ────────────────
   /** image: fileId en GridFS cuando la imagen fue subida (no URL externa). */

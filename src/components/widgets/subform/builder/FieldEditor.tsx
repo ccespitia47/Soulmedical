@@ -3,6 +3,8 @@ import type { SubformField } from "../subform.types";
 import Icon from "../../../common/Icon";
 import SubformFieldTypeSelect from "./SubformFieldTypeSelect";
 import { deleteFormAsset, uploadFormAsset } from "../../../../services/formAssets";
+import { COUNTRIES } from "../../../../lib/countries";
+import { ID_DOC_COUNTRIES, ID_DOC_COUNTRY_MAP } from "../../../../lib/idDocuments";
 import {
   FIELDS_WITH_OPTIONS,
   FIELD_TYPES,
@@ -697,45 +699,81 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
         </>
       )}
 
-      {/* ── Phone: prefijo + maxLength + defaultValue ── */}
+      {/* ── Phone: prefijo + maxLength + defaultValue + country selector ── */}
       {field.type === "phone" && (
-        <div className="mb-[18px] grid grid-cols-3 gap-3">
-          <div>
-            <label className={SUBFORM_LABEL_CLASS}>Prefijo</label>
-            <input
-              className={SUBFORM_INPUT_CLASS}
-              value={field.prefix || ""}
-              placeholder="+57"
-              onChange={(e) => onUpdate(field.id, { prefix: e.target.value })}
-            />
+        <>
+          <div className="mb-[18px] grid grid-cols-3 gap-3">
+            <div>
+              <label className={SUBFORM_LABEL_CLASS}>Prefijo</label>
+              <input
+                className={SUBFORM_INPUT_CLASS}
+                value={field.prefix || ""}
+                placeholder="+57"
+                disabled={field.enableCountrySelector}
+                onChange={(e) =>
+                  onUpdate(field.id, { prefix: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <label className={SUBFORM_LABEL_CLASS}>Long. máxima</label>
+              <input
+                type="number"
+                min={0}
+                className={SUBFORM_INPUT_CLASS}
+                value={field.maxLength ?? ""}
+                placeholder="10"
+                onChange={(e) =>
+                  onUpdate(field.id, {
+                    maxLength:
+                      e.target.value === "" ? undefined : parseInt(e.target.value),
+                  })
+                }
+              />
+            </div>
+            <div>
+              <label className={SUBFORM_LABEL_CLASS}>Valor por defecto</label>
+              <input
+                className={SUBFORM_INPUT_CLASS}
+                value={field.defaultValue || ""}
+                onChange={(e) =>
+                  onUpdate(field.id, { defaultValue: e.target.value })
+                }
+              />
+            </div>
           </div>
-          <div>
-            <label className={SUBFORM_LABEL_CLASS}>Long. máxima</label>
+          <label className="mb-3 flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
             <input
-              type="number"
-              min={0}
-              className={SUBFORM_INPUT_CLASS}
-              value={field.maxLength ?? ""}
-              placeholder="10"
+              type="checkbox"
+              checked={field.enableCountrySelector ?? false}
               onChange={(e) =>
                 onUpdate(field.id, {
-                  maxLength:
-                    e.target.value === "" ? undefined : parseInt(e.target.value),
+                  enableCountrySelector: e.target.checked,
                 })
               }
+              className="h-4 w-4 accent-[#00c2a8]"
             />
-          </div>
-          <div>
-            <label className={SUBFORM_LABEL_CLASS}>Valor por defecto</label>
-            <input
-              className={SUBFORM_INPUT_CLASS}
-              value={field.defaultValue || ""}
-              onChange={(e) =>
-                onUpdate(field.id, { defaultValue: e.target.value })
-              }
-            />
-          </div>
-        </div>
+            <span>Permitir al usuario cambiar país</span>
+          </label>
+          {field.enableCountrySelector && (
+            <div className="mb-[18px]">
+              <label className={SUBFORM_LABEL_CLASS}>País por defecto</label>
+              <select
+                className={SUBFORM_INPUT_CLASS}
+                value={field.defaultCountry || "CO"}
+                onChange={(e) =>
+                  onUpdate(field.id, { defaultCountry: e.target.value })
+                }
+              >
+                {COUNTRIES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.flag} {c.name} ({c.dialCode})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </>
       )}
 
       {/* ── Date: min/max + defaultValue ── */}
@@ -887,20 +925,113 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
         </div>
       )}
 
-      {/* ── idDocument: thousandsSeparator ── */}
-      {field.type === "idDocument" && (
-        <label className="mb-[18px] flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
-          <input
-            type="checkbox"
-            checked={field.thousandsSeparator ?? false}
-            onChange={(e) =>
-              onUpdate(field.id, { thousandsSeparator: e.target.checked })
-            }
-            className="h-4 w-4 accent-[#00c2a8]"
-          />
-          <span>Formatear con separador de miles (1.234.567)</span>
-        </label>
-      )}
+      {/* ── idDocument: multi-país + thousandsSeparator (tri-estado) ── */}
+      {field.type === "idDocument" && (() => {
+        const countries = field.countries?.length ? field.countries : ["CO"];
+        const defaultCountry = field.defaultCountry || countries[0];
+        // Lectura con compat: boolean legacy → string. Default "none".
+        const thousandsRaw = field.thousandsSeparator;
+        const thousands: "none" | "dot" | "comma" =
+          typeof thousandsRaw === "string"
+            ? thousandsRaw
+            : thousandsRaw === true
+              ? "dot"
+              : "none";
+
+        const toggleCountry = (code: string) => {
+          const next = countries.includes(code)
+            ? countries.filter((c) => c !== code)
+            : [...countries, code];
+          if (next.length === 0) return; // siempre al menos uno
+          const nextDefault = next.includes(defaultCountry) ? defaultCountry : next[0];
+          onUpdate(field.id, {
+            countries: next,
+            defaultCountry: nextDefault,
+          });
+        };
+
+        return (
+          <>
+            <div className="mb-[18px]">
+              <label className={SUBFORM_LABEL_CLASS}>Países disponibles</label>
+              <div className="max-h-[220px] overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2">
+                {ID_DOC_COUNTRIES.map((c) => {
+                  const active = countries.includes(c.code);
+                  return (
+                    <label
+                      key={c.code}
+                      className={`flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-[12.5px] ${active ? "font-semibold text-slate-900" : "text-slate-600"}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={active}
+                        onChange={() => toggleCountry(c.code)}
+                        className="h-4 w-4 accent-[#00c2a8]"
+                      />
+                      <span className="text-[15px]">{c.flag}</span>
+                      <span className="flex-1">{c.name}</span>
+                      <span className="font-mono text-[10.5px] text-slate-400">
+                        {c.types.length} tipos
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="mt-1 text-[11px] leading-snug text-slate-400">
+                Con un solo país activo, el usuario no ve el selector de país.
+              </p>
+            </div>
+
+            {countries.length > 1 && (
+              <div className="mb-[18px]">
+                <label className={SUBFORM_LABEL_CLASS}>País por defecto</label>
+                <select
+                  className={SUBFORM_INPUT_CLASS}
+                  value={defaultCountry}
+                  onChange={(e) =>
+                    onUpdate(field.id, { defaultCountry: e.target.value })
+                  }
+                >
+                  {countries.map((code) => {
+                    const c = ID_DOC_COUNTRY_MAP[code];
+                    return c ? (
+                      <option key={code} value={code}>
+                        {c.flag} {c.name}
+                      </option>
+                    ) : null;
+                  })}
+                </select>
+              </div>
+            )}
+
+            <div className="mb-[18px]">
+              <label className={SUBFORM_LABEL_CLASS}>
+                Separador de miles (números)
+              </label>
+              <select
+                className={SUBFORM_INPUT_CLASS}
+                value={thousands}
+                onChange={(e) =>
+                  onUpdate(field.id, {
+                    thousandsSeparator: e.target.value as
+                      | "none"
+                      | "dot"
+                      | "comma",
+                  })
+                }
+              >
+                <option value="none">Sin separador</option>
+                <option value="dot">Punto (1.015.437.174)</option>
+                <option value="comma">Coma (1,015,437,174)</option>
+              </select>
+              <p className="mt-1 text-[11px] leading-snug text-slate-400">
+                Solo aplica a tipos numéricos (cédula, DNI…). En la base de
+                datos el número se guarda sin separadores.
+              </p>
+            </div>
+          </>
+        );
+      })()}
 
       {/* ── Image: maxWidth/maxHeight/clickable ── */}
       {field.type === "image" && (
@@ -1321,34 +1452,59 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
         </>
       )}
 
-      {/* ── Signature: color y grosor del trazo ── */}
+      {/* ── Signature: color, grosor del trazo y assignedStep ── */}
       {field.type === "signature" && (
-        <div className="mb-[18px] grid grid-cols-2 gap-3">
-          <div>
-            <label className={SUBFORM_LABEL_CLASS}>Color del trazo</label>
-            <input
-              type="color"
-              className={`${SUBFORM_INPUT_CLASS} h-10 cursor-pointer p-1`}
-              value={field.penColor || "#000000"}
-              onChange={(e) => onUpdate(field.id, { penColor: e.target.value })}
-            />
+        <>
+          <div className="mb-[18px] grid grid-cols-2 gap-3">
+            <div>
+              <label className={SUBFORM_LABEL_CLASS}>Color del trazo</label>
+              <input
+                type="color"
+                className={`${SUBFORM_INPUT_CLASS} h-10 cursor-pointer p-1`}
+                value={field.penColor || "#000000"}
+                onChange={(e) => onUpdate(field.id, { penColor: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className={SUBFORM_LABEL_CLASS}>Grosor (px)</label>
+              <input
+                type="number"
+                min={1}
+                max={5}
+                className={SUBFORM_INPUT_CLASS}
+                value={field.penWidth ?? 2}
+                onChange={(e) => {
+                  let val = parseInt(e.target.value) || 2;
+                  if (val < 1) val = 1;
+                  if (val > 5) val = 5;
+                  onUpdate(field.id, { penWidth: val });
+                }}
+              />
+            </div>
           </div>
-          <div>
-            <label className={SUBFORM_LABEL_CLASS}>Grosor (px)</label>
+          <div className="mb-[18px]">
+            <label className={SUBFORM_LABEL_CLASS}>Asignar al paso</label>
             <input
               type="number"
-              min={1}
-              max={10}
+              min={0}
+              step={1}
+              placeholder="0 = cualquier paso"
               className={SUBFORM_INPUT_CLASS}
-              value={field.penWidth ?? 2}
-              onChange={(e) =>
+              value={field.assignedStep ?? 0}
+              onChange={(e) => {
+                const n = parseInt(e.target.value, 10);
                 onUpdate(field.id, {
-                  penWidth: parseInt(e.target.value) || 2,
-                })
-              }
+                  assignedStep: Number.isFinite(n) && n > 0 ? n : 0,
+                });
+              }}
             />
+            <p className="mt-1.5 text-[11.5px] leading-snug text-slate-500">
+              Para tareas con varios destinatarios: número del paso (1, 2, 3…)
+              en el que esta firma debe completarse. Déjalo en 0 para permitir
+              que cualquiera la firme.
+            </p>
           </div>
-        </div>
+        </>
       )}
 
       {/* ── Radio: valor predeterminado, alineación, recordar entrada ── */}

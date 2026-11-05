@@ -5,6 +5,7 @@ import {
   deleteSubmissionFile,
   uploadSubmissionFile,
 } from "../../../../services/submissionUploads";
+import { COUNTRIES } from "../../../../lib/countries";
 import Icon from "../../../common/Icon";
 
 const INPUT_BASE =
@@ -1128,7 +1129,15 @@ function PhoneInput({
   onChange: (v: string) => void;
 }) {
   useDefaultSeed(value, field.defaultValue, onChange);
-  const prefix = field.prefix || "";
+  // Si el country selector está activo, el dialCode del defaultCountry gana
+  // sobre el prefix custom. Buscamos el país; si no está (código raro), caemos
+  // al prefix o a nada. Alineado con el main widget Phone.
+  let prefix = field.prefix || "";
+  if (field.enableCountrySelector) {
+    const code = field.defaultCountry || "CO";
+    const country = COUNTRIES.find((c) => c.code === code);
+    if (country) prefix = country.dialCode;
+  }
   return (
     <div
       style={{
@@ -1189,9 +1198,19 @@ function IdDocumentInput({
   onChange: (v: string) => void;
 }) {
   useDefaultSeed(value, field.defaultValue, onChange);
-  const useSep = field.thousandsSeparator ?? false;
-  const formatted = useSep
-    ? value.replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, ".")
+  // Soporta tri-estado ("none" | "dot" | "comma") + boolean legacy
+  // (true=dot, false=none) para configs guardadas antes del cambio.
+  const raw = field.thousandsSeparator;
+  const mode: "none" | "dot" | "comma" =
+    typeof raw === "string"
+      ? raw
+      : raw === true
+        ? "dot"
+        : "none";
+  const sep = mode === "dot" ? "." : mode === "comma" ? "," : "";
+  const digits = value.replace(/\D/g, "");
+  const formatted = sep
+    ? digits.replace(/\B(?=(\d{3})+(?!\d))/g, sep)
     : value;
   return (
     <input
@@ -1201,8 +1220,10 @@ function IdDocumentInput({
       value={formatted}
       placeholder={field.placeholder || "Número de documento"}
       onChange={(e) => {
-        const next = useSep
-          ? e.target.value.replace(/\./g, "")
+        // Sea cual sea el separador elegido, al valor canónico siempre lo
+        // dejamos sin separador — así la DB queda limpia.
+        const next = sep
+          ? e.target.value.split(sep).join("")
           : e.target.value;
         onChange(next);
       }}
