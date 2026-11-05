@@ -31,7 +31,13 @@ function show(value: unknown): string {
 export default function PendingActivityRender({ widget }: WidgetRenderProps) {
   const cfg = widget.config;
   const planningFormId = (cfg.planningFormId as string) ?? "";
-  const subformWidgetId = (cfg.subformWidgetId as string) ?? "";
+  // Compat: acepta el nuevo array `subformWidgetIds` o el viejo singular
+  // `subformWidgetId` (configs guardadas antes del multi-subform).
+  const subformWidgetIds: string[] = Array.isArray(cfg.subformWidgetIds)
+    ? ((cfg.subformWidgetIds as string[]) ?? []).filter(Boolean)
+    : typeof cfg.subformWidgetId === "string" && cfg.subformWidgetId
+      ? [cfg.subformWidgetId as string]
+      : [];
   const displayFields = (cfg.displayFields as string[]) ?? [];
   const allowMultiple = (cfg.allowMultiple as boolean) ?? true;
 
@@ -40,23 +46,42 @@ export default function PendingActivityRender({ widget }: WidgetRenderProps) {
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
 
+  // join estable para la dep del effect — evita re-fetch infinito por
+  // identidad del array cambiando en cada render.
+  const subformIdsKey = subformWidgetIds.join(",");
+
   useEffect(() => {
-    if (!planningFormId || !subformWidgetId) {
+    if (!planningFormId || subformWidgetIds.length === 0) {
       setLoading(false);
       return;
     }
     let cancelled = false;
     setLoading(true);
-    getPendingActivitiesApi(planningFormId, subformWidgetId).then((r) => {
+    // N fetches en paralelo (uno por subform) y concatenamos. El backend
+    // ya devuelve solo pendientes (filtra las completadas) por cada
+    // consulta, así que la unión queda correcta sin dedup extra — las
+    // keys son `${submissionId}:${index}` y son únicas por subform.
+    Promise.all(
+      subformWidgetIds.map((sid) =>
+        getPendingActivitiesApi(planningFormId, sid),
+      ),
+    ).then((results) => {
       if (cancelled) return;
-      if (r.data) setItems(r.data);
-      else setError(r.error ?? "No se pudieron cargar las actividades");
+      const errored = results.find((r) => r.error);
+      if (errored) {
+        setError(errored.error ?? "No se pudieron cargar las actividades");
+        setItems([]);
+      } else {
+        setItems(results.flatMap((r) => r.data ?? []));
+        setError("");
+      }
       setLoading(false);
     });
     return () => {
       cancelled = true;
     };
-  }, [planningFormId, subformWidgetId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planningFormId, subformIdsKey]);
 
   const toggle = (key: string) =>
     setSelected((prev) =>
@@ -100,7 +125,7 @@ export default function PendingActivityRender({ widget }: WidgetRenderProps) {
         value={selected.length ? JSON.stringify(selected) : ""}
       />
 
-      {!planningFormId || !subformWidgetId ? (
+      {!planningFormId || subformWidgetIds.length === 0 ? (
         <p style={{ fontSize: 12.5, color: "#ef4444" }}>
           Este campo no está configurado.
         </p>

@@ -83,9 +83,57 @@ export default function PendingActivityProperties({
     if (folder) void loadFormDetails(folder.id, planningFormId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [planningFormId, needsHydration]);
-  const subform = subforms.find((w) => w.id === cfg.subformWidgetId);
-  const subFields = (subform?.config?.fields as SubField[]) ?? [];
+  // Compat: migración on-read del legacy `subformWidgetId: string` →
+  // `subformWidgetIds: string[]`. Nunca escribimos el viejo de vuelta.
+  const subformWidgetIds: string[] = Array.isArray(cfg.subformWidgetIds)
+    ? (cfg.subformWidgetIds as string[])
+    : typeof cfg.subformWidgetId === "string" && cfg.subformWidgetId
+      ? [cfg.subformWidgetId as string]
+      : [];
+
+  const selectedSubforms = subforms.filter((w) =>
+    subformWidgetIds.includes(w.id),
+  );
+  // Union de fields de TODOS los subforms seleccionados (dedup por id).
+  // El admin marca qué mostrar; si un field no existe en un subform
+  // concreto, el runtime lo renderiza vacío — no rompe cuando los
+  // subforms tienen campos distintos.
+  const subFields: SubField[] = (() => {
+    const seen = new Set<string>();
+    const out: SubField[] = [];
+    for (const sf of selectedSubforms) {
+      for (const f of (sf.config?.fields as SubField[]) ?? []) {
+        if (!seen.has(f.id)) {
+          seen.add(f.id);
+          out.push(f);
+        }
+      }
+    }
+    return out;
+  })();
   const displayFields = (cfg.displayFields as string[]) ?? [];
+
+  const toggleSubform = (id: string) => {
+    const next = subformWidgetIds.includes(id)
+      ? subformWidgetIds.filter((x) => x !== id)
+      : [...subformWidgetIds, id];
+    // Al cambiar la selección, limpiamos displayFields que ya no existen
+    // en los subforms activos (evita checkboxes huérfanos en el runtime).
+    const nextIds = new Set(next);
+    const nextSubforms = subforms.filter((w) => nextIds.has(w.id));
+    const nextFieldIds = new Set<string>();
+    for (const sf of nextSubforms)
+      for (const f of (sf.config?.fields as SubField[]) ?? [])
+        nextFieldIds.add(f.id);
+    const prunedDisplay = displayFields.filter((id) => nextFieldIds.has(id));
+    set({
+      subformWidgetIds: next,
+      displayFields: prunedDisplay,
+      // Limpio el legacy para no dejar un string apuntando a un subform
+      // quizá desmarcado — evita re-migrarlo en una próxima apertura.
+      subformWidgetId: undefined,
+    });
+  };
 
   return (
     <>
@@ -108,7 +156,8 @@ export default function PendingActivityProperties({
           onChange={(e) =>
             set({
               planningFormId: e.target.value,
-              subformWidgetId: "",
+              subformWidgetIds: [],
+              subformWidgetId: undefined,
               displayFields: [],
             })
           }
@@ -129,7 +178,7 @@ export default function PendingActivityProperties({
 
       {planningForm && (
         <div style={{ marginBottom: 14 }}>
-          <label style={LABEL}>Subformulario de actividades</label>
+          <label style={LABEL}>Subformularios de actividades</label>
           {needsHydration ? (
             <p style={HINT}>Cargando campos del formulario…</p>
           ) : subforms.length === 0 ? (
@@ -138,20 +187,52 @@ export default function PendingActivityProperties({
               actividades.
             </p>
           ) : (
-            <select
-              style={INPUT}
-              value={(cfg.subformWidgetId as string) ?? ""}
-              onChange={(e) =>
-                set({ subformWidgetId: e.target.value, displayFields: [] })
-              }
-            >
-              <option value="">-- Selecciona --</option>
-              {subforms.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.label}
-                </option>
-              ))}
-            </select>
+            <>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  border: "1.5px solid #e2e8f0",
+                  borderRadius: 7,
+                  background: "#f8fafc",
+                  padding: 8,
+                }}
+              >
+                {subforms.map((w) => {
+                  const active = subformWidgetIds.includes(w.id);
+                  return (
+                    <label
+                      key={w.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        fontSize: 13,
+                        cursor: "pointer",
+                        padding: "4px 6px",
+                        borderRadius: 5,
+                        background: active ? "#ecfeff" : "transparent",
+                        fontWeight: active ? 600 : 400,
+                        color: "#111827",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={active}
+                        onChange={() => toggleSubform(w.id)}
+                        style={{ accentColor: "#0891b2" }}
+                      />
+                      <span style={{ flex: 1 }}>{w.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              <p style={HINT}>
+                Podés activar varios — el widget unirá las actividades
+                pendientes de todos los subformularios marcados.
+              </p>
+            </>
           )}
         </div>
       )}
