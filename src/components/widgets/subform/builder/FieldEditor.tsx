@@ -2265,6 +2265,16 @@ function SearchSourceEditor({
               value={field.sheetsUrl || ""}
               placeholder="https://docs.google.com/spreadsheets/d/…"
               onChange={(e) => onUpdate(field.id, { sheetsUrl: e.target.value })}
+              onPaste={(e) => {
+                // El evento `paste` dispara ANTES de que React actualice el
+                // value — leemos la URL del clipboard y persistimos+detectamos
+                // sin esperar al onBlur (que requería que el admin clickeara
+                // afuera para que se auto-cargaran las columnas).
+                const url = e.clipboardData.getData("text").trim();
+                if (!url) return;
+                onUpdate(field.id, { sheetsUrl: url });
+                void detectSheetsHeaders(url);
+              }}
               onBlur={(e) => void detectSheetsHeaders(e.target.value)}
             />
             <p className="mt-1 text-[11px] leading-snug text-slate-400">
@@ -2303,6 +2313,12 @@ function SearchSourceEditor({
               value={field.excelUrl || ""}
               placeholder="https://…/sharepoint.com/…/archivo.xlsx"
               onChange={(e) => onUpdate(field.id, { excelUrl: e.target.value })}
+              onPaste={(e) => {
+                const url = e.clipboardData.getData("text").trim();
+                if (!url) return;
+                onUpdate(field.id, { excelUrl: url });
+                void detectExcelHeaders(url);
+              }}
               onBlur={(e) => void detectExcelHeaders(e.target.value)}
             />
             <p className="mt-1 text-[11px] leading-snug text-slate-400">
