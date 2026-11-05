@@ -1904,35 +1904,40 @@ function SearchInput({
 
   return (
     <>
-      <div className="flex items-center gap-2">
-        <input
-          type="text"
-          name={field.id}
-          required={field.required}
-          value={value}
-          placeholder={field.placeholder || "Haz clic en Buscar…"}
-          readOnly
-          onClick={() => setOpen(true)}
-          className={`${INPUT_BASE} cursor-pointer`}
-        />
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="flex flex-shrink-0 cursor-pointer items-center gap-1.5 rounded-[7px] border-[1.5px] border-slate-200 bg-white px-3 py-2 text-[13px] font-semibold text-cyan-700 hover:border-cyan-600"
-        >
-          <Icon name="search" size={14} /> Buscar
-        </button>
-        {value && (
-          <button
-            type="button"
-            title="Limpiar"
-            onClick={() => onChange("")}
-            className="flex h-8 w-8 flex-shrink-0 cursor-pointer items-center justify-center rounded-md border-[1.5px] border-slate-200 bg-white text-[14px] text-slate-400 hover:text-red-500"
-          >
-            ×
-          </button>
+      {/* Submit hidden — el form lee de aquí. El trigger visual es un <button>
+          estilizado como input (mismo look que el main widget Search). */}
+      <input type="hidden" name={field.id} value={value} />
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex w-full cursor-pointer items-center gap-2 rounded-lg border-[1.5px] border-slate-200 bg-white px-3 py-2 text-left text-[13.5px] outline-none hover:border-[#00c2a8] focus:border-[#00c2a8]"
+      >
+        <span className="text-gray-400">
+          <Icon name="search" size={14} />
+        </span>
+        {value ? (
+          <span className="flex-1 truncate font-medium text-gray-900">
+            {value}
+          </span>
+        ) : (
+          <span className="flex-1 truncate text-gray-400">
+            {field.placeholder || "Buscar..."}
+          </span>
         )}
-      </div>
+        {value && (
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              onChange("");
+            }}
+            className="cursor-pointer rounded border-none bg-slate-100 px-1.5 py-0.5 text-[11px] text-gray-500 hover:bg-slate-200"
+            role="button"
+            aria-label="Limpiar selección"
+          >
+            ✕
+          </span>
+        )}
+      </button>
 
       {open && (
         <div
