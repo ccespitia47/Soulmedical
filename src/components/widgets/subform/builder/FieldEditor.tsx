@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { SubformField } from "../subform.types";
 import Icon from "../../../common/Icon";
 import SubformFieldTypeSelect from "./SubformFieldTypeSelect";
@@ -287,13 +287,16 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
 
       {hasOptions && (
         <div className="mb-[18px]">
-          <label className={SUBFORM_LABEL_CLASS}>
-            Opciones{" "}
-            <span className="font-normal normal-case text-slate-400">
-              (una por línea)
+          <div className="mb-1.5 flex items-center gap-1.5">
+            <label className={`${SUBFORM_LABEL_CLASS} mb-0`}>Opciones</label>
+            <span
+              title="Cada opción del campo. Arrastra ☰ para reordenar y × para eliminar."
+              className="flex h-[14px] w-[14px] cursor-help items-center justify-center rounded-full border border-slate-300 text-[9px] text-slate-500"
+            >
+              i
             </span>
-          </label>
-          <OptionsTextarea
+          </div>
+          <OptionsPerRow
             key={field.id}
             options={field.options || []}
             onChange={(opts) => onUpdate(field.id, { options: opts })}
@@ -1560,37 +1563,106 @@ function ImageSource({
   );
 }
 
-function OptionsTextarea({
+/**
+ * UI de opciones per-row, con drag-handle ☰, input por opción y × para
+ * eliminar, más botón "Añadir". Replica la UX del main Select/Checkbox
+ * para que select, checkbox, radio y quiz_question del subform tengan la
+ * misma edición de opciones que el formulario principal.
+ *
+ * Las opciones se guardan como `string[]` en field.options — la forma
+ * canónica que el runtime y el schema ya esperan.
+ */
+function OptionsPerRow({
   options,
   onChange,
 }: {
   options: string[];
   onChange: (opts: string[]) => void;
 }) {
-  const [draft, setDraft] = useState(() => options.join("\n"));
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
-  // Si el padre actualiza options (ej. desde otra parte del UI), reflejar
-  // ese cambio EXCEPTO cuando el draft ya representa esas mismas options
-  // (evita wipear una línea vacía que el user acaba de abrir).
-  useEffect(() => {
-    const normalized = draft.split("\n").filter(Boolean);
-    const same =
-      normalized.length === options.length &&
-      normalized.every((v, i) => v === options[i]);
-    if (!same) setDraft(options.join("\n"));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [options]);
+  const reorder = (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0) return;
+    const next = [...options];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    onChange(next);
+  };
+
+  const update = (idx: number, value: string) => {
+    const next = [...options];
+    next[idx] = value;
+    onChange(next);
+  };
+
+  const remove = (idx: number) => {
+    onChange(options.filter((_, i) => i !== idx));
+  };
+
+  const add = () => {
+    const next = [...options, `Opción ${options.length + 1}`];
+    onChange(next);
+    setTimeout(() => {
+      const el = inputRefs.current[next.length - 1];
+      el?.focus();
+      el?.select();
+    }, 0);
+  };
 
   return (
-    <textarea
-      className={`${SUBFORM_INPUT_CLASS} min-h-[100px] resize-y font-sans leading-relaxed`}
-      value={draft}
-      placeholder={"Opción 1\nOpción 2"}
-      onChange={(e) => {
-        const next = e.target.value;
-        setDraft(next);
-        onChange(next.split("\n").filter(Boolean));
-      }}
-    />
+    <div className="flex flex-col gap-1.5">
+      {options.map((option, index) => {
+        const isDragging = dragIdx === index;
+        return (
+          <div
+            // key SOLO por index — incluir el texto haría que React desmonte
+            // el <input> en cada tecla y el foco se pierda letra por letra.
+            key={index}
+            draggable
+            onDragStart={() => setDragIdx(index)}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (dragIdx !== null) reorder(dragIdx, index);
+              setDragIdx(null);
+            }}
+            onDragEnd={() => setDragIdx(null)}
+            className="flex items-center gap-1.5"
+            style={{ opacity: isDragging ? 0.5 : 1 }}
+          >
+            <span
+              title="Arrastra para reordenar"
+              className="cursor-grab select-none px-1 text-[14px] text-slate-400"
+            >
+              ☰
+            </span>
+            <input
+              ref={(el) => {
+                inputRefs.current[index] = el;
+              }}
+              className={`${SUBFORM_INPUT_CLASS} flex-1`}
+              value={option}
+              onChange={(e) => update(index, e.target.value)}
+            />
+            <button
+              type="button"
+              title="Eliminar"
+              onClick={() => remove(index)}
+              className="flex h-7 w-7 flex-shrink-0 cursor-pointer items-center justify-center rounded-md border-[1.5px] border-slate-200 bg-white text-[16px] leading-none text-slate-400 hover:text-red-500"
+            >
+              ×
+            </button>
+          </div>
+        );
+      })}
+      <button
+        type="button"
+        onClick={add}
+        className="mt-1 w-full cursor-pointer rounded-md border-[1.5px] border-slate-200 bg-white px-3 py-2 text-[13px] font-medium text-slate-700 hover:border-cyan-600 hover:text-cyan-700"
+      >
+        + Añadir opción
+      </button>
+    </div>
   );
 }
