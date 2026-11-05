@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { SubformField } from "../subform.types";
+import type { QuizOption, SubformField } from "../subform.types";
+import { resolveQuizOptions } from "../subform.types";
 import Icon from "../../../common/Icon";
 import SubformFieldTypeSelect from "./SubformFieldTypeSelect";
 import { deleteFormAsset, uploadFormAsset } from "../../../../services/formAssets";
@@ -14,6 +15,7 @@ import {
   SUBFORM_FIELD_ICONS,
   SUBFORM_INPUT_CLASS,
   SUBFORM_LABEL_CLASS,
+  uid,
 } from "./constants";
 
 type FieldEditorProps = {
@@ -187,24 +189,24 @@ function FieldPreview({ field }: { field: SubformField }) {
       )}
       {field.type === "quiz_question" && (
         <div className="flex flex-col gap-1 text-[12.5px] text-slate-500">
-          {(field.options || []).map((o, i) => {
-            const isCorrect = i === (field.correctOptionIndex ?? 0);
-            return (
-              <label key={o} className="flex items-center gap-1.5">
-                <input type="radio" disabled />
-                <span
-                  className={
-                    isCorrect
-                      ? "inline-flex items-center gap-1 font-semibold text-emerald-700"
-                      : ""
-                  }
-                >
-                  {o}
-                  {isCorrect && <Icon name="check" size={12} />}
-                </span>
-              </label>
-            );
-          })}
+          {resolveQuizOptions(field).map((opt) => (
+            <label key={opt.id} className="flex items-center gap-1.5">
+              <input
+                type={field.quizMode === "multi" ? "checkbox" : "radio"}
+                disabled
+              />
+              <span
+                className={
+                  opt.correct
+                    ? "inline-flex items-center gap-1 font-semibold text-emerald-700"
+                    : ""
+                }
+              >
+                {opt.label}
+                {opt.correct && <Icon name="check" size={12} />}
+              </span>
+            </label>
+          ))}
         </div>
       )}
     </div>
@@ -464,164 +466,15 @@ export default function FieldEditor({
       )}
 
       {field.type === "calc" && (
-        <>
-          <div className="mb-[18px] grid grid-cols-2 gap-3">
-            <div>
-              <label className={SUBFORM_LABEL_CLASS}>Operador</label>
-              <select
-                className={SUBFORM_INPUT_CLASS}
-                value={field.calcOperator || "sum"}
-                onChange={(e) =>
-                  onUpdate(field.id, {
-                    calcOperator: e.target
-                      .value as SubformField["calcOperator"],
-                  })
-                }
-              >
-                <option value="sum">Sumar</option>
-                <option value="subtract">Restar</option>
-                <option value="multiply">Multiplicar</option>
-                <option value="divide">Dividir</option>
-                <option value="average">Promedio</option>
-                <option value="min">Mínimo</option>
-                <option value="max">Máximo</option>
-                <option value="count">Contar</option>
-              </select>
-            </div>
-            <div>
-              <label className={SUBFORM_LABEL_CLASS}>Decimales</label>
-              <input
-                type="number"
-                min={0}
-                max={6}
-                className={SUBFORM_INPUT_CLASS}
-                value={field.decimalPrecision ?? 2}
-                onChange={(e) =>
-                  onUpdate(field.id, {
-                    decimalPrecision: parseInt(e.target.value) || 0,
-                  })
-                }
-              />
-            </div>
-          </div>
-          <div className="mb-[18px]">
-            <label className={SUBFORM_LABEL_CLASS}>
-              Fórmula{" "}
-              <span className="font-normal normal-case text-slate-400">
-                (opcional — si se llena, sobrescribe el operador)
-              </span>
-            </label>
-            <input
-              className={`${SUBFORM_INPUT_CLASS} font-mono`}
-              value={field.formula || ""}
-              placeholder="precio*cantidad"
-              onChange={(e) => onUpdate(field.id, { formula: e.target.value })}
-            />
-            <div className="mt-1 text-[11px] text-slate-400">
-              Operadores permitidos: + - * / ( ). Vacío = aplica el operador
-              de arriba a todos los campos number del subform.
-            </div>
-          </div>
-          <div className="mb-[18px]">
-            <label className={SUBFORM_LABEL_CLASS}>Valor inicial</label>
-            <input
-              type="number"
-              className={SUBFORM_INPUT_CLASS}
-              value={field.initialValue ?? ""}
-              placeholder="0"
-              onChange={(e) =>
-                onUpdate(field.id, {
-                  initialValue:
-                    e.target.value === "" ? undefined : parseFloat(e.target.value),
-                })
-              }
-            />
-          </div>
-          <label className="mb-2 flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
-            <input
-              type="checkbox"
-              checked={field.ignoreInvalid ?? true}
-              onChange={(e) =>
-                onUpdate(field.id, { ignoreInvalid: e.target.checked })
-              }
-              className="h-4 w-4 accent-[#00c2a8]"
-            />
-            <span>Ignorar valores no numéricos</span>
-          </label>
-          <label className="mb-2 flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
-            <input
-              type="checkbox"
-              checked={field.isPrice ?? false}
-              onChange={(e) =>
-                onUpdate(field.id, { isPrice: e.target.checked })
-              }
-              className="h-4 w-4 accent-[#00c2a8]"
-            />
-            <span>Mostrar como precio (usa el prefijo pricePrefix)</span>
-          </label>
-          {field.isPrice && (
-            <div className="mb-[18px] grid grid-cols-2 gap-3">
-              <div>
-                <label className={SUBFORM_LABEL_CLASS}>Prefijo</label>
-                <input
-                  className={SUBFORM_INPUT_CLASS}
-                  value={field.pricePrefix || "$"}
-                  onChange={(e) =>
-                    onUpdate(field.id, { pricePrefix: e.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <label className={SUBFORM_LABEL_CLASS}>Moneda</label>
-                <input
-                  className={SUBFORM_INPUT_CLASS}
-                  value={field.currency || "COP"}
-                  onChange={(e) =>
-                    onUpdate(field.id, {
-                      currency: e.target.value.toUpperCase(),
-                    })
-                  }
-                />
-              </div>
-            </div>
-          )}
-        </>
+        <CalcFieldEditor
+          field={field}
+          onUpdate={onUpdate}
+          allFields={allFields}
+        />
       )}
 
       {field.type === "quiz_question" && (
-        <>
-          <div className="mb-[18px]">
-            <label className={SUBFORM_LABEL_CLASS}>
-              Índice de la opción correcta{" "}
-              <span className="font-normal normal-case text-slate-400">
-                (0 = la primera)
-              </span>
-            </label>
-            <input
-              type="number"
-              min={0}
-              className={SUBFORM_INPUT_CLASS}
-              value={field.correctOptionIndex ?? 0}
-              onChange={(e) =>
-                onUpdate(field.id, {
-                  correctOptionIndex: parseInt(e.target.value) || 0,
-                })
-              }
-            />
-          </div>
-          <div className="mb-[18px]">
-            <label className={SUBFORM_LABEL_CLASS}>Puntos de la correcta</label>
-            <input
-              type="number"
-              min={0}
-              className={SUBFORM_INPUT_CLASS}
-              value={field.points ?? 1}
-              onChange={(e) =>
-                onUpdate(field.id, { points: parseFloat(e.target.value) || 0 })
-              }
-            />
-          </div>
-        </>
+        <QuizQuestionEditor field={field} onUpdate={onUpdate} />
       )}
 
       {/* ── Textarea: rows + maxLength + defaultValue ── */}
@@ -1208,19 +1061,67 @@ export default function FieldEditor({
         </>
       )}
 
-      {/* ── Barcode: scannerEnabled ── */}
+      {/* ── Barcode: scannerEnabled + cameraType + format + autoSubmit ── */}
       {field.type === "barcode" && (
-        <label className="mb-[18px] flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
-          <input
-            type="checkbox"
-            checked={field.scannerEnabled ?? false}
-            onChange={(e) =>
-              onUpdate(field.id, { scannerEnabled: e.target.checked })
-            }
-            className="h-4 w-4 accent-[#00c2a8]"
-          />
-          <span>Habilitar botón "Escanear" (preview, sin cámara real aún)</span>
-        </label>
+        <>
+          <label className="mb-[14px] flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+            <input
+              type="checkbox"
+              checked={field.scannerEnabled ?? true}
+              onChange={(e) =>
+                onUpdate(field.id, { scannerEnabled: e.target.checked })
+              }
+              className="h-4 w-4 accent-[#00c2a8]"
+            />
+            <span>Habilitar botón "Escanear" (preview, sin cámara real aún)</span>
+          </label>
+
+          <div className="mb-[14px]">
+            <label className={SUBFORM_LABEL_CLASS}>Cámara</label>
+            <select
+              className={SUBFORM_INPUT_CLASS}
+              value={field.cameraType || "rear"}
+              onChange={(e) =>
+                onUpdate(field.id, {
+                  cameraType: e.target.value as SubformField["cameraType"],
+                })
+              }
+            >
+              <option value="rear">Trasera (recomendado en móvil)</option>
+              <option value="front">Frontal (kiosco / mesa)</option>
+            </select>
+          </div>
+
+          <div className="mb-[14px]">
+            <label className={SUBFORM_LABEL_CLASS}>Formato esperado</label>
+            <select
+              className={SUBFORM_INPUT_CLASS}
+              value={field.format || "code_128"}
+              onChange={(e) =>
+                onUpdate(field.id, {
+                  format: e.target.value as SubformField["format"],
+                })
+              }
+            >
+              <option value="code_128">Code 128 (etiquetas producto)</option>
+              <option value="ean_13">EAN-13 (retail internacional)</option>
+              <option value="qr_code">QR Code</option>
+              <option value="upc_a">UPC-A (retail US)</option>
+            </select>
+          </div>
+
+          <label className="mb-[18px] flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+            <input
+              type="checkbox"
+              checked={field.autoSubmit ?? true}
+              onChange={(e) =>
+                onUpdate(field.id, { autoSubmit: e.target.checked })
+              }
+              className="h-4 w-4 accent-[#00c2a8]"
+            />
+            <span>Enviar el formulario automáticamente al escanear</span>
+          </label>
+        </>
       )}
 
       {/* ── idscanner: documentType, allowManual, fields a extraer ── */}
@@ -2579,6 +2480,471 @@ function NestedSubformEditor({
           }}
           onClose={() => setOpen(false)}
         />
+      )}
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// QuizQuestionEditor: paridad con el widget quiz_question del formulario
+// main. UI estructurada con tipo de respuesta (single/multi), modo de
+// puntuación (correct/weighted) y opciones ricas (label + puntos por
+// opción). Soporta compat on-read: si el field viene con `options` legacy
+// + `correctOptionIndex` + `points` global, se derivan opciones canónicas
+// via resolveQuizOptions; al primer edit del usuario se migra el field a
+// `quizOptions` y se limpian los legacy para no leer de 2 lugares.
+// ─────────────────────────────────────────────────────────────────────────
+function QuizQuestionEditor({
+  field,
+  onUpdate,
+}: {
+  field: SubformField;
+  onUpdate: (id: string, changes: Partial<SubformField>) => void;
+}) {
+  const mode = field.quizMode || "single";
+  const scoreMode = field.scoreMode || "correct";
+  const options: QuizOption[] = resolveQuizOptions(field);
+
+  // Al editar cualquier cosa de las opciones, persistimos siempre en
+  // `quizOptions` y limpiamos los legacy. Así los dos formatos no coexisten
+  // en el mismo field una vez que el admin lo abrió.
+  const commitOptions = (next: QuizOption[]) =>
+    onUpdate(field.id, {
+      quizOptions: next,
+      options: undefined,
+      correctOptionIndex: undefined,
+      points: undefined,
+    });
+
+  const updateOption = (i: number, changes: Partial<QuizOption>) =>
+    commitOptions(
+      options.map((o, idx) => (idx === i ? { ...o, ...changes } : o)),
+    );
+
+  const addOption = () =>
+    commitOptions([
+      ...options,
+      {
+        id: uid(),
+        label: `Opción ${options.length + 1}`,
+        points: 0,
+        correct: false,
+      },
+    ]);
+
+  const removeOption = (i: number) =>
+    commitOptions(options.filter((_, idx) => idx !== i));
+
+  return (
+    <>
+      <div className="mb-[14px]">
+        <label className={SUBFORM_LABEL_CLASS}>Tipo de respuesta</label>
+        <select
+          className={SUBFORM_INPUT_CLASS}
+          value={mode}
+          onChange={(e) =>
+            onUpdate(field.id, {
+              quizMode: e.target.value as "single" | "multi",
+            })
+          }
+        >
+          <option value="single">Una respuesta (radio)</option>
+          <option value="multi">Varias respuestas (checkbox)</option>
+        </select>
+      </div>
+
+      <div className="mb-[14px]">
+        <label className={SUBFORM_LABEL_CLASS}>Puntuación</label>
+        <select
+          className={SUBFORM_INPUT_CLASS}
+          value={scoreMode}
+          onChange={(e) =>
+            onUpdate(field.id, {
+              scoreMode: e.target.value as "correct" | "weighted",
+            })
+          }
+        >
+          <option value="correct">
+            Marcar correctas (cada correcta vale 1 pt)
+          </option>
+          <option value="weighted">Peso libre por opción</option>
+        </select>
+        <p className="mt-1.5 text-[11px] leading-[1.4] text-slate-400">
+          {scoreMode === "correct"
+            ? "Solo marcá cuáles opciones son correctas."
+            : "Cada opción puede tener puntos distintos, incluso negativos."}
+        </p>
+      </div>
+
+      <div className="mb-[18px]">
+        <div className="mb-2 flex items-center justify-between">
+          <label className={`${SUBFORM_LABEL_CLASS} mb-0`}>Opciones</label>
+          <button
+            type="button"
+            onClick={addOption}
+            className="inline-flex cursor-pointer items-center gap-1 rounded-md border-[1.5px] border-[#0891b2] bg-white px-2.5 py-1 text-[12px] font-semibold text-[#0891b2]"
+          >
+            <Icon name="plus" size={12} /> Opción
+          </button>
+        </div>
+
+        {options.length === 0 && (
+          <p className="m-0 py-2.5 text-center text-[12px] text-slate-400">
+            Agregá al menos una opción.
+          </p>
+        )}
+
+        {options.map((opt, i) => (
+          <div
+            key={opt.id}
+            className="mb-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2.5"
+          >
+            <span className="min-w-[18px] text-[11px] font-semibold text-slate-400">
+              {i + 1}.
+            </span>
+            <input
+              className={`${SUBFORM_INPUT_CLASS} flex-1 px-2.5 py-1.5`}
+              value={opt.label}
+              placeholder="Texto de la opción"
+              onChange={(e) => updateOption(i, { label: e.target.value })}
+            />
+            {scoreMode === "weighted" ? (
+              <input
+                type="number"
+                className={`${SUBFORM_INPUT_CLASS} w-[72px] px-2 py-1.5`}
+                value={opt.points}
+                title="Puntos"
+                onChange={(e) =>
+                  updateOption(i, {
+                    points: parseFloat(e.target.value) || 0,
+                  })
+                }
+              />
+            ) : (
+              <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-[12px] font-semibold text-[#0891b2]">
+                <input
+                  type="checkbox"
+                  checked={opt.correct}
+                  onChange={(e) =>
+                    updateOption(i, {
+                      correct: e.target.checked,
+                      points: e.target.checked ? 1 : 0,
+                    })
+                  }
+                />
+                Correcta
+              </label>
+            )}
+            <button
+              type="button"
+              onClick={() => removeOption(i)}
+              aria-label="Quitar opción"
+              className="flex h-[26px] w-[26px] shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-red-100 text-red-500"
+            >
+              <Icon name="x" size={13} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// CalcFieldEditor: paridad con el widget calc del formulario main.
+//
+// UX:
+//   1. Operador (8 operadores) + decimales.
+//   2. Lista estructurada de Términos (botones "+ Campo" / "+ Fijo"). Cada
+//      Campo referencia OTRO campo del subform row (number/price/calc).
+//   3. Valor inicial.
+//   4. Flags: ignoreInvalid, ignoreHidden, isPrice.
+//   5. Moneda (dropdown COP/USD/EUR/MXN) + prefijo override cuando isPrice.
+//   6. Fórmula legacy en un `<details>` colapsado — solo para configs ya
+//      guardadas; los nuevos calc usan `calcTerms` directo.
+// ─────────────────────────────────────────────────────────────────────────
+const CALC_OPERATORS: Array<{ value: NonNullable<SubformField["calcOperator"]>; label: string }> = [
+  { value: "sum", label: "Suma (+)" },
+  { value: "subtract", label: "Resta (−)" },
+  { value: "multiply", label: "Multiplicar (×)" },
+  { value: "divide", label: "Dividir (÷)" },
+  { value: "average", label: "Promedio" },
+  { value: "min", label: "Mínimo" },
+  { value: "max", label: "Máximo" },
+  { value: "count", label: "Contar" },
+];
+
+const CALC_CURRENCIES = [
+  { value: "COP", label: "Peso colombiano (COP)" },
+  { value: "USD", label: "Dólar (USD)" },
+  { value: "EUR", label: "Euro (€)" },
+  { value: "MXN", label: "Peso mexicano (MXN)" },
+];
+
+type CalcTerm = NonNullable<SubformField["calcTerms"]>[number];
+
+function CalcFieldEditor({
+  field,
+  onUpdate,
+  allFields,
+}: {
+  field: SubformField;
+  onUpdate: (id: string, changes: Partial<SubformField>) => void;
+  allFields: SubformField[];
+}) {
+  const terms: CalcTerm[] = field.calcTerms || [];
+  // Campos del MISMO subform row que pueden ser sumandos: number/price/calc,
+  // excluyendo el propio calc para evitar autoreferencia infinita.
+  const availableFields = allFields.filter(
+    (f) => f.id !== field.id && ["number", "price", "calc"].includes(f.type),
+  );
+
+  const commitTerms = (next: CalcTerm[]) =>
+    onUpdate(field.id, { calcTerms: next });
+
+  const addTerm = (kind: "widget" | "fixed") => {
+    const newTerm: CalcTerm =
+      kind === "widget" ? { type: "widget", widgetId: "" } : { type: "fixed", value: 0 };
+    commitTerms([...terms, newTerm]);
+  };
+
+  const updateTerm = (i: number, changes: Partial<CalcTerm>) =>
+    commitTerms(terms.map((t, idx) => (idx === i ? { ...t, ...changes } : t)));
+
+  const removeTerm = (i: number) =>
+    commitTerms(terms.filter((_, idx) => idx !== i));
+
+  return (
+    <>
+      {/* Operador + decimales */}
+      <div className="mb-[18px] grid grid-cols-2 gap-3">
+        <div>
+          <label className={SUBFORM_LABEL_CLASS}>Operador</label>
+          <select
+            className={SUBFORM_INPUT_CLASS}
+            value={field.calcOperator || "sum"}
+            onChange={(e) =>
+              onUpdate(field.id, {
+                calcOperator: e.target.value as SubformField["calcOperator"],
+              })
+            }
+          >
+            {CALC_OPERATORS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className={SUBFORM_LABEL_CLASS}>Decimales</label>
+          <input
+            type="number"
+            min={0}
+            max={6}
+            className={SUBFORM_INPUT_CLASS}
+            value={field.decimalPrecision ?? 2}
+            onChange={(e) =>
+              onUpdate(field.id, {
+                decimalPrecision: parseInt(e.target.value) || 0,
+              })
+            }
+          />
+        </div>
+      </div>
+
+      {/* Términos estructurados */}
+      <div className="mb-[18px]">
+        <div className="mb-2 flex items-center justify-between">
+          <label className={`${SUBFORM_LABEL_CLASS} mb-0`}>
+            Términos del cálculo
+          </label>
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => addTerm("widget")}
+              className="inline-flex cursor-pointer items-center gap-1 rounded-md border-[1.5px] border-[#0891b2] bg-white px-2.5 py-1 text-[12px] font-semibold text-[#0891b2]"
+            >
+              <Icon name="plus" size={12} /> Campo
+            </button>
+            <button
+              type="button"
+              onClick={() => addTerm("fixed")}
+              className="inline-flex cursor-pointer items-center gap-1 rounded-md border-[1.5px] border-slate-300 bg-white px-2.5 py-1 text-[12px] font-semibold text-slate-600"
+            >
+              <Icon name="plus" size={12} /> Fijo
+            </button>
+          </div>
+        </div>
+
+        {terms.length === 0 && (
+          <p className="m-0 py-2.5 text-center text-[12px] text-slate-400">
+            Agregá campos numéricos del mismo subformulario o valores fijos.
+          </p>
+        )}
+
+        {terms.map((term, i) => (
+          <div
+            key={i}
+            className="mb-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2.5"
+          >
+            <span className="min-w-[18px] text-[11px] font-semibold text-slate-400">
+              {i + 1}.
+            </span>
+            {term.type === "widget" ? (
+              <select
+                className={`${SUBFORM_INPUT_CLASS} flex-1 px-2.5 py-1.5`}
+                value={term.widgetId || ""}
+                onChange={(e) => updateTerm(i, { widgetId: e.target.value })}
+              >
+                <option value="">— Elegí campo —</option>
+                {availableFields.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.label || `(sin etiqueta) — ${f.id}`}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="number"
+                className={`${SUBFORM_INPUT_CLASS} flex-1 px-2.5 py-1.5`}
+                value={term.value ?? 0}
+                onChange={(e) =>
+                  updateTerm(i, { value: parseFloat(e.target.value) || 0 })
+                }
+              />
+            )}
+            <span className="min-w-[32px] text-[10.5px] font-semibold uppercase tracking-[0.04em] text-slate-400">
+              {term.type === "widget" ? "campo" : "fijo"}
+            </span>
+            <button
+              type="button"
+              onClick={() => removeTerm(i)}
+              aria-label="Quitar término"
+              className="flex h-[26px] w-[26px] shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-red-100 text-red-500"
+            >
+              <Icon name="x" size={13} />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Valor inicial */}
+      <div className="mb-[14px]">
+        <label className={SUBFORM_LABEL_CLASS}>Valor inicial</label>
+        <input
+          type="number"
+          className={SUBFORM_INPUT_CLASS}
+          value={field.initialValue ?? ""}
+          placeholder="0"
+          onChange={(e) =>
+            onUpdate(field.id, {
+              initialValue:
+                e.target.value === "" ? undefined : parseFloat(e.target.value),
+            })
+          }
+        />
+      </div>
+
+      {/* Flags */}
+      <label className="mb-2 flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+        <input
+          type="checkbox"
+          checked={field.ignoreInvalid ?? true}
+          onChange={(e) =>
+            onUpdate(field.id, { ignoreInvalid: e.target.checked })
+          }
+          className="h-4 w-4 accent-[#00c2a8]"
+        />
+        <span>Ignorar valores no numéricos</span>
+      </label>
+      <label className="mb-2 flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+        <input
+          type="checkbox"
+          checked={field.ignoreHidden ?? false}
+          onChange={(e) =>
+            onUpdate(field.id, { ignoreHidden: e.target.checked })
+          }
+          className="h-4 w-4 accent-[#00c2a8]"
+        />
+        <span>Ignorar campos ocultos por reglas</span>
+      </label>
+      <label className="mb-2 flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+        <input
+          type="checkbox"
+          checked={field.isPrice ?? false}
+          onChange={(e) => onUpdate(field.id, { isPrice: e.target.checked })}
+          className="h-4 w-4 accent-[#00c2a8]"
+        />
+        <span>El valor calculado es un precio</span>
+      </label>
+
+      {/* Moneda + prefijo (solo si isPrice) */}
+      {field.isPrice && (
+        <div className="mb-[18px] mt-1.5 grid grid-cols-2 gap-3">
+          <div>
+            <label className={SUBFORM_LABEL_CLASS}>Moneda</label>
+            <select
+              className={SUBFORM_INPUT_CLASS}
+              value={field.currency || "COP"}
+              onChange={(e) =>
+                onUpdate(field.id, { currency: e.target.value })
+              }
+            >
+              {CALC_CURRENCIES.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={SUBFORM_LABEL_CLASS}>
+              Prefijo{" "}
+              <span className="font-normal normal-case text-slate-400">
+                (override)
+              </span>
+            </label>
+            <input
+              className={SUBFORM_INPUT_CLASS}
+              value={field.pricePrefix || ""}
+              placeholder="Automático según moneda"
+              onChange={(e) =>
+                onUpdate(field.id, { pricePrefix: e.target.value })
+              }
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Fórmula legacy — solo si ya existe */}
+      {typeof field.formula === "string" && field.formula !== "" && (
+        <details className="mb-[18px] rounded-md border border-amber-200 bg-amber-50 p-2">
+          <summary className="cursor-pointer text-[12px] font-semibold text-amber-800">
+            Fórmula textual (legacy)
+          </summary>
+          <div className="mt-2">
+            <input
+              className={`${SUBFORM_INPUT_CLASS} font-mono`}
+              value={field.formula}
+              placeholder="precio*cantidad"
+              onChange={(e) =>
+                onUpdate(field.id, { formula: e.target.value })
+              }
+            />
+            <p className="mt-1 text-[11px] text-slate-500">
+              Si la fórmula está vacía o se borra, el cálculo pasa a usar los
+              Términos de arriba. Operadores permitidos: + − × ÷ ( ).
+            </p>
+            <button
+              type="button"
+              onClick={() => onUpdate(field.id, { formula: undefined })}
+              className="mt-1.5 text-[11px] font-semibold text-red-600 hover:underline"
+            >
+              Quitar fórmula y usar solo Términos
+            </button>
+          </div>
+        </details>
       )}
     </>
   );

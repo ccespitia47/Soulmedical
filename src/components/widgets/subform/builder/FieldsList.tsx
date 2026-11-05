@@ -32,12 +32,25 @@ function NewFieldForm({
 
   const handleAdd = () => {
     if (!label.trim()) return;
+    // quiz_question usa `quizOptions` estructuradas (id/label/points/correct)
+    // en vez de `options: string[]`. Defaults alineados con el widget main:
+    // single + correct mode + 2 opciones (la primera correcta vale 1 pto).
+    const extras: Partial<SubformField> = {};
+    if (type === "quiz_question") {
+      extras.quizMode = "single";
+      extras.scoreMode = "correct";
+      extras.quizOptions = [
+        { id: uid(), label: "Opción 1", points: 1, correct: true },
+        { id: uid(), label: "Opción 2", points: 0, correct: false },
+      ];
+    }
     onAdd({
       id: uid(),
       type,
       label: label.trim(),
       required: false,
       options: FIELDS_WITH_OPTIONS.includes(type) ? ["Opción 1"] : undefined,
+      ...extras,
     });
   };
 

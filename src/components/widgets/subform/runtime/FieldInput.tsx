@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { SubformEntry, SubformField } from "../subform.types";
+import type { QuizOption, SubformEntry, SubformField } from "../subform.types";
+import { resolveQuizOptions } from "../subform.types";
 import { sanitizeHtml } from "../../../../utils/sanitize";
 import {
   deleteSubmissionFile,
@@ -207,33 +208,9 @@ export default function FieldInput({
     return <CalcInput field={field} value={value} onChange={onChange} entry={entry} fields={fields} />;
   }
 
-  // ── Quiz question (radio con puntos) ──
+  // ── Quiz question (radio/checkbox con puntos) ──
   if (field.type === "quiz_question") {
-    const correctIdx = field.correctOptionIndex ?? -1;
-    const points = field.points ?? 1;
-    const options = field.options || [];
-    const earned = options[correctIdx] && value === options[correctIdx] ? points : 0;
-    // Hidden auxiliar para que quiz_score pueda sumar: guardamos tanto el
-    // valor legible como los puntos ganados (clave compuesta `${id}__points`).
-    return (
-      <>
-        <div className="flex flex-col gap-1.5">
-          {options.map((opt) => (
-            <label key={opt} className="flex cursor-pointer items-center gap-2 text-[13px]">
-              <input
-                type="radio"
-                name={field.id}
-                value={opt}
-                checked={value === opt}
-                onChange={() => onChange(opt)}
-              />
-              {opt}
-            </label>
-          ))}
-        </div>
-        <input type="hidden" name={`${field.id}__points`} value={String(earned)} />
-      </>
-    );
+    return <QuizQuestionInput field={field} value={value} onChange={onChange} />;
   }
 
   // ── Quiz score ──
@@ -319,18 +296,111 @@ function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function computeQuizScore(entry?: SubformEntry, fields?: SubformField[]): number {
-  if (!entry || !fields) return 0;
+/**
+ * Suma los puntos ganados en TODAS las quiz_question de un row. Soporta las
+ * dos formas de guardar el valor del campo:
+ *   - single (radio): `entry[fieldId]` es el label de la opción elegida.
+ *   - multi  (chk):   `entry[fieldId]` es un JSON string con el array de
+ *                     labels seleccionados.
+ *
+ * Score por opción es siempre `opt.points` — en scoreMode="correct" las
+ * no-correct tienen points=0 por construcción (ver QuizQuestionEditor),
+ * en "weighted" cada opción tiene el peso que el admin le dio.
+ */
+function scoreForQuizQuestion(
+  field: SubformField,
+  rawValue: string,
+): number {
+  const options = resolveQuizOptions(field);
+  if (options.length === 0) return 0;
+  const selectedLabels = pickSelectedLabels(field, rawValue);
+  if (selectedLabels.size === 0) return 0;
   let sum = 0;
-  for (const f of fields) {
-    if (f.type !== "quiz_question") continue;
-    const correctIdx = f.correctOptionIndex ?? -1;
-    const correctOpt = (f.options || [])[correctIdx];
-    if (correctOpt && entry[f.id] === correctOpt) {
-      sum += f.points ?? 1;
-    }
+  for (const opt of options) {
+    if (selectedLabels.has(opt.label)) sum += opt.points;
   }
   return sum;
+}
+
+function pickSelectedLabels(
+  field: SubformField,
+  rawValue: string,
+): Set<string> {
+  const mode = field.quizMode || "single";
+  if (mode === "single") {
+    return rawValue ? new Set([rawValue]) : new Set();
+  }
+  try {
+    const parsed = JSON.parse(rawValue || "[]");
+    if (Array.isArray(parsed)) return new Set(parsed.map(String));
+  } catch {
+    /* malformado → sin selección */
+  }
+  return new Set();
+}
+
+/**
+ * Runtime del quiz_question: radio (single) o checkbox group (multi).
+ * Hidden auxiliar `${id}__points` guarda los puntos ganados para que el
+ * reporte/export pueda mostrarlos sin recomputar en backend.
+ */
+function QuizQuestionInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: SubformField;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const options: QuizOption[] = resolveQuizOptions(field);
+  const mode = field.quizMode || "single";
+  const selected = pickSelectedLabels(field, value);
+  const earned = scoreForQuizQuestion(field, value);
+
+  const toggleMulti = (label: string, checked: boolean) => {
+    const next = new Set(selected);
+    if (checked) next.add(label);
+    else next.delete(label);
+    onChange(JSON.stringify(Array.from(next)));
+  };
+
+  return (
+    <>
+      <div className="flex flex-col gap-1.5">
+        {options.map((opt) => (
+          <label
+            key={opt.id}
+            className="flex cursor-pointer items-center gap-2 text-[13px]"
+          >
+            {mode === "multi" ? (
+              <input
+                type="checkbox"
+                name={field.id}
+                value={opt.label}
+                checked={selected.has(opt.label)}
+                onChange={(e) => toggleMulti(opt.label, e.target.checked)}
+              />
+            ) : (
+              <input
+                type="radio"
+                name={field.id}
+                value={opt.label}
+                checked={value === opt.label}
+                onChange={() => onChange(opt.label)}
+              />
+            )}
+            {opt.label}
+          </label>
+        ))}
+      </div>
+      <input
+        type="hidden"
+        name={`${field.id}__points`}
+        value={String(earned)}
+      />
+    </>
+  );
 }
 
 // ─── RadioInput: mismo look que el widget radio del form principal ──────
@@ -816,7 +886,21 @@ function PriceInput({
   );
 }
 
-// ─── CalcInput: operator + initialValue + precision + formula fallback ──
+// ─── CalcInput: terms[] estructurados > formula textual > applyOperator ──
+//
+// Prioridad de evaluación (de mayor a menor):
+//   1. `calcTerms[]` — lista estructurada alineada con el widget main.
+//   2. `formula` textual legacy.
+//   3. `calcOperator` aplicado a TODOS los números del row (default viejo).
+//
+// Mantener los tres garantiza compat con configs ya guardadas en Mongo.
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  COP: "$",
+  USD: "US$",
+  EUR: "€",
+  MXN: "MX$",
+};
+
 function CalcInput({
   field,
   value,
@@ -832,12 +916,18 @@ function CalcInput({
 }) {
   const precision = field.decimalPrecision ?? 2;
   const isPrice = field.isPrice ?? false;
-  const prefix = field.pricePrefix || "$";
+  const currency = field.currency || "COP";
+  // Prefijo: override explícito gana; si no, símbolo de la moneda.
+  const prefix =
+    field.pricePrefix && field.pricePrefix.trim()
+      ? field.pricePrefix
+      : CURRENCY_SYMBOLS[currency] ?? currency;
 
   const result = useMemoLike(() => {
-    // Si hay fórmula, usar evaluador existente (compat con lo que ya guardaron).
+    if (Array.isArray(field.calcTerms) && field.calcTerms.length > 0) {
+      return applyStructuredTerms(field, entry);
+    }
     if ((field.formula || "").trim()) return computeCalc(field, entry, fields);
-    // Si no, aplicar calcOperator sobre todos los campos number del row.
     return applyOperator(field, entry, fields);
   }, [field, entry, fields]);
 
@@ -854,6 +944,76 @@ function CalcInput({
       <span>{display}</span>
     </div>
   );
+}
+
+/**
+ * Evalúa `calcTerms[]` estructurados. Cada term es un `widget` (referencia
+ * por fieldId al mismo subform row) o un valor `fixed`. Se aplica el
+ * mismo operador que `applyOperator` usa para la lista completa.
+ */
+function applyStructuredTerms(
+  field: SubformField,
+  entry?: SubformEntry,
+): number | null {
+  const terms = field.calcTerms || [];
+  const op = field.calcOperator || "sum";
+  const ignoreInvalid = field.ignoreInvalid ?? true;
+  const initial = field.initialValue;
+  const initialProvided = typeof initial === "number";
+
+  const values: number[] = [];
+  for (const term of terms) {
+    if (term.type === "fixed") {
+      values.push(term.value ?? 0);
+      continue;
+    }
+    if (term.type === "widget" && term.widgetId) {
+      // Autoreferencia (debería ser imposible por filtro en el editor,
+      // pero defendemos igual) — nunca sumar al propio calc.
+      if (term.widgetId === field.id) continue;
+      const raw = entry?.[term.widgetId];
+      if (raw === undefined || raw === "") {
+        if (!ignoreInvalid) values.push(0);
+        continue;
+      }
+      const n = parseFloat(String(raw).replace(",", "."));
+      if (Number.isFinite(n)) values.push(n);
+      else if (!ignoreInvalid) values.push(0);
+    }
+  }
+
+  switch (op) {
+    case "sum":
+      return values.reduce((a, b) => a + b, initial ?? 0);
+    case "subtract": {
+      if (initialProvided) return values.reduce((a, b) => a - b, initial);
+      if (values.length === 0) return 0;
+      return values.slice(1).reduce((a, b) => a - b, values[0]);
+    }
+    case "multiply":
+      return values.reduce((a, b) => a * b, initialProvided ? initial : 1);
+    case "divide": {
+      const seed = initialProvided ? initial : values[0];
+      const rest = initialProvided ? values : values.slice(1);
+      let r = seed ?? 0;
+      for (const v of rest) {
+        if (v === 0) return null;
+        r /= v;
+      }
+      return r;
+    }
+    case "average":
+      if (values.length === 0) return initialProvided ? initial : 0;
+      return values.reduce((a, b) => a + b, 0) / values.length;
+    case "min":
+      return values.length === 0 ? null : Math.min(...values);
+    case "max":
+      return values.length === 0 ? null : Math.max(...values);
+    case "count":
+      return values.length;
+    default:
+      return 0;
+  }
 }
 
 // ─── QuizScoreInput: visibility, showMax, precision, includedIds ────────
@@ -883,11 +1043,16 @@ function QuizScoreInput({
     for (const f of fields) {
       if (f.type !== "quiz_question") continue;
       if (includeQuestions === "select" && !includedIds.includes(f.id)) continue;
-      const correctIdx = f.correctOptionIndex ?? -1;
-      const correctOpt = (f.options || [])[correctIdx];
-      const points = f.points ?? 1;
-      max += points;
-      if (correctOpt && entry[f.id] === correctOpt) total += points;
+      // Max = suma de puntos de opciones correctas (scoreMode="correct")
+      // o la suma total de puntos positivos (scoreMode="weighted"). Con la
+      // convención unificada de resolveQuizOptions, cada opción tiene su
+      // `points` final, así que sumamos los positivos — da la escala real
+      // alcanzable. Score actual = puntos ganados por lo seleccionado.
+      const options = resolveQuizOptions(f);
+      for (const opt of options) {
+        if (opt.points > 0) max += opt.points;
+      }
+      total += scoreForQuizQuestion(f, entry[f.id] ?? "");
     }
     return { total, max };
   }, [entry, fields, includeQuestions, includedIds]);

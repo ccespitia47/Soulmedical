@@ -84,11 +84,13 @@ export const HAS_VALUE_OPTIONS: { value: string; label: string }[] = [
 
 // search NO va acá: sus "opciones" vienen de la fuente externa (sheets/
 // excel/sql) configurada en SearchSourceEditor, no de un array manual.
+// quiz_question tampoco: usa su propia UI estructurada con
+// `quizOptions: [{id, label, points, correct}]` para paridad con el widget
+// main — ver bloque específico en FieldEditor.
 export const FIELDS_WITH_OPTIONS: SubformFieldType[] = [
   "select",
   "radio",
   "checkbox",
-  "quiz_question",
 ];
 
 export function uid(): string {

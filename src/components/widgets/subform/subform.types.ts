@@ -69,10 +69,45 @@ export type SubformField = {
   accept?: string;
   /** calc: fórmula simple con ids de campos del mismo subform. Ej. "a+b*2". */
   formula?: string;
-  /** quiz_question: índice de la opción correcta (0-based). */
+  /**
+   * quiz_question (legacy): índice de la opción correcta (0-based) cuando
+   * `quizOptions` NO está presente. Se mantiene para no romper configs ya
+   * guardadas — al abrir el editor se migra a `quizOptions`.
+   */
   correctOptionIndex?: number;
-  /** quiz_question: puntos que vale la opción correcta. */
+  /**
+   * quiz_question (legacy): puntos globales de la pregunta cuando
+   * `quizOptions` NO está presente. En modo estructurado, cada opción
+   * tiene sus propios `points`.
+   */
   points?: number;
+  /**
+   * quiz_question: tipo de respuesta. `single` = radio (default, compat),
+   * `multi` = checkbox (varias opciones correctas). En `multi` el valor
+   * se serializa como JSON string de array de labels seleccionados.
+   * Alias del `mode` del widget main (renombrado acá para no colisionar
+   * con otros fields que puedan usar `mode`).
+   */
+  quizMode?: "single" | "multi";
+  /**
+   * quiz_question: modo de puntuación. `correct` = cada opción marcada
+   * correcta vale 1 pt; `weighted` = el admin define los puntos por opción
+   * libremente (incluso negativos).
+   */
+  scoreMode?: "correct" | "weighted";
+  /**
+   * quiz_question: opciones estructuradas — forma canónica alineada con
+   * el main widget. Cuando está presente, el runtime y el scoring IGNORAN
+   * `options`, `correctOptionIndex` y `points` legacy. Si NO está presente,
+   * se deriva on-read de los legacy en el builder/runtime/scoring para
+   * mantener compat con configs viejas.
+   */
+  quizOptions?: Array<{
+    id: string;
+    label: string;
+    points: number;
+    correct: boolean;
+  }>;
   /** radio: orientación de las opciones (default true = vertical). */
   verticalAlign?: boolean;
   /** radio: cuando true, cada opción se muestra con una imagen encima del label. */
@@ -159,8 +194,28 @@ export type SubformField = {
   initialValue?: number;
   /** calc: ignorar valores no numéricos (default true). */
   ignoreInvalid?: boolean;
+  /** calc: ignorar campos ocultos por reglas (default false). Paridad con main. */
+  ignoreHidden?: boolean;
   /** calc: mostrar como precio con el prefijo `pricePrefix`. */
   isPrice?: boolean;
+  /**
+   * calc: lista estructurada de términos — forma canónica alineada con el
+   * widget calc del main. Cuando está presente, el runtime la usa en vez
+   * del `formula` legacy o del fallback "aplica operador a todos los
+   * números del row". Cada term es o bien un `widget` (referencia por
+   * fieldId a OTRO campo del mismo subform row) o un valor `fixed`.
+   *
+   * Si está ausente, se mantiene el comportamiento legacy:
+   *   1. `formula` textual si existe.
+   *   2. `calcOperator` aplicado a todos los campos number/price/calc.
+   */
+  calcTerms?: Array<{
+    type: "widget" | "fixed";
+    /** widget: fieldId de otro campo del MISMO subform row. */
+    widgetId?: string;
+    /** fixed: valor numérico literal. */
+    value?: number;
+  }>;
 
   // ── quiz_score ───────────────────────────────────────────────────────
   /** quiz_score: incluir todas las preguntas o solo las de `includedIds`. */
@@ -252,6 +307,20 @@ export type SubformField = {
   // ── barcode ──────────────────────────────────────────────────────────
   /** barcode: habilita botón de "escanear" (preview, sin cámara real). */
   scannerEnabled?: boolean;
+  /**
+   * barcode: cuál cámara usar cuando haya scanner real. "rear" (trasera) es
+   * el default sensato en móvil para escanear códigos físicos; "front" se
+   * usa en kioscos o mesas de trabajo donde el código mira al usuario.
+   */
+  cameraType?: "rear" | "front";
+  /**
+   * barcode: formato esperado del código. El default `code_128` cubre la
+   * mayoría de etiquetas de producto; `ean_13` para retail internacional,
+   * `qr_code` para enlaces/payloads JSON, `upc_a` para retail US.
+   */
+  format?: "code_128" | "ean_13" | "qr_code" | "upc_a";
+  /** barcode: al completar el escaneo, dispara submit del formulario. */
+  autoSubmit?: boolean;
 
   // ── idscanner ────────────────────────────────────────────────────────
   /**
@@ -305,6 +374,38 @@ export type SubformField = {
 };
 
 export type SubformEntry = Record<string, string>;
+
+export type QuizOption = {
+  id: string;
+  label: string;
+  points: number;
+  correct: boolean;
+};
+
+/**
+ * Devuelve las opciones canónicas de un `quiz_question`. Si el field ya tiene
+ * `quizOptions` estructuradas, las devuelve tal cual. Si no, deriva desde el
+ * legacy (`options: string[]` + `correctOptionIndex` + `points` global):
+ * cada string se vuelve una `QuizOption`, la del índice correcto queda
+ * `correct=true` con los `points` globales, el resto con points=0.
+ *
+ * El objetivo es que runtime, scoring y builder consuman una sola forma —
+ * las configs viejas guardadas en Mongo siguen funcionando sin migración.
+ */
+export function resolveQuizOptions(field: SubformField): QuizOption[] {
+  if (Array.isArray(field.quizOptions) && field.quizOptions.length > 0) {
+    return field.quizOptions;
+  }
+  const strings = field.options || [];
+  const correctIdx = field.correctOptionIndex ?? -1;
+  const pts = field.points ?? 1;
+  return strings.map((label, i) => ({
+    id: `legacy_${i}`,
+    label,
+    points: i === correctIdx ? pts : 0,
+    correct: i === correctIdx,
+  }));
+}
 
 // ── Reglas internas del subformulario ──────────────────────────────────────
 
