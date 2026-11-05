@@ -4,7 +4,7 @@ import Render from "./PendingActivity.render";
 import type { WidgetDefinition } from "../../../types/widget.types";
 
 /**
- * Widget "Actividades pendientes": muestra al usuario las filas de
+ * Widget "Cumplimiento actividades": muestra al usuario las filas de
  * subformulario de un formulario de Planeación propio que todavía no
  * cumplió. Al enviar el formulario (Cumplimiento), el valor seleccionado
  * se guarda en `completesActivities` y el backend bloquea que la misma
@@ -15,7 +15,7 @@ import type { WidgetDefinition } from "../../../types/widget.types";
  */
 export const PendingActivityWidget: WidgetDefinition = {
   type: "pending_activity",
-  label: "Actividades pendientes",
+  label: "Cumplimiento actividades",
   icon: "checkCircle",
   defaultConfig: {
     planningFormId: "",
