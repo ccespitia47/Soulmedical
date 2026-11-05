@@ -26,6 +26,25 @@ export type SubformFieldType =
   | "quiz_question"
   | "quiz_score";
 
+/**
+ * ── Deuda técnica: renames pendientes contra el schema del formulario
+ * principal (postpuestos para no romper configuraciones ya guardadas).
+ * Cuando se aborden, hacerlos con capa de compat (leer ambos nombres,
+ * escribir al nuevo) y eliminar la capa después de 6 meses.
+ *
+ *   SUBFORM            →  MAIN
+ *   rememberInput      →  rememberEntry
+ *   decimalMark "dot"  →  decimalMark "point"
+ *   headerText         →  text
+ *   headerSize         →  size
+ *   htmlContent        →  html
+ *   idscannerFields    →  fields
+ *   calcOperator       →  operator
+ *   url / imageFileId  →  src / mediaId         (image)
+ *
+ * Ver también el audit MAIN↔SUBFORM en la conversación de 2026-11.
+ */
+
 export type SubformField = {
   id: string;
   type: SubformFieldType;
@@ -35,8 +54,12 @@ export type SubformField = {
   options?: string[];
   defaultValue?: string;
   // ── Configs específicas de widgets portados ──
-  /** URL (para image/video) o contenido HTML (htmlblock). */
+  /**
+   * URL (para image/video) o contenido HTML (htmlblock).
+   * TODO rename (image): `url` → `src` para match con main.
+   */
   url?: string;
+  /** TODO rename (htmlblock): `htmlContent` → `html` para match con main. */
   htmlContent?: string;
   /** price: prefijo visual (ej. "$", "COP"). */
   pricePrefix?: string;
@@ -62,7 +85,10 @@ export type SubformField = {
     imageUrl?: string;
     imageId?: string;
   }>;
-  /** radio / text / price / select: persiste la última entrada en localStorage. */
+  /**
+   * radio / text / price / select: persiste la última entrada en localStorage.
+   * TODO rename: `rememberInput` → `rememberEntry` para match con main.
+   */
   rememberInput?: boolean;
 
   // ── text ─────────────────────────────────────────────────────────────
@@ -90,7 +116,12 @@ export type SubformField = {
   // ── price ────────────────────────────────────────────────────────────
   /** price: código de moneda (COP, USD, EUR, MXN…). */
   currency?: string;
-  /** price: separador decimal ("comma" o "dot", match con el main). */
+  /**
+   * price: separador decimal.
+   * TODO rename: aceptar también `"point"` (el main usa esa variante);
+   * hoy solo `"comma" | "dot"`. Al alinear, mapear `"dot"` → `"point"`
+   * con capa de compat para configs guardadas.
+   */
   decimalMark?: "comma" | "dot";
   /** price / calc / quiz_score: número de decimales a mostrar. */
   decimalPrecision?: number;
@@ -116,7 +147,11 @@ export type SubformField = {
   assignedStep?: number;
 
   // ── calc ─────────────────────────────────────────────────────────────
-  /** calc: operador aplicado a los campos referenciados. */
+  /**
+   * calc: operador aplicado a los campos referenciados.
+   * TODO rename: `calcOperator` → `operator` para match con main.
+   * (Prop solo vive aquí → rename puro, bajo riesgo.)
+   */
   calcOperator?: "sum" | "subtract" | "multiply" | "divide" | "average" | "min" | "max" | "count";
   /** calc: valor inicial a sumar al resultado. */
   initialValue?: number;
@@ -180,7 +215,10 @@ export type SubformField = {
   thousandsSeparator?: "none" | "dot" | "comma" | boolean;
 
   // ── image (view-only — URL externa o upload a GridFS) ────────────────
-  /** image: fileId en GridFS cuando la imagen fue subida (no URL externa). */
+  /**
+   * image: fileId en GridFS cuando la imagen fue subida (no URL externa).
+   * TODO rename: `imageFileId` → `mediaId` para match con main.
+   */
   imageFileId?: string;
   /** image: ancho máximo en px (null = sin límite). */
   maxWidth?: number;
@@ -196,9 +234,15 @@ export type SubformField = {
   maxDurationSecs?: number;
 
   // ── header ───────────────────────────────────────────────────────────
-  /** header: texto del encabezado (separado de `label`). */
+  /**
+   * header: texto del encabezado (separado de `label`).
+   * TODO rename: `headerText` → `text` para match con main.
+   */
   headerText?: string;
-  /** header: tamaño visual (small / medium / large). */
+  /**
+   * header: tamaño visual (small / medium / large).
+   * TODO rename: `headerSize` → `size` para match con main.
+   */
   headerSize?: "small" | "medium" | "large";
   /** header: mostrar línea divisoria debajo. */
   showDivider?: boolean;
@@ -208,7 +252,11 @@ export type SubformField = {
   scannerEnabled?: boolean;
 
   // ── idscanner ────────────────────────────────────────────────────────
-  /** idscanner: qué campos extraer (nombre, numero, fechaNacimiento, …). */
+  /**
+   * idscanner: qué campos extraer (nombre, numero, fechaNacimiento, …).
+   * TODO rename: `idscannerFields` → `fields` para match con main.
+   * (Prop solo vive aquí → rename puro, bajo riesgo.)
+   */
   idscannerFields?: string[];
   /** idscanner: permitir edición manual del resultado. */
   allowManual?: boolean;
