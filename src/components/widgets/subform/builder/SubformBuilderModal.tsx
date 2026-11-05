@@ -46,6 +46,12 @@ export default function SubformBuilderModal({
       // antes de descartar el field — si no se corre, queda huérfano.
       // Best-effort: si el delete falla, no bloqueamos la edición.
       if (target?.imageFileId) void deleteFormAsset(target.imageFileId);
+      // Lo mismo para las imágenes por opción del radio con useImageLabels.
+      if (target?.radioOptions?.length) {
+        for (const opt of target.radioOptions) {
+          if (opt.imageId) void deleteFormAsset(opt.imageId);
+        }
+      }
       return prev.filter((f) => f.id !== id);
     });
     // Limpiar referencias en reglas

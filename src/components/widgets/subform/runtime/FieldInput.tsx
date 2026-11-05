@@ -343,7 +343,17 @@ function RadioInput({
     }
   }, [remember, value, storageKey]);
 
-  const options = field.options || [];
+  // Modo rico (con imágenes por opción) usa radioOptions; si no, caemos a
+  // options: string[] — así formularios viejos siguen renderizando igual.
+  const useImageLabels = field.useImageLabels && (field.radioOptions?.length ?? 0) > 0;
+  const options: Array<{ key: string; label: string; imageUrl?: string }> =
+    useImageLabels
+      ? (field.radioOptions || []).map((o) => ({
+          key: o.label, // value canónico sigue siendo el label, para compat con datos ya guardados
+          label: o.label,
+          imageUrl: o.imageUrl,
+        }))
+      : (field.options || []).map((o) => ({ key: o, label: o }));
 
   return (
     <div
@@ -352,20 +362,23 @@ function RadioInput({
         flexDirection: vertical ? "column" : undefined,
         gridTemplateColumns: vertical
           ? undefined
-          : "repeat(auto-fit, minmax(140px, 1fr))",
+          : useImageLabels
+            ? "repeat(auto-fit, minmax(120px, 1fr))"
+            : "repeat(auto-fit, minmax(140px, 1fr))",
         gap: 8,
       }}
     >
       {options.map((opt, index) => {
-        const isSelected = value === opt;
+        const isSelected = value === opt.key;
         return (
           <label
-            key={opt}
+            key={opt.key}
             style={{
               display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: "8px 12px",
+              flexDirection: useImageLabels ? "column" : "row",
+              alignItems: useImageLabels ? "center" : "center",
+              gap: useImageLabels ? 6 : 10,
+              padding: useImageLabels ? "10px 8px" : "8px 12px",
               border: isSelected
                 ? "1.5px solid #0891b2"
                 : "1.5px solid #e2e8f0",
@@ -375,20 +388,46 @@ function RadioInput({
               fontSize: 13.5,
               color: "#111827",
               transition: "all 0.15s ease-out",
+              textAlign: useImageLabels ? "center" : "left",
             }}
           >
-            <input
-              type="radio"
-              name={field.id}
-              value={opt}
-              required={field.required && index === 0}
-              checked={isSelected}
-              onChange={() => onChange(opt)}
-              style={{ accentColor: "#0891b2", flexShrink: 0 }}
-            />
-            <span style={{ whiteSpace: vertical ? "normal" : "nowrap" }}>
-              {opt}
-            </span>
+            {useImageLabels && opt.imageUrl && (
+              <img
+                src={opt.imageUrl}
+                alt={opt.label}
+                style={{
+                  width: 80,
+                  height: 80,
+                  objectFit: "cover",
+                  borderRadius: 6,
+                  background: "#fff",
+                }}
+              />
+            )}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: useImageLabels ? 6 : 10,
+              }}
+            >
+              <input
+                type="radio"
+                name={field.id}
+                value={opt.key}
+                required={field.required && index === 0}
+                checked={isSelected}
+                onChange={() => onChange(opt.key)}
+                style={{ accentColor: "#0891b2", flexShrink: 0 }}
+              />
+              <span
+                style={{
+                  whiteSpace: vertical || useImageLabels ? "normal" : "nowrap",
+                }}
+              >
+                {opt.label}
+              </span>
+            </div>
           </label>
         );
       })}

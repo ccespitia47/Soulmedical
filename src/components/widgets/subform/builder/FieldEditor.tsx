@@ -5,6 +5,7 @@ import SubformFieldTypeSelect from "./SubformFieldTypeSelect";
 import { deleteFormAsset, uploadFormAsset } from "../../../../services/formAssets";
 import { COUNTRIES } from "../../../../lib/countries";
 import { ID_DOC_COUNTRIES, ID_DOC_COUNTRY_MAP } from "../../../../lib/idDocuments";
+import { sanitizeHtml } from "../../../../utils/sanitize";
 import {
   FIELDS_WITH_OPTIONS,
   FIELD_TYPES,
@@ -106,7 +107,11 @@ function FieldPreview({ field }: { field: SubformField }) {
       {field.type === "htmlblock" && (
         <div
           className="rounded border border-slate-200 bg-slate-50 p-2 text-[12px] text-slate-600"
-          dangerouslySetInnerHTML={{ __html: field.htmlContent || "<em>HTML vacío</em>" }}
+          dangerouslySetInnerHTML={{
+            __html: field.htmlContent
+              ? sanitizeHtml(field.htmlContent)
+              : "<em>HTML vacío</em>",
+          }}
         />
       )}
       {field.type === "image" && field.url && (
@@ -287,7 +292,7 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
         </div>
       )}
 
-      {hasOptions && (
+      {hasOptions && !(field.type === "radio" && field.useImageLabels) && (
         <div className="mb-[18px]">
           <div className="mb-1.5 flex items-center gap-1.5">
             <label className={`${SUBFORM_LABEL_CLASS} mb-0`}>Opciones</label>
@@ -411,15 +416,35 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
       )}
 
       {field.type === "htmlblock" && (
-        <div className="mb-[18px]">
-          <label className={SUBFORM_LABEL_CLASS}>Contenido HTML</label>
-          <textarea
-            className={`${SUBFORM_INPUT_CLASS} min-h-[100px] resize-y font-mono text-[12px]`}
-            value={field.htmlContent || ""}
-            placeholder="<p>Lorem ipsum…</p>"
-            onChange={(e) => onUpdate(field.id, { htmlContent: e.target.value })}
-          />
-        </div>
+        <>
+          <div className="mb-[14px]">
+            <label className={SUBFORM_LABEL_CLASS}>Código HTML</label>
+            <textarea
+              className={`${SUBFORM_INPUT_CLASS} min-h-[180px] resize-y font-mono text-[12px] leading-relaxed`}
+              value={field.htmlContent || ""}
+              placeholder="<h4>Título</h4><p>Contenido…</p>"
+              spellCheck={false}
+              onChange={(e) =>
+                onUpdate(field.id, { htmlContent: e.target.value })
+              }
+            />
+            <p className="mt-1 text-[11px] text-slate-400">
+              Soporta HTML completo con estilos inline. El contenido se
+              sanitiza antes de renderizar (no se ejecutan scripts).
+            </p>
+          </div>
+          <div className="mb-[18px]">
+            <label className={SUBFORM_LABEL_CLASS}>Vista previa</label>
+            <div
+              className="min-h-[40px] rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-[13px]"
+              dangerouslySetInnerHTML={{
+                __html: field.htmlContent
+                  ? sanitizeHtml(field.htmlContent)
+                  : "<em style='color:#9ca3af'>Sin contenido</em>",
+              }}
+            />
+          </div>
+        </>
       )}
 
       {field.type === "calc" && (
@@ -1562,6 +1587,43 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
             </div>
           </div>
 
+          <label className="mb-3 flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+            <input
+              type="checkbox"
+              checked={field.useImageLabels ?? false}
+              onChange={(e) => {
+                const enabled = e.target.checked;
+                // Al activar, sembrar radioOptions desde options (string[]) si
+                // está vacío — para no obligar al user a re-tipear etiquetas.
+                const seeded =
+                  enabled && (!field.radioOptions || field.radioOptions.length === 0)
+                    ? (field.options || []).map((label, i) => ({
+                        id: `opt_${i}_${Date.now().toString(36)}`,
+                        label,
+                      }))
+                    : undefined;
+                onUpdate(field.id, {
+                  useImageLabels: enabled,
+                  ...(seeded ? { radioOptions: seeded } : {}),
+                });
+              }}
+              className="h-4 w-4 accent-[#00c2a8]"
+            />
+            <span>Usar imágenes como etiquetas de las opciones</span>
+          </label>
+
+          {field.useImageLabels && (
+            <div className="mb-[18px]">
+              <label className={SUBFORM_LABEL_CLASS}>Opciones con imagen</label>
+              <RichRadioOptions
+                options={field.radioOptions || []}
+                onChange={(next) =>
+                  onUpdate(field.id, { radioOptions: next })
+                }
+              />
+            </div>
+          )}
+
           <label className="mb-[18px] flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
             <input
               type="checkbox"
@@ -1804,6 +1866,206 @@ function OptionsPerRow({
             <button
               type="button"
               title="Eliminar"
+              onClick={() => remove(index)}
+              className="flex h-7 w-7 flex-shrink-0 cursor-pointer items-center justify-center rounded-md border-[1.5px] border-slate-200 bg-white text-[16px] leading-none text-slate-400 hover:text-red-500"
+            >
+              ×
+            </button>
+          </div>
+        );
+      })}
+      <button
+        type="button"
+        onClick={add}
+        className="mt-1 w-full cursor-pointer rounded-md border-[1.5px] border-slate-200 bg-white px-3 py-2 text-[13px] font-medium text-slate-700 hover:border-cyan-600 hover:text-cyan-700"
+      >
+        + Añadir opción
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Edición rica de opciones para el widget radio del subform cuando
+ * `useImageLabels=true`: cada opción tiene label + imagen opcional
+ * (upload a GridFS). Los uploads reusan /forms/assets igual que el
+ * widget Image, así los cleanups también se unifican.
+ */
+type RichRadioOption = {
+  id: string;
+  label: string;
+  imageUrl?: string;
+  imageId?: string;
+};
+
+function RichRadioOptions({
+  options,
+  onChange,
+}: {
+  options: RichRadioOption[];
+  onChange: (next: RichRadioOption[]) => void;
+}) {
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [busyIdx, setBusyIdx] = useState<number | null>(null);
+  const [errorIdx, setErrorIdx] = useState<{ idx: number; msg: string } | null>(
+    null,
+  );
+  const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const fileRefs = useRef<Array<HTMLInputElement | null>>([]);
+
+  const reorder = (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0) return;
+    const next = [...options];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    onChange(next);
+  };
+
+  const patch = (idx: number, changes: Partial<RichRadioOption>) => {
+    const next = options.map((o, i) => (i === idx ? { ...o, ...changes } : o));
+    onChange(next);
+  };
+
+  const remove = (idx: number) => {
+    const target = options[idx];
+    if (target?.imageId) void deleteFormAsset(target.imageId);
+    onChange(options.filter((_, i) => i !== idx));
+  };
+
+  const add = () => {
+    const next: RichRadioOption[] = [
+      ...options,
+      {
+        id: `opt_${Math.random().toString(36).slice(2, 8)}`,
+        label: `Opción ${options.length + 1}`,
+      },
+    ];
+    onChange(next);
+    setTimeout(() => {
+      const el = inputRefs.current[next.length - 1];
+      el?.focus();
+      el?.select();
+    }, 0);
+  };
+
+  const handleFile = async (idx: number, file: File) => {
+    setErrorIdx(null);
+    setBusyIdx(idx);
+    const previousId = options[idx]?.imageId;
+    const res = await uploadFormAsset(file);
+    setBusyIdx(null);
+    const ref = fileRefs.current[idx];
+    if (ref) ref.value = "";
+    if (res.error) {
+      setErrorIdx({ idx, msg: res.error });
+      return;
+    }
+    patch(idx, { imageUrl: res.url, imageId: res.fileId });
+    if (previousId && previousId !== res.fileId) {
+      void deleteFormAsset(previousId);
+    }
+  };
+
+  const clearImage = (idx: number) => {
+    const target = options[idx];
+    if (target?.imageId) void deleteFormAsset(target.imageId);
+    patch(idx, { imageUrl: undefined, imageId: undefined });
+    const ref = fileRefs.current[idx];
+    if (ref) ref.value = "";
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      {options.map((opt, index) => {
+        const isDragging = dragIdx === index;
+        const busy = busyIdx === index;
+        const err = errorIdx?.idx === index ? errorIdx.msg : null;
+        return (
+          <div
+            key={opt.id}
+            draggable
+            onDragStart={() => setDragIdx(index)}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (dragIdx !== null) reorder(dragIdx, index);
+              setDragIdx(null);
+            }}
+            onDragEnd={() => setDragIdx(null)}
+            className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2"
+            style={{ opacity: isDragging ? 0.5 : 1 }}
+          >
+            <span
+              title="Arrastra para reordenar"
+              className="cursor-grab select-none px-1 text-[14px] text-slate-400"
+            >
+              ☰
+            </span>
+
+            {/* Imagen (upload o preview) */}
+            <div className="flex-shrink-0">
+              {opt.imageUrl ? (
+                <div className="group relative">
+                  <img
+                    src={opt.imageUrl}
+                    alt={opt.label}
+                    className="h-12 w-12 rounded-md border border-slate-200 bg-white object-cover"
+                  />
+                  <button
+                    type="button"
+                    title="Quitar imagen"
+                    onClick={() => clearImage(index)}
+                    className="absolute -right-1.5 -top-1.5 flex h-5 w-5 cursor-pointer items-center justify-center rounded-full border-none bg-red-500 text-[11px] font-bold leading-none text-white"
+                  >
+                    ×
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => fileRefs.current[index]?.click()}
+                  title="Subir imagen"
+                  className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-md border-[1.5px] border-dashed border-slate-300 bg-white text-slate-400 hover:border-cyan-600 hover:text-cyan-700 disabled:cursor-wait"
+                >
+                  <Icon name="image" size={16} />
+                </button>
+              )}
+              <input
+                ref={(el) => {
+                  fileRefs.current[index] = el;
+                }}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleFile(index, f);
+                }}
+              />
+            </div>
+
+            {/* Label editable */}
+            <div className="flex flex-1 flex-col gap-0.5">
+              <input
+                ref={(el) => {
+                  inputRefs.current[index] = el;
+                }}
+                className={SUBFORM_INPUT_CLASS}
+                value={opt.label}
+                onChange={(e) => patch(index, { label: e.target.value })}
+              />
+              {err && (
+                <span className="text-[11px] text-red-600">{err}</span>
+              )}
+              {busy && (
+                <span className="text-[11px] text-slate-500">Subiendo…</span>
+              )}
+            </div>
+
+            <button
+              type="button"
+              title="Eliminar opción"
               onClick={() => remove(index)}
               className="flex h-7 w-7 flex-shrink-0 cursor-pointer items-center justify-center rounded-md border-[1.5px] border-slate-200 bg-white text-[16px] leading-none text-slate-400 hover:text-red-500"
             >

@@ -50,6 +50,18 @@ export type SubformField = {
   points?: number;
   /** radio: orientación de las opciones (default true = vertical). */
   verticalAlign?: boolean;
+  /** radio: cuando true, cada opción se muestra con una imagen encima del label. */
+  useImageLabels?: boolean;
+  /**
+   * radio: opciones "ricas" con id/label + imagen opcional. Se usa cuando
+   * `useImageLabels=true`. Si está vacío, el runtime cae a `options: string[]`.
+   */
+  radioOptions?: Array<{
+    id: string;
+    label: string;
+    imageUrl?: string;
+    imageId?: string;
+  }>;
   /** radio / text / price / select: persiste la última entrada en localStorage. */
   rememberInput?: boolean;
 
