@@ -1769,10 +1769,17 @@ function SearchInput({
   const [error, setError] = useState("");
   const minChars = field.searchMinChars ?? 2;
 
-  // Determina si la fuente está "lista" — hay URL/endpoint según el tipo.
-  // Un search sin configuración completa no abre el modal; mostramos un
-  // estado explícito en lugar de un select vacío que confundía al usuario.
-  const source = field.searchSource;
+  // Healer en runtime: subformularios guardados antes de la feature search
+  // externo no tienen `searchSource`; si hay URL/endpoint los inferimos.
+  // Si no hay nada, defaulteamos a google_sheets para que `toMainConfig`
+  // elija una ruta y el "configured" check decida mostrar el cartel.
+  const source: SubformField["searchSource"] =
+    field.searchSource ??
+    (field.excelUrl
+      ? "excel_web"
+      : field.sqlEndpoint
+        ? "sql"
+        : "google_sheets");
   const configured =
     (source === "google_sheets" && !!field.sheetsUrl) ||
     (source === "excel_web" && !!field.excelUrl) ||
@@ -1790,12 +1797,13 @@ function SearchInput({
 
   // Construye el SearchWidgetConfig que esperan searchGoogleSheets /
   // searchExcelWeb — es la forma más pragmática de reusar su lógica sin
-  // duplicar el parseo de URLs, CSV, etc.
+  // duplicar el parseo de URLs, CSV, etc. Usamos `source` (inferida) en
+  // vez de field.searchSource para que el healer retroactivo funcione.
   const toMainConfig = (): SearchWidgetConfig => ({
     sourceType:
-      field.searchSource === "excel_web"
+      source === "excel_web"
         ? "excel_web"
-        : field.searchSource === "sql"
+        : source === "sql"
           ? "sql"
           : "google_sheets",
     sheetsUrl: field.sheetsUrl,
@@ -1815,11 +1823,11 @@ function SearchInput({
     const cfg = toMainConfig();
     try {
       let result: SearchRow[] = [];
-      if (field.searchSource === "google_sheets") {
+      if (source === "google_sheets") {
         result = await searchGoogleSheets(cfg, query);
-      } else if (field.searchSource === "excel_web") {
+      } else if (source === "excel_web") {
         result = await searchExcelWeb(cfg, query);
-      } else if (field.searchSource === "sql" && field.sqlEndpoint) {
+      } else if (source === "sql" && field.sqlEndpoint) {
         const base =
           field.sqlEndpoint.startsWith("/") || field.sqlEndpoint.startsWith("http")
             ? field.sqlEndpoint
@@ -1872,9 +1880,7 @@ function SearchInput({
     // El value primario es la columna de búsqueda — si no existe, la
     // primera displayColumn — si no, el primer campo del row.
     const searchCol =
-      field.searchSource === "excel_web"
-        ? field.excelSearchCol
-        : field.sheetsSearchCol;
+      source === "excel_web" ? field.excelSearchCol : field.sheetsSearchCol;
     const firstDisplay = field.displayColumns?.[0]?.key;
     const primaryKey =
       (searchCol && row[searchCol] != null && searchCol) ||

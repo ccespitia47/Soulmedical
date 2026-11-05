@@ -16,6 +16,31 @@ type SubformBuilderModalProps = {
 
 type Tab = "fields" | "rules";
 
+/**
+ * Healer de schema: pasa por los fields una vez y aplica fixes retroactivos
+ * para configuraciones guardadas antes de un cambio de modelo. Hoy:
+ *
+ * - search sin `searchSource`: si tiene URL/endpoint, lo inferimos. Si no,
+ *   defaulteamos a "google_sheets" para que el editor y el runtime le den
+ *   un tratamiento consistente (antes caía a un SelectInput huérfano).
+ *
+ * Mantener la función corta y explícita por cada caso — nada de "fix
+ * genérico" que se expanda a validaciones de lógica de negocio.
+ */
+function healFields(fields: SubformField[]): SubformField[] {
+  return fields.map((f) => {
+    if (f.type === "search" && !f.searchSource) {
+      const inferred: SubformField["searchSource"] = f.excelUrl
+        ? "excel_web"
+        : f.sqlEndpoint
+          ? "sql"
+          : "google_sheets";
+      return { ...f, searchSource: inferred };
+    }
+    return f;
+  });
+}
+
 export default function SubformBuilderModal({
   widgetLabel,
   fields,
@@ -23,7 +48,9 @@ export default function SubformBuilderModal({
   onSave,
   onClose,
 }: SubformBuilderModalProps) {
-  const [localFields, setLocalFields] = useState<SubformField[]>([...fields]);
+  const [localFields, setLocalFields] = useState<SubformField[]>(() =>
+    healFields(fields),
+  );
   const [localRules, setLocalRules] = useState<SubformRule[]>([...rules]);
   const [activeTab, setActiveTab] = useState<Tab>("fields");
   const [editingId, setEditingId] = useState<string | null>(null);
