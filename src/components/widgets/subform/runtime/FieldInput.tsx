@@ -136,6 +136,13 @@ export default function FieldInput({
     );
   }
 
+  // ── Subform anidado ──
+  if (field.type === "subform") {
+    return (
+      <NestedSubformInput field={field} value={value} onChange={onChange} />
+    );
+  }
+
   // ── Radio ──
   if (field.type === "radio") {
     return <RadioInput field={field} value={value} onChange={onChange} />;
@@ -2041,5 +2048,177 @@ function SearchInput({
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * Runtime del subform anidado dentro de un entry padre.
+ *
+ * El `value` es el JSON string de `SubformEntry[]` — mismo contrato que
+ * usa un subform top-level cuando se envía como parte del FormData.
+ * Serializar/parsear en cada cambio mantiene el modelo unificado y el
+ * backend no necesita saber que es anidado.
+ *
+ * EntryModal se carga con `import()` dinámico para romper el ciclo
+ * FieldInput ↔ EntryModal (EntryModal importa FieldInput y ahora
+ * FieldInput necesita EntryModal). Es la misma técnica que usa el
+ * builder con SubformBuilderModal.
+ */
+function NestedSubformInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: SubformField;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const childFields = field.childFields ?? [];
+  const childRules = field.childRules ?? [];
+
+  const entries: SubformEntry[] = (() => {
+    if (!value) return [];
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  })();
+
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [ModalLazy, setModalLazy] = useState<
+    typeof import("./EntryModal").default | null
+  >(null);
+
+  const persist = (next: SubformEntry[]) =>
+    onChange(next.length === 0 ? "" : JSON.stringify(next));
+
+  const loadModal = async () => {
+    if (!ModalLazy) {
+      const mod = await import("./EntryModal");
+      setModalLazy(() => mod.default);
+    }
+  };
+
+  const openAdd = async () => {
+    await loadModal();
+    setAdding(true);
+  };
+
+  const openEdit = async (idx: number) => {
+    await loadModal();
+    setEditingIdx(idx);
+  };
+
+  const remove = (idx: number) => {
+    persist(entries.filter((_, i) => i !== idx));
+  };
+
+  // Resumen de una fila para la tabla: concatenamos los primeros 3 fields
+  // con valor no vacío. El label de cada campo se preserva como prefijo
+  // para que el admin identifique qué es qué sin abrir el modal.
+  const rowSummary = (entry: SubformEntry) => {
+    const parts: string[] = [];
+    for (const f of childFields) {
+      const v = entry[f.id];
+      if (v == null || v === "") continue;
+      if (typeof v === "string" && (v.startsWith("data:") || v.startsWith("gridfs:"))) continue;
+      parts.push(`${f.label}: ${v}`);
+      if (parts.length >= 3) break;
+    }
+    return parts.length === 0 ? "(sin datos)" : parts.join(" · ");
+  };
+
+  const title = field.label || "Entrada";
+
+  return (
+    <div>
+      <input type="hidden" name={field.id} value={value} />
+
+      {childFields.length === 0 ? (
+        <div className="rounded-[7px] border border-dashed border-slate-300 bg-slate-50 px-3 py-2.5 text-[12.5px] text-slate-500">
+          Subformulario anidado sin campos configurados.
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-slate-200">
+          {entries.length === 0 ? (
+            <div className="px-3 py-4 text-center text-[12.5px] text-slate-400">
+              Sin entradas todavía.
+            </div>
+          ) : (
+            <ul className="m-0 list-none p-0">
+              {entries.map((entry, idx) => (
+                <li
+                  key={idx}
+                  className="flex items-center justify-between gap-2 border-b border-slate-100 bg-white px-3 py-2 last:border-b-0"
+                >
+                  <div className="min-w-0 flex-1 truncate text-[12.5px] text-slate-700">
+                    <span className="mr-2 inline-block rounded bg-slate-100 px-1.5 text-[11px] font-mono text-slate-500">
+                      #{idx + 1}
+                    </span>
+                    {rowSummary(entry)}
+                  </div>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => void openEdit(idx)}
+                      className="cursor-pointer rounded border-none bg-slate-100 px-2 py-1 text-[11.5px] font-semibold text-cyan-700 hover:bg-slate-200"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => remove(idx)}
+                      className="cursor-pointer rounded border-none bg-red-50 px-2 py-1 text-[11.5px] font-semibold text-red-600 hover:bg-red-100"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          <button
+            type="button"
+            onClick={() => void openAdd()}
+            className="block w-full cursor-pointer border-none border-t border-slate-200 bg-slate-50 px-3 py-2 text-[12.5px] font-semibold text-cyan-700 hover:bg-slate-100"
+          >
+            + Agregar entrada
+          </button>
+        </div>
+      )}
+
+      {ModalLazy && (adding || editingIdx !== null) && (
+        <ModalLazy
+          fields={childFields}
+          rules={childRules}
+          initial={
+            editingIdx !== null ? entries[editingIdx] ?? {} : {}
+          }
+          title={
+            editingIdx !== null
+              ? `${title} #${editingIdx + 1}`
+              : `Nueva ${title.toLowerCase()}`
+          }
+          onSave={(entry) => {
+            if (editingIdx !== null) {
+              const next = [...entries];
+              next[editingIdx] = entry;
+              persist(next);
+              setEditingIdx(null);
+            } else {
+              persist([...entries, entry]);
+              setAdding(false);
+            }
+          }}
+          onClose={() => {
+            setAdding(false);
+            setEditingIdx(null);
+          }}
+        />
+      )}
+    </div>
   );
 }

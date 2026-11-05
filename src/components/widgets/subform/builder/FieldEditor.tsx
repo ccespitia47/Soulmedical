@@ -138,6 +138,12 @@ function FieldPreview({ field }: { field: SubformField }) {
       {field.type === "file" && (
         <PreviewPlaceholder iconName="file" text="Adjuntar archivo" />
       )}
+      {field.type === "subform" && (
+        <PreviewPlaceholder
+          iconName="table"
+          text={`Subformulario anidado · ${(field.childFields ?? []).length} campo(s)`}
+        />
+      )}
       {field.type === "calc" && (
         <div className="flex items-center justify-center gap-2 rounded-md border-[1.5px] border-cyan-400 bg-cyan-50/60 px-3 py-2 font-mono text-sm font-bold text-cyan-700">
           <Icon name="calc" size={14} />
