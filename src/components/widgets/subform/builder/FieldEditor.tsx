@@ -114,11 +114,8 @@ function FieldPreview({ field }: { field: SubformField }) {
           className="max-h-[120px] rounded border border-slate-200 object-contain"
         />
       )}
-      {field.type === "video" && field.url && (
-        <div className="flex items-center gap-2 rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-          <Icon name="video" size={14} />
-          <span className="font-mono">{field.url}</span>
-        </div>
+      {field.type === "video" && (
+        <PreviewPlaceholder iconName="video" text="Captura de video" />
       )}
       {field.type === "signature" && (
         <PreviewPlaceholder iconName="edit" text="Zona de firma" />
@@ -408,18 +405,6 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
         <ImageSource field={field} onUpdate={onUpdate} />
       )}
 
-      {field.type === "video" && (
-        <div className="mb-[18px]">
-          <label className={SUBFORM_LABEL_CLASS}>URL</label>
-          <input
-            className={SUBFORM_INPUT_CLASS}
-            value={field.url || ""}
-            placeholder="https://youtube.com/watch?v=…"
-            onChange={(e) => onUpdate(field.id, { url: e.target.value })}
-          />
-        </div>
-      )}
-
       {field.type === "htmlblock" && (
         <div className="mb-[18px]">
           <label className={SUBFORM_LABEL_CLASS}>Contenido HTML</label>
@@ -428,21 +413,6 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
             value={field.htmlContent || ""}
             placeholder="<p>Lorem ipsum…</p>"
             onChange={(e) => onUpdate(field.id, { htmlContent: e.target.value })}
-          />
-        </div>
-      )}
-
-      {field.type === "file" && (
-        <div className="mb-[18px]">
-          <label className={SUBFORM_LABEL_CLASS}>
-            Tipos aceptados{" "}
-            <span className="font-normal normal-case text-slate-400">(opcional)</span>
-          </label>
-          <input
-            className={SUBFORM_INPUT_CLASS}
-            value={field.accept || ""}
-            placeholder="application/pdf,image/*"
-            onChange={(e) => onUpdate(field.id, { accept: e.target.value })}
           />
         </div>
       )}
@@ -651,64 +621,77 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
         </div>
       )}
 
-      {/* ── Number: min/max/step + defaultValue ── */}
+      {/* ── Number: min/max/step + defaultValue + allowDecimals ── */}
       {field.type === "number" && (
-        <div className="mb-[18px] grid grid-cols-2 gap-3">
-          <div>
-            <label className={SUBFORM_LABEL_CLASS}>Valor predeterminado</label>
-            <input
-              type="number"
-              className={SUBFORM_INPUT_CLASS}
-              value={field.defaultValue ?? ""}
-              onChange={(e) =>
-                onUpdate(field.id, { defaultValue: e.target.value })
-              }
-            />
+        <>
+          <div className="mb-[18px] grid grid-cols-2 gap-3">
+            <div>
+              <label className={SUBFORM_LABEL_CLASS}>Valor predeterminado</label>
+              <input
+                type="number"
+                className={SUBFORM_INPUT_CLASS}
+                value={field.defaultValue ?? ""}
+                onChange={(e) =>
+                  onUpdate(field.id, { defaultValue: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <label className={SUBFORM_LABEL_CLASS}>Paso (step)</label>
+              <input
+                type="number"
+                className={SUBFORM_INPUT_CLASS}
+                value={field.step ?? ""}
+                placeholder="1"
+                onChange={(e) =>
+                  onUpdate(field.id, {
+                    step:
+                      e.target.value === "" ? undefined : parseFloat(e.target.value),
+                  })
+                }
+              />
+            </div>
+            <div>
+              <label className={SUBFORM_LABEL_CLASS}>Mínimo</label>
+              <input
+                type="number"
+                className={SUBFORM_INPUT_CLASS}
+                value={field.min ?? ""}
+                onChange={(e) =>
+                  onUpdate(field.id, {
+                    min:
+                      e.target.value === "" ? undefined : parseFloat(e.target.value),
+                  })
+                }
+              />
+            </div>
+            <div>
+              <label className={SUBFORM_LABEL_CLASS}>Máximo</label>
+              <input
+                type="number"
+                className={SUBFORM_INPUT_CLASS}
+                value={field.max ?? ""}
+                onChange={(e) =>
+                  onUpdate(field.id, {
+                    max:
+                      e.target.value === "" ? undefined : parseFloat(e.target.value),
+                  })
+                }
+              />
+            </div>
           </div>
-          <div>
-            <label className={SUBFORM_LABEL_CLASS}>Paso (step)</label>
+          <label className="mb-[18px] flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
             <input
-              type="number"
-              className={SUBFORM_INPUT_CLASS}
-              value={field.step ?? ""}
-              placeholder="1"
+              type="checkbox"
+              checked={field.allowDecimals ?? true}
               onChange={(e) =>
-                onUpdate(field.id, {
-                  step:
-                    e.target.value === "" ? undefined : parseFloat(e.target.value),
-                })
+                onUpdate(field.id, { allowDecimals: e.target.checked })
               }
+              className="h-4 w-4 accent-[#00c2a8]"
             />
-          </div>
-          <div>
-            <label className={SUBFORM_LABEL_CLASS}>Mínimo</label>
-            <input
-              type="number"
-              className={SUBFORM_INPUT_CLASS}
-              value={field.min ?? ""}
-              onChange={(e) =>
-                onUpdate(field.id, {
-                  min:
-                    e.target.value === "" ? undefined : parseFloat(e.target.value),
-                })
-              }
-            />
-          </div>
-          <div>
-            <label className={SUBFORM_LABEL_CLASS}>Máximo</label>
-            <input
-              type="number"
-              className={SUBFORM_INPUT_CLASS}
-              value={field.max ?? ""}
-              onChange={(e) =>
-                onUpdate(field.id, {
-                  max:
-                    e.target.value === "" ? undefined : parseFloat(e.target.value),
-                })
-              }
-            />
-          </div>
-        </div>
+            <span>Permitir decimales</span>
+          </label>
+        </>
       )}
 
       {/* ── Phone: prefijo + maxLength + defaultValue ── */}
@@ -799,7 +782,7 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
               }
               className="h-4 w-4 accent-[#00c2a8]"
             />
-            <span>Pre-rellenar con la hora actual</span>
+            <span>Ahora por defecto</span>
           </label>
           <label className="mb-[18px] flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
             <input
@@ -813,26 +796,6 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
             <span>Recordar última entrada</span>
           </label>
         </>
-      )}
-
-      {/* ── Checkbox: defaultValue (CSV) ── */}
-      {field.type === "checkbox" && (
-        <div className="mb-[18px]">
-          <label className={SUBFORM_LABEL_CLASS}>
-            Opciones preseleccionadas
-            <span className="font-normal normal-case text-slate-400">
-              {" "}(separadas por coma)
-            </span>
-          </label>
-          <input
-            className={SUBFORM_INPUT_CLASS}
-            value={field.defaultValue || ""}
-            placeholder="Opción 1, Opción 2"
-            onChange={(e) =>
-              onUpdate(field.id, { defaultValue: e.target.value })
-            }
-          />
-        </div>
       )}
 
       {/* ── Photo: cámara / disco / tamaño máximo ── */}
@@ -887,18 +850,18 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
             <label className={SUBFORM_LABEL_CLASS}>Tipo permitido</label>
             <select
               className={SUBFORM_INPUT_CLASS}
-              value={field.fileType || "any"}
+              value={field.fileType || "documents"}
               onChange={(e) =>
                 onUpdate(field.id, {
                   fileType: e.target.value as SubformField["fileType"],
                 })
               }
             >
-              <option value="any">Cualquier tipo</option>
               <option value="documents">Documentos (PDF, Word, Excel)</option>
               <option value="images">Imágenes</option>
               <option value="audio">Audio</option>
               <option value="video">Video</option>
+              <option value="any">Cualquier tipo</option>
             </select>
           </div>
           <div>
@@ -938,40 +901,40 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
 
       {/* ── Image: maxWidth/maxHeight/clickable ── */}
       {field.type === "image" && (
-        <div className="mb-[18px] grid grid-cols-3 gap-3">
-          <div>
-            <label className={SUBFORM_LABEL_CLASS}>Ancho máx. (px)</label>
+        <>
+          <div className="mb-[18px]">
+            <label className={SUBFORM_LABEL_CLASS}>Anchura máxima (px)</label>
             <input
               type="number"
-              min={0}
+              min={20}
+              max={1200}
               className={SUBFORM_INPUT_CLASS}
-              value={field.maxWidth ?? ""}
-              placeholder="Auto"
+              value={field.maxWidth ?? 180}
               onChange={(e) =>
                 onUpdate(field.id, {
-                  maxWidth:
-                    e.target.value === "" ? undefined : parseInt(e.target.value),
+                  maxWidth: parseInt(e.target.value) || 180,
                 })
               }
             />
           </div>
-          <div>
-            <label className={SUBFORM_LABEL_CLASS}>Alto máx. (px)</label>
+          <div className="mb-[18px]">
+            <label className={SUBFORM_LABEL_CLASS}>Altura máxima (px)</label>
             <input
               type="number"
-              min={0}
+              min={20}
+              max={1200}
               className={SUBFORM_INPUT_CLASS}
               value={field.maxHeight ?? ""}
-              placeholder="Auto"
-              onChange={(e) =>
+              placeholder="Sin límite"
+              onChange={(e) => {
+                const n = parseInt(e.target.value);
                 onUpdate(field.id, {
-                  maxHeight:
-                    e.target.value === "" ? undefined : parseInt(e.target.value),
-                })
-              }
+                  maxHeight: Number.isFinite(n) ? n : undefined,
+                });
+              }}
             />
           </div>
-          <label className="col-span-3 flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
+          <label className="mb-[18px] flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
             <input
               type="checkbox"
               checked={field.clickable ?? false}
@@ -980,48 +943,50 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
               }
               className="h-4 w-4 accent-[#00c2a8]"
             />
-            <span>Click abre la imagen ampliada</span>
+            <span>Haz clic para ver la imagen ampliada</span>
           </label>
-        </div>
+        </>
       )}
 
       {/* ── Video: maxDurationSecs + maxSizeMB ── */}
       {field.type === "video" && (
-        <div className="mb-[18px] grid grid-cols-2 gap-3">
-          <div>
-            <label className={SUBFORM_LABEL_CLASS}>Duración máx. (s)</label>
+        <>
+          <div className="mb-[18px]">
+            <label className={SUBFORM_LABEL_CLASS}>
+              Duración máxima (segundos)
+            </label>
             <input
               type="number"
-              min={0}
+              min={5}
+              max={1800}
               className={SUBFORM_INPUT_CLASS}
-              value={field.maxDurationSecs ?? ""}
-              placeholder="Sin límite"
+              value={field.maxDurationSecs ?? 60}
               onChange={(e) =>
                 onUpdate(field.id, {
-                  maxDurationSecs:
-                    e.target.value === "" ? undefined : parseInt(e.target.value),
+                  maxDurationSecs: parseInt(e.target.value) || 60,
                 })
               }
             />
           </div>
-          <div>
-            <label className={SUBFORM_LABEL_CLASS}>Tamaño máx. (MB)</label>
+          <div className="mb-[18px]">
+            <label className={SUBFORM_LABEL_CLASS}>Tamaño máximo (MB)</label>
             <input
               type="number"
-              min={0.1}
-              step={0.1}
+              min={5}
+              max={200}
               className={SUBFORM_INPUT_CLASS}
-              value={field.maxSizeMB ?? ""}
-              placeholder="Sin límite"
+              value={field.maxSizeMB ?? 100}
               onChange={(e) =>
                 onUpdate(field.id, {
-                  maxSizeMB:
-                    e.target.value === "" ? undefined : parseFloat(e.target.value),
+                  maxSizeMB: parseInt(e.target.value) || 100,
                 })
               }
             />
+            <p className="mt-1 text-[11px] leading-snug text-slate-400">
+              Cap absoluto del servidor: 200 MB.
+            </p>
           </div>
-        </div>
+        </>
       )}
 
       {/* ── Header: text + size + divider ── */}
@@ -1057,7 +1022,7 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
           <label className="mb-[18px] flex cursor-pointer items-center gap-2.5 text-[13px] text-slate-700">
             <input
               type="checkbox"
-              checked={field.showDivider ?? false}
+              checked={field.showDivider ?? true}
               onChange={(e) =>
                 onUpdate(field.id, { showDivider: e.target.checked })
               }
@@ -1500,12 +1465,6 @@ export default function FieldEditor({ field, onUpdate }: FieldEditorProps) {
  * edita), y propagamos al padre el array filtrado. El `key={field.id}` del
  * caller sincroniza el buffer al cambiar de campo.
  */
-/**
- * Panel de fuente de imagen para el campo `image` del subform.
- * Soporta dos modos: upload a GridFS (guarda `imageFileId` + `url`) o
- * URL externa (solo `url`). Reutiliza los endpoints `/forms/assets/*`
- * del backend igual que el main widget Image.
- */
 function ImageSource({
   field,
   onUpdate,
@@ -1545,30 +1504,29 @@ function ImageSource({
 
   return (
     <div className="mb-[18px] flex flex-col gap-2.5">
-      <label className={SUBFORM_LABEL_CLASS}>Fuente de la imagen</label>
+      <label className={SUBFORM_LABEL_CLASS}>Recurso</label>
 
-      {/* Modo upload: preview + cambiar/borrar */}
       {hasUpload ? (
-        <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+        <div className="flex flex-col gap-2">
           <img
             src={field.url}
             alt="preview"
-            className="max-h-[120px] max-w-[200px] self-start rounded border border-slate-200 bg-white object-contain"
+            className="max-h-[80px] max-w-[160px] self-start rounded-[7px] border border-slate-200 bg-white object-contain"
           />
-          <div className="flex gap-2">
+          <div className="flex gap-1.5">
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
               disabled={busy}
-              className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[12.5px] font-semibold text-cyan-700 disabled:cursor-not-allowed"
+              className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-[7px] border-[1.5px] border-slate-200 bg-slate-50 px-3 py-[7px] text-[12.5px] font-semibold text-cyan-700 disabled:cursor-not-allowed"
             >
-              <Icon name="upload" size={12} /> Cambiar
+              <Icon name="upload" size={13} /> Cambiar
             </button>
             <button
               type="button"
               onClick={handleRemoveUpload}
               disabled={busy}
-              className="flex-1 cursor-pointer rounded-md border-none bg-red-500 px-3 py-1.5 text-[12.5px] font-semibold text-white disabled:cursor-not-allowed"
+              className="flex-1 cursor-pointer rounded-[7px] border-none bg-red-500 px-3 py-[7px] text-[12.5px] font-semibold text-white disabled:cursor-not-allowed"
             >
               Borrar
             </button>
@@ -1579,10 +1537,10 @@ function ImageSource({
           type="button"
           onClick={() => fileRef.current?.click()}
           disabled={busy}
-          className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-md border-[1.5px] border-dashed border-slate-300 bg-slate-50 px-3 py-2.5 text-[13px] text-slate-600 disabled:cursor-not-allowed"
+          className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border-[1.5px] border-dashed border-slate-300 bg-slate-50 px-4 py-2.5 text-[13px] text-slate-500 disabled:cursor-wait"
         >
-          <Icon name="upload" size={13} />
-          {busy ? "Subiendo…" : "Subir imagen desde el dispositivo"}
+          <Icon name="upload" size={14} />
+          {busy ? "Subiendo…" : "Seleccionar imagen"}
         </button>
       )}
 
@@ -1593,34 +1551,6 @@ function ImageSource({
         className="hidden"
         onChange={handleFile}
       />
-
-      {/* Divider "o" */}
-      <div className="my-1 flex items-center gap-2 text-[11px] uppercase tracking-wider text-slate-400">
-        <div className="h-px flex-1 bg-slate-200" />
-        <span>o</span>
-        <div className="h-px flex-1 bg-slate-200" />
-      </div>
-
-      {/* URL externa — queda disponible siempre; si el user escribe una URL
-          nueva estando en modo upload, limpiamos el imageFileId para evitar
-          el asset huérfano referenciado desde ningún lado. */}
-      <label className="text-[11.5px] font-medium text-slate-600">
-        URL externa
-      </label>
-      <input
-        className={SUBFORM_INPUT_CLASS}
-        value={field.url || ""}
-        placeholder="https://…/imagen.png"
-        disabled={hasUpload}
-        onChange={(e) =>
-          onUpdate(field.id, { url: e.target.value, imageFileId: undefined })
-        }
-      />
-      {hasUpload && (
-        <p className="text-[11px] text-slate-400">
-          Quita la imagen subida para poder usar una URL externa.
-        </p>
-      )}
 
       {error && <p className="text-[11.5px] text-red-600">{error}</p>}
       <p className="text-[11px] text-slate-400">

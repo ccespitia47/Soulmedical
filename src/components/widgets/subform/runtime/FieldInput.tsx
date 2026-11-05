@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { SubformEntry, SubformField } from "../subform.types";
 import { sanitizeHtml } from "../../../../utils/sanitize";
+import {
+  deleteSubmissionFile,
+  uploadSubmissionFile,
+} from "../../../../services/submissionUploads";
+import Icon from "../../../common/Icon";
 
 const INPUT_BASE =
   "box-border w-full rounded-[7px] border-[1.5px] border-slate-200 bg-neutral-50 px-3 py-2.5 font-sans text-[13.5px] text-gray-900 outline-none focus:border-[#00c2a8]";
@@ -27,8 +32,9 @@ export default function FieldInput({ field, value, onChange, entry, fields }: Fi
         : size === "small"
           ? "text-sm font-semibold"
           : "text-base font-bold";
+    const showDivider = field.showDivider ?? true;
     return (
-      <div className={field.showDivider ? "border-b border-slate-200 pb-2" : ""}>
+      <div className={showDivider ? "border-b border-slate-200 pb-2" : ""}>
         <h3 className={`m-0 text-slate-900 ${sizeClass}`}>{text}</h3>
       </div>
     );
@@ -75,26 +81,7 @@ export default function FieldInput({ field, value, onChange, entry, fields }: Fi
   }
 
   if (field.type === "video") {
-    const src = field.url || "";
-    if (!src) {
-      return (
-        <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-center text-xs text-slate-400">
-          Sin URL de video configurada
-        </div>
-      );
-    }
-    // Si es YouTube/Vimeo detectamos y usamos iframe; sino <video>.
-    const isEmbed = /youtube\.com|youtu\.be|vimeo\.com/i.test(src);
-    return isEmbed ? (
-      <iframe
-        src={src}
-        className="aspect-video w-full rounded-md border border-slate-200"
-        allow="autoplay; encrypted-media; picture-in-picture"
-        allowFullScreen
-      />
-    ) : (
-      <video src={src} controls className="w-full rounded-md border border-slate-200" />
-    );
+    return <VideoCapture field={field} value={value} onChange={onChange} />;
   }
 
   // ── Textarea ──
@@ -1028,6 +1015,8 @@ function NumberInput({
   onChange: (v: string) => void;
 }) {
   useDefaultSeed(value, field.defaultValue, onChange);
+  const allowDecimals = field.allowDecimals ?? true;
+  const step = field.step ?? (allowDecimals ? undefined : 1);
   return (
     <input
       type="number"
@@ -1037,8 +1026,12 @@ function NumberInput({
       placeholder={field.placeholder}
       min={field.min}
       max={field.max}
-      step={field.step}
-      onChange={(e) => onChange(e.target.value)}
+      step={step}
+      onChange={(e) => {
+        const raw = e.target.value;
+        if (!allowDecimals && /[.,]/.test(raw)) return;
+        onChange(raw);
+      }}
       className={INPUT_BASE}
     />
   );
@@ -1470,6 +1463,189 @@ function FileAttach({
       {value && !busy && !error && (
         <div className="mt-1 text-xs text-emerald-700">✓ Archivo adjuntado {fileName && `(${fileName})`}</div>
       )}
+    </div>
+  );
+}
+
+function formatVideoSize(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatVideoDuration(secs: number): string {
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  return m > 0 ? `${m}:${s.toString().padStart(2, "0")} min` : `${s}s`;
+}
+
+function VideoCapture({
+  field,
+  value,
+  onChange,
+}: {
+  field: SubformField;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const maxDurationSecs = field.maxDurationSecs ?? 60;
+  const maxSizeMB = field.maxSizeMB ?? 100;
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const [name, setName] = useState("");
+  const [size, setSize] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  // El fileId "canónico" se persiste en el value del subform entry como
+  // `gridfs:<id>` — mismo contrato que el main widget Video. El estado
+  // local (name/size/preview) es solo UX visual mientras la row esté
+  // abierta; al remontar, el value basta para reconstruir que hay algo.
+  const hasUploaded = value.startsWith("gridfs:");
+  const currentFileId = hasUploaded ? value.slice("gridfs:".length) : "";
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const clearLocalState = () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setName("");
+    setSize(0);
+    setDuration(0);
+    setPreviewUrl("");
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const handleChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setError("");
+
+    if (f.size > maxSizeMB * 1024 * 1024) {
+      setError(`El video excede el tamaño máximo de ${maxSizeMB} MB`);
+      e.target.value = "";
+      return;
+    }
+
+    const url = URL.createObjectURL(f);
+    const vid = document.createElement("video");
+    vid.preload = "metadata";
+    vid.src = url;
+    vid.onloadedmetadata = async () => {
+      if (vid.duration > maxDurationSecs) {
+        setError(
+          `El video excede la duración máxima de ${formatVideoDuration(maxDurationSecs)}`,
+        );
+        URL.revokeObjectURL(url);
+        if (fileRef.current) fileRef.current.value = "";
+        return;
+      }
+
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(url);
+      setName(f.name);
+      setSize(f.size);
+      setDuration(vid.duration);
+      setBusy(true);
+
+      const previous = currentFileId;
+      const res = await uploadSubmissionFile(f);
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
+      if (res.error) {
+        setError(res.error);
+        clearLocalState();
+        return;
+      }
+      onChange(`gridfs:${res.fileId}`);
+      if (previous && previous !== res.fileId) {
+        void deleteSubmissionFile(previous);
+      }
+    };
+    vid.onerror = () => {
+      setError("No se pudo leer el video seleccionado");
+      URL.revokeObjectURL(url);
+      if (fileRef.current) fileRef.current.value = "";
+    };
+  };
+
+  const handleRemove = () => {
+    if (currentFileId) void deleteSubmissionFile(currentFileId);
+    onChange("");
+    setError("");
+    clearLocalState();
+  };
+
+  const showPreview = !!name || hasUploaded;
+
+  return (
+    <div>
+      <input type="hidden" name={field.id} value={value} />
+      {!showPreview ? (
+        <div
+          onClick={() => !busy && fileRef.current?.click()}
+          className={`flex cursor-${busy ? "wait" : "pointer"} flex-col items-center justify-center gap-2 rounded-lg border-[1.5px] border-dashed border-slate-300 bg-slate-50 px-3 py-6 transition-colors hover:border-cyan-600 hover:bg-cyan-50`}
+        >
+          <span className="text-cyan-700">
+            <Icon name="video" size={28} />
+          </span>
+          <span className="text-[13px] font-semibold text-slate-600">
+            Añadir video
+          </span>
+          <span className="text-[11px] text-slate-400">
+            Máx. {formatVideoDuration(maxDurationSecs)} · {maxSizeMB} MB
+          </span>
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-lg border-[1.5px] border-emerald-200 bg-emerald-50">
+          {previewUrl && (
+            <video
+              src={previewUrl}
+              controls
+              className="block max-h-[220px] w-full bg-black"
+            />
+          )}
+          <div className="flex items-center justify-between gap-2 px-3 py-2">
+            <div className="min-w-0">
+              <div className="truncate text-[13px] font-semibold text-slate-900">
+                {name || "Video adjuntado"}
+              </div>
+              <div className="text-[11px] text-slate-500">
+                {size > 0 && `${formatVideoSize(size)}`}
+                {duration > 0 && ` · ${formatVideoDuration(duration)}`}
+                {busy
+                  ? " · subiendo…"
+                  : hasUploaded
+                    ? " · subido"
+                    : ""}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleRemove}
+              disabled={busy}
+              className="cursor-pointer rounded border-none bg-red-100 px-2.5 py-1 text-[12px] font-semibold text-red-600 disabled:cursor-not-allowed"
+            >
+              Borrar
+            </button>
+          </div>
+        </div>
+      )}
+      {error && (
+        <p className="mt-1.5 text-[12px] text-red-600">{error}</p>
+      )}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="video/*"
+        className="hidden"
+        onChange={handleChange}
+      />
     </div>
   );
 }

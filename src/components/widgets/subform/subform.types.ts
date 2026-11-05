@@ -72,6 +72,8 @@ export type SubformField = {
   max?: number;
   /** number: paso del input. */
   step?: number;
+  /** number: permitir decimales (default true). */
+  allowDecimals?: boolean;
 
   // ── price ────────────────────────────────────────────────────────────
   /** price: código de moneda (COP, USD, EUR, MXN…). */
@@ -161,7 +163,9 @@ export type SubformField = {
   /** image: abre modal con la imagen ampliada al click. */
   clickable?: boolean;
 
-  // ── video ────────────────────────────────────────────────────────────
+  // ── video (capture — subido a GridFS como el main widget video) ──────
+  /** video: fileId en GridFS tras upload de submission. */
+  videoFileId?: string;
   /** video: duración máxima permitida en segundos. */
   maxDurationSecs?: number;
 
